@@ -1,0 +1,14 @@
+{
+  "name": "movie-night-showdown-screenshots",
+  "private": true,
+  "type": "module",
+  "description": "Self-contained Playwright pipeline that regenerates the README screenshots against a mock Jellyfin server. Not part of the published app; kept isolated from web/ and the repo root.",
+  "scripts": {
+    "install:browsers": "playwright install chromium",
+    "gen-posters": "node gen-posters.mjs",
+    "capture": "node capture.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0"
+  }
+}

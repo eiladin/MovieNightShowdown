@@ -11,8 +11,12 @@
 #   make publish ARGS="0.2.0 --allow-dirty"
 #   make publish-minor ARGS="--allow-dirty"
 #   make publish-dry ARGS="major"
+#
+# Other targets:
+#   make screenshots           Regenerate docs/screenshots/0{1-5}-*.png
+#                               (see scripts/screenshots/README.md)
 
-.PHONY: publish publish-patch publish-minor publish-major publish-dry
+.PHONY: publish publish-patch publish-minor publish-major publish-dry screenshots
 
 # Build the Docker image, push it to the registry, and tag the release.
 # See scripts/publish.sh for the version model and flags.
@@ -32,3 +36,9 @@ publish-major:
 # pushing, or tagging anything.
 publish-dry:
 	./scripts/publish.sh --dry-run $(ARGS)
+
+# Regenerate the README screenshots against a self-contained mock Jellyfin
+# server (no real Jellyfin instance or personal data involved).
+# See scripts/screenshots/README.md.
+screenshots:
+	bash scripts/screenshots/run.sh

@@ -15,6 +15,9 @@ web/dist/
 npm-debug.log*
 yarn-error.log*
 
+# Screenshot pipeline (scripts/screenshots/README.md)
+scripts/screenshots/node_modules/
+
 # Editor / OS
 .DS_Store
 .idea/
