@@ -14,6 +14,7 @@ export interface TinderCardApi {
 interface CardProps {
   movie: Movie
   active: boolean
+  visible?: boolean
   onSwipe: (dir: SwipeDirection) => void
 }
 
@@ -29,16 +30,18 @@ const Card = forwardRef<TinderCardApi, CardProps>(function Card({ movie, active,
       onSwipe={onSwipe}
       preventSwipe={['up', 'down']}
     >
-      <div className="swipe-card-inner">
-        <img className="swipe-card-poster" src={movie.posterURL} alt={movie.title} draggable={false} />
-        <div className="swipe-card-meta">
-          <h2>
-            {movie.title} <span className="swipe-card-year">({movie.year})</span>
-          </h2>
-          <p className="swipe-card-genres">{movie.genres.join(', ')}</p>
-          <p className="swipe-card-runtime">{movie.runtime} min</p>
+      {visible !== false && (
+        <div className="swipe-card-inner">
+          <img className="swipe-card-poster" src={movie.posterURL} alt={movie.title} draggable={false} />
+          <div className="swipe-card-meta">
+            <h2>
+              {movie.title} <span className="swipe-card-year">({movie.year})</span>
+            </h2>
+            <p className="swipe-card-genres">{movie.genres.join(', ')}</p>
+            <p className="swipe-card-runtime">{movie.runtime} min</p>
+          </div>
         </div>
-      </div>
+      )}
     </TinderCard>
   )
 })

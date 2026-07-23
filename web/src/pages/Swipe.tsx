@@ -100,6 +100,7 @@ export default function Swipe({ socket }: SwipeProps) {
             ref={childRefs[index]}
             movie={movie}
             active={index === currentIndex}
+            visible={index <= currentIndex + 1 && index >= currentIndex - 3}
             onSwipe={(dir) => handleCardSwiped(dir, movie.id, index)}
           />
         ))}
