@@ -74,8 +74,20 @@
 .unwatched-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
   margin: 8px 0 16px;
+  min-height: 44px;
+  padding: 8px 4px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.unwatched-toggle input[type='checkbox'] {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .preview-error {
