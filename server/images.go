@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 // handleImage proxies a movie's primary poster image from Jellyfin so the
@@ -16,7 +17,7 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reqURL := fmt.Sprintf("%s/Items/%s/Images/Primary?maxWidth=600", s.jellyfin.baseURL, id)
+	reqURL := fmt.Sprintf("%s/Items/%s/Images/Primary?maxWidth=600", s.jellyfin.baseURL, url.PathEscape(id))
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, reqURL, nil)
 	if err != nil {
 		http.Error(w, "failed to build image request", http.StatusInternalServerError)
