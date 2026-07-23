@@ -1,0 +1,21 @@
+# Env / secrets
+.env
+.env.local
+*.local
+
+# Go
+/movie-night-showdown
+*.exe
+*.test
+*.out
+
+# Node / Vite
+web/node_modules/
+web/dist/
+npm-debug.log*
+yarn-error.log*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
