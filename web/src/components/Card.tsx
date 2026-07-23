@@ -30,7 +30,7 @@ const Card = forwardRef<TinderCardApi, CardProps>(function Card({ movie, active,
       onSwipe={onSwipe}
       preventSwipe={['up', 'down']}
       swipeRequirementType="position"
-      swipeThreshold={100}
+      swipeThreshold={65}
     >
       {visible !== false && (
         <div className="swipe-card-inner">
