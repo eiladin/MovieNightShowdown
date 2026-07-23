@@ -513,7 +513,7 @@ Goal: shared deck, swipe/undo, server-side votes, match detection.
       attempt is rejected.
 
 ### 4.2 Vote engine + match detection
-- [ ] Create `server/match.go`:
+- [x] Create `server/match.go`:
 ```go
 // recordSwipe records a vote and returns the winning movie if this swipe caused
 // a match. Caller must hold the session lock.
@@ -540,10 +540,10 @@ func (s *Session) recordSwipe(participantID, movieID string, yes bool) (winner *
 	return s.findMovie(movieID), true
 }
 ```
-- [ ] Handle `swipe {movieID, dir}`: call `recordSwipe`. If matched, set
+- [x] Handle `swipe {movieID, dir}`: call `recordSwipe`. If matched, set
       `Status=Matched`, `WinnerID`, and broadcast `match {movie}`. Otherwise
       broadcast `progress`.
-- [ ] Handle `undo`: delete the participant's `LastSwipe` vote from
+- [x] Handle `undo`: delete the participant's `LastSwipe` vote from
       `Votes[movieID]`, clear `LastSwipe[participantID]`, broadcast `progress`.
       (Undo can revive a secretly-killed movie — that is correct.)
 - Verify: with `requiredCount=2`, two clients swipe "yes" on the same movie ->

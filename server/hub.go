@@ -159,8 +159,12 @@ func (c *Client) handleMessage(env Envelope) {
 		c.handleJoin(env.Payload)
 	case "admin:start":
 		c.handleAdminStart(env.Payload)
+	case "swipe":
+		c.handleSwipe(env.Payload)
+	case "undo":
+		c.handleUndo(env.Payload)
 	default:
-		// swipe/undo/admin:end land in the rest of Phase 4 / Phase 5.
+		// admin:end lands in Phase 5.
 		log.Printf("ws: unhandled message type %q", env.Type)
 	}
 }
@@ -284,6 +288,76 @@ func (c *Client) handleAdminStart(raw json.RawMessage) {
 
 	session.broadcastDeck()
 	session.broadcastSessionState()
+}
+
+// handleSwipe records one vote and, on a match, transitions the session to
+// Matched and broadcasts it; otherwise it broadcasts updated progress. A
+// "no" is a secret-kill: it is recorded but never removed from any client's
+// deck (Phase 4, task 4.2).
+func (c *Client) handleSwipe(raw json.RawMessage) {
+	var p SwipePayload
+	if err := json.Unmarshal(raw, &p); err != nil {
+		c.sendError("invalid swipe payload")
+		return
+	}
+	if p.MovieID == "" {
+		c.sendError("movieID is required")
+		return
+	}
+	if p.Dir != "yes" && p.Dir != "no" {
+		c.sendError(`dir must be "yes" or "no"`)
+		return
+	}
+	yes := p.Dir == "yes"
+
+	session := c.session
+	session.mu.Lock()
+	if session.Status != StatusActive {
+		session.mu.Unlock()
+		c.sendError("session is not active")
+		return
+	}
+	winner, matched := session.recordSwipe(c.participantID, p.MovieID, yes)
+	var progress ProgressPayload
+	if matched {
+		session.Status = StatusMatched
+		session.WinnerID = p.MovieID
+	} else {
+		progress = session.progressLocked(p.MovieID)
+	}
+	session.mu.Unlock()
+
+	if matched {
+		session.broadcast("match", MatchPayload{Movie: *winner})
+		return
+	}
+	session.broadcast("progress", progress)
+}
+
+// handleUndo reverses the sender's last vote: it deletes their entry from
+// Votes[movieID] and clears LastSwipe, which can revive a secretly-killed
+// movie (Phase 4, task 4.2). No-op if the sender has not swiped yet.
+func (c *Client) handleUndo(raw json.RawMessage) {
+	session := c.session
+	session.mu.Lock()
+	if session.Status != StatusActive {
+		session.mu.Unlock()
+		c.sendError("session is not active")
+		return
+	}
+	last, ok := session.LastSwipe[c.participantID]
+	if !ok {
+		session.mu.Unlock()
+		return
+	}
+	if votes, ok := session.Votes[last.MovieID]; ok {
+		delete(votes, c.participantID)
+	}
+	delete(session.LastSwipe, c.participantID)
+	progress := session.progressLocked(last.MovieID)
+	session.mu.Unlock()
+
+	session.broadcast("progress", progress)
 }
 
 // findParticipantByTokenLocked returns the participant whose Token matches,
