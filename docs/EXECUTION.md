@@ -179,3 +179,28 @@ entry per `docs/HANDOFF.md` before stopping.
 - **Verification:** Execute all eight steps of `PLAN.md > End-to-end verification`.
 - **Continuation logic:** Items are independent hardening tasks; `STATE.md`
   checklist tracks which remain. Ship only when the full E2E passes.
+
+---
+
+## Phase 7 — Poster caching & proactive warming
+
+- **Goal:** Serve posters from an on-disk cache keyed by Jellyfin's image tag
+  (cache-busting on artwork change), de-duplicate concurrent fetches, and warm
+  the cache at the "go to the Lobby" transition so a session starts warm.
+- **Entry criteria:** Phase 6 green (project shipped).
+- **Tasks:**
+  1. Thread Jellyfin's Primary image tag into `posterURL` (`?tag=`).
+  2. Add an on-disk poster cache (`server/imagecache.go`) with singleflight
+     de-duplication, atomic writes, and old-tag pruning.
+  3. Make `GET /api/images/{id}` read through the cache; serve `immutable` when a
+     tag is present.
+  4. Add `POST /api/library/warm` that background-prefetches the filtered set.
+  5. Fire the warm from the frontend's "go to the Lobby" action.
+  6. Add `CACHE_DIR` config + a compose volume; document it.
+- **DoD:** Posters serve from disk on repeat requests; changed artwork produces a
+  new `?tag=` and a pruned old file; concurrent requests for one poster hit
+  Jellyfin once; clicking "go to the Lobby" warms the cache without blocking.
+- **Verification:** See Phase 7 verify steps in `docs/TASKS.md` (7.10).
+- **Continuation logic:** Tasks are ordered to keep the Go build green per
+  group; `STATE.md > Next action` names the next unchecked 7.x task. The
+  frontend (7.6) and docs (7.8) are independent of each other.
