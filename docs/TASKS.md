@@ -12,23 +12,28 @@ on, then come here.
 
 ## How to work (read this once, then follow it every step)
 
-- [ ] **One step at a time.** Finish and verify a step before starting the next.
-- [ ] **Copy the code blocks exactly.** Where a file's full contents are given,
+- **One step at a time.** Finish and verify a step before starting the next.
+- **Copy the code blocks exactly.** Where a file's full contents are given,
       create the file with exactly that content. Where a command is given, run it
       exactly.
-- [ ] **Verify after every step.** Each step ends with a "Verify:" line. If it
+- **Verify after every step.** Each step ends with a "Verify:" line. If it
       does not pass, fix it before moving on. Do not check the box until Verify
       passes.
-- [ ] **Commit after each numbered group** (1.x, 2.x, …) with a Conventional
+- **Tick the box in THIS file the moment Verify passes.** Edit the task's
+      `- [ ]` to `- [x]` in `docs/TASKS.md` immediately — not only in
+      `docs/STATE.md`. `docs/TASKS.md` is the running record of what is actually
+      done; a completed task with an unchecked box is a bug. Before you hand back,
+      confirm every task you finished this session is checked here.
+- **Commit after each numbered group** (1.x, 2.x, …) with a Conventional
       Commit message, e.g. `feat(server): add health endpoint and SPA embed`.
-- [ ] **Update `docs/STATE.md` before you stop** (any reason): set the current
+- **Update `docs/STATE.md` before you stop** (any reason): set the current
       phase/status, set the single `Next action` to the next unchecked task here,
       and append a handback entry. Follow `docs/HANDOFF.md`.
-- [ ] **Never delete or rewrite** past entries in the `docs/STATE.md` handoff log.
-- [ ] **If a step fails and you cannot fix it in 3 tries:** stop, write exactly
+- **Never delete or rewrite** past entries in the `docs/STATE.md` handoff log.
+- **If a step fails and you cannot fix it in 3 tries:** stop, write exactly
       what failed (command + full error) into the `docs/STATE.md` handback log,
       set `Build: red (<reason>)`, and hand back. Do not guess-thrash.
-- [ ] **Do not add libraries** that are not listed below. If you think you need
+- **Do not add libraries** that are not listed below. If you think you need
       one, stop and hand back a note instead.
 
 ---
@@ -110,24 +115,24 @@ movie-night-showdown/
 Goal: one container that serves a placeholder React page and `GET /healthz`.
 
 ### 1.1 Initialize the Go module
-- [ ] From the repo root run: `go mod init github.com/eiladin/movie-night-showdown`
-- [ ] Confirm Go version: `go version` shows 1.23.x (install via mise if not).
+- [x] From the repo root run: `go mod init github.com/eiladin/movie-night-showdown`
+- [x] Confirm Go version: `go version` shows 1.23.x (install via mise if not).
 - Verify: `go.mod` exists with the module path and `go 1.23`.
 
 ### 1.2 Scaffold the Vite React app
-- [ ] Run: `npm create vite@latest web -- --template react-ts`
-- [ ] Run: `cd web && npm install`
-- [ ] Install runtime deps:
+- [x] Run: `npm create vite@latest web -- --template react-ts`
+- [x] Run: `cd web && npm install`
+- [x] Install runtime deps:
       `npm install react-router-dom zustand react-tinder-card canvas-confetti react-qr-code`
-- [ ] Install types where needed: `npm install -D @types/canvas-confetti`
-- [ ] Edit `web/vite.config.ts` to set `base: './'` so embedded assets load from
+- [x] Install types where needed: `npm install -D @types/canvas-confetti`
+- [x] Edit `web/vite.config.ts` to set `base: './'` so embedded assets load from
       any path. Keep the rest of the generated config.
-- [ ] Replace `web/src/App.tsx` body with a placeholder: a `<h1>Movie Night
+- [x] Replace `web/src/App.tsx` body with a placeholder: a `<h1>Movie Night
       Showdown</h1>` and the text `Coming soon`.
 - Verify: `cd web && npm run build` succeeds and creates `web/dist/index.html`.
 
 ### 1.3 Backend: server package + health endpoint
-- [ ] Create `server/server.go`:
+- [x] Create `server/server.go`:
 ```go
 package server
 
@@ -150,7 +155,7 @@ func (s *Server) routes() {
 	// static handler is registered in main.go via SetStatic (needs the embed.FS)
 }
 ```
-- [ ] Create `server/health.go`:
+- [x] Create `server/health.go`:
 ```go
 package server
 
@@ -167,7 +172,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 - Verify: nothing to run yet; it compiles after 1.4/1.5.
 
 ### 1.4 Backend: SPA embed + fallback handler
-- [ ] Create `server/static.go`:
+- [x] Create `server/static.go`:
 ```go
 package server
 
@@ -203,7 +208,7 @@ func spaFallback(dist fs.FS, fileServer http.Handler) http.Handler {
 ```
 
 ### 1.5 Backend: entrypoint with embed
-- [ ] Create `main.go` at repo root:
+- [x] Create `main.go` at repo root:
 ```go
 package main
 
@@ -239,16 +244,16 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, s.Handler()))
 }
 ```
-- [ ] IMPORTANT: `//go:embed all:web/dist` needs `web/dist` to exist. Always run
+- [x] IMPORTANT: `//go:embed all:web/dist` needs `web/dist` to exist. Always run
       `cd web && npm run build` **before** `go build`.
-- [ ] Run: `go mod tidy`
-- [ ] Run: `cd web && npm run build && cd .. && go build ./...`
+- [x] Run: `go mod tidy`
+- [x] Run: `cd web && npm run build && cd .. && go build ./...`
 - Verify: `go run .` starts; `curl -fsS localhost:8080/healthz` returns
       `{"status":"ok"}`; opening `http://localhost:8080/` shows the placeholder.
-- [ ] Commit: `feat(server): scaffold Go server with health check and embedded SPA`
+- [x] Commit: `feat(server): scaffold Go server with health check and embedded SPA`
 
 ### 1.6 Dockerfile
-- [ ] Create `Dockerfile`:
+- [x] Create `Dockerfile`:
 ```dockerfile
 # --- Build frontend ---
 FROM node:22-alpine AS web
@@ -275,7 +280,7 @@ ENTRYPOINT ["/showdown"]
 ```
 
 ### 1.7 docker-compose.yml
-- [ ] Create `docker-compose.yml`:
+- [x] Create `docker-compose.yml`:
 ```yaml
 services:
   showdown:
@@ -293,7 +298,7 @@ services:
 ```
 
 ### 1.8 .env.example
-- [ ] Create `.env.example`:
+- [x] Create `.env.example`:
 ```
 JELLYFIN_URL=https://jellyfin.example.com
 JELLYFIN_API_KEY=replace-me
@@ -305,8 +310,8 @@ SESSION_TTL=4h
 - Verify (whole phase): `docker compose up --build -d`, then
       `curl -fsS localhost:8080/healthz` returns `{"status":"ok"}` and `/` renders.
       Then `docker compose down`.
-- [ ] Commit: `chore(deploy): add Dockerfile, compose, and env example`
-- [ ] Update `docs/STATE.md`: Phase 1 done, Next action = Phase 2 step 2.1.
+- [x] Commit: `chore(deploy): add Dockerfile, compose, and env example`
+- [x] Update `docs/STATE.md`: Phase 1 done, Next action = Phase 2 step 2.1.
 
 ---
 
