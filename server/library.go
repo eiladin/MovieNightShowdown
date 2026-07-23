@@ -28,3 +28,17 @@ func (s *Server) handleLibraryPreview(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(libraryPreviewResponse{Count: count, Movies: movies})
 }
+
+// handleLibraryFilters fetches the available filter options (genres, ratings)
+// from the Jellyfin library.
+func (s *Server) handleLibraryFilters(w http.ResponseWriter, r *http.Request) {
+	filters, err := s.jellyfin.GetAvailableFilters(r.Context())
+	if err != nil {
+		log.Printf("library filters: %v", err)
+		http.Error(w, "failed to fetch available filters from Jellyfin", http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(filters)
+}
