@@ -35,6 +35,7 @@ export default function AdminSetup() {
   const [genres, setGenres] = useState<string[]>([])
   const [yearMin, setYearMin] = useState('')
   const [yearMax, setYearMax] = useState('')
+  const [officialRating, setOfficialRating] = useState('')
   const [unwatched, setUnwatched] = useState(false)
   const [preview, setPreview] = useState<PreviewResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -49,6 +50,7 @@ export default function AdminSetup() {
       genres,
       yearMin: yearMin ? Number(yearMin) : undefined,
       yearMax: yearMax ? Number(yearMax) : undefined,
+      officialRating: officialRating || undefined,
       unwatched,
     }
   }
@@ -108,6 +110,18 @@ export default function AdminSetup() {
           <input type="number" value={yearMax} onChange={(e) => setYearMax(e.target.value)} placeholder="2026" />
         </label>
       </div>
+
+      <label className="rating-select">
+        Parental Rating
+        <select value={officialRating} onChange={(e) => setOfficialRating(e.target.value)}>
+          <option value="">Any</option>
+          <option value="G">G</option>
+          <option value="PG">PG</option>
+          <option value="PG-13">PG-13</option>
+          <option value="R">R</option>
+          <option value="NC-17">NC-17</option>
+        </select>
+      </label>
 
       <label className="unwatched-toggle">
         <input type="checkbox" checked={unwatched} onChange={(e) => setUnwatched(e.target.checked)} />
