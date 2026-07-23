@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { getPreview, type PreviewResponse } from '../api'
 import '../styles/admin.css'
 
@@ -26,6 +27,9 @@ const GENRE_OPTIONS = [
 // AdminSetup is the minimal filter + preview page for Phase 2. Session
 // creation ("Begin") is wired up in Phase 4.
 export default function AdminSetup() {
+  const [searchParams] = useSearchParams()
+  const sessionCode = searchParams.get('code')
+
   const [genres, setGenres] = useState<string[]>([])
   const [yearMin, setYearMin] = useState('')
   const [yearMax, setYearMax] = useState('')
@@ -60,6 +64,13 @@ export default function AdminSetup() {
   return (
     <div className="admin-setup">
       <h1>Start a Showdown</h1>
+
+      {sessionCode && (
+        <p className="admin-session-banner">
+          Session <strong>{sessionCode}</strong> created —{' '}
+          <Link to={`/join/${sessionCode}`}>go to the Lobby</Link> to see who has joined.
+        </p>
+      )}
 
       <fieldset className="genre-filter">
         <legend>Genres</legend>

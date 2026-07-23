@@ -5,6 +5,13 @@
   text-align: left;
 }
 
+.admin-session-banner {
+  background: var(--code-bg, #f4f3ec);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 0 0 16px;
+}
+
 .genre-filter {
   display: flex;
   flex-wrap: wrap;

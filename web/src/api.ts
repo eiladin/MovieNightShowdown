@@ -56,3 +56,27 @@ export async function getPreview(filters: PreviewFilters): Promise<PreviewRespon
   }
   return res.json() as Promise<PreviewResponse>
 }
+
+// CreateSessionResponse mirrors server.createSessionResponse (see
+// server/session.go).
+export interface CreateSessionResponse {
+  code: string
+  joinURL: string
+  participantId: string
+  token: string
+}
+
+// createSession starts a new session with the given admin name. The admin
+// becomes participant #1; the caller is responsible for persisting the
+// returned token (see SessionSocket.setToken in ws.ts) before connecting.
+export async function createSession(adminName: string): Promise<CreateSessionResponse> {
+  const res = await fetch('/api/sessions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ adminName }),
+  })
+  if (!res.ok) {
+    throw new Error(`create session failed: ${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<CreateSessionResponse>
+}
