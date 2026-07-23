@@ -36,6 +36,7 @@ var upgrader = websocket.Upgrader{
 type Client struct {
 	conn          *websocket.Conn
 	send          chan []byte
+	done          chan struct{} // closed by readPump on exit; signals writePump to stop
 	session       *Session
 	jellyfin      *JellyfinClient // used by handleAdminStart to deal the deck (Phase 4)
 	participantID string          // set once join() attaches this client to a participant
@@ -63,6 +64,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	client := &Client{
 		conn:     conn,
 		send:     make(chan []byte, sendBufferSize),
+		done:     make(chan struct{}),
 		session:  session,
 		jellyfin: s.jellyfin,
 		token:    token,
@@ -74,11 +76,17 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 // readPump is the only goroutine that reads from conn. It dispatches
 // messages and, on exit (error/close), detaches the client from its session
-// and signals writePump to stop by closing send.
+// and signals writePump to stop by closing done.
+//
+// It closes done — never send. Broadcasters send on send from other
+// goroutines (see trySend); if the reader closed send, an in-flight broadcast
+// that snapshotted this client under the lock could send on a closed channel
+// and panic the process. done is closed exactly once, here, and only ever
+// selected on; send is never closed, so a concurrent trySend is always safe.
 func (c *Client) readPump() {
 	defer func() {
 		c.session.removeClient(c)
-		close(c.send)
+		close(c.done)
 	}()
 
 	c.conn.SetReadLimit(maxMessageSize)
@@ -111,12 +119,13 @@ func (c *Client) writePump() {
 
 	for {
 		select {
-		case msg, ok := <-c.send:
+		case <-c.done:
+			// readPump has detached this client; tell the peer and stop.
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if !ok {
-				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
+			_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+			return
+		case msg := <-c.send:
+			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
 				return
 			}
@@ -133,7 +142,12 @@ func (c *Client) writePump() {
 // caller. A full buffer means an unusually slow client; the message is
 // dropped rather than stalling the broadcaster.
 func (c *Client) trySend(data []byte) {
+	// send is never closed (readPump closes done instead), so this send can
+	// never panic even if this client is disconnecting concurrently. The done
+	// case lets a detached client shed queued messages instead of filling its
+	// buffer after writePump has stopped reading.
 	select {
+	case <-c.done:
 	case c.send <- data:
 	default:
 		log.Printf("ws: send buffer full for participant %s, dropping message", c.participantID)
