@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { getAvailableFilters, getPreview, type AvailableFilters, type PreviewFilters, type PreviewResponse } from '../api'
+import { getAvailableFilters, getPreview, warmLibrary, type AvailableFilters, type PreviewFilters, type PreviewResponse } from '../api'
 import { useSessionStore } from '../store'
 import '../styles/admin.css'
 
@@ -99,6 +99,11 @@ export default function AdminSetup() {
   // than the URL since they can include an arbitrary list of genres.
   function handleGoToLobby() {
     setFilters(currentFilters())
+    // Warm the poster cache during the lobby-fill window (fire-and-forget;
+    // must never block entering the lobby).
+    warmLibrary(currentFilters()).catch((err) =>
+      console.error('Failed to warm poster cache:', err),
+    )
   }
 
   return (
@@ -108,7 +113,7 @@ export default function AdminSetup() {
       {sessionCode && (
         <p className="admin-session-banner">
           Session <strong>{sessionCode}</strong> created —{' '}
-          <Link to={`/join/${sessionCode}`} onClick={handleGoToLobby}>
+          <Link to={`/join/${sessionCode}`} onClick={handleGoToLobby} className="btn-primary">
             go to the Lobby
           </Link>{' '}
           to see who has joined.
