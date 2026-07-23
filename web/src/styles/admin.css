@@ -75,3 +75,8 @@
   border-radius: 6px;
   background: var(--code-bg, #f4f3ec);
 }
+
+.admin-setup > button {
+  margin-top: 24px;
+  width: 100%;
+}

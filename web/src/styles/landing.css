@@ -8,12 +8,13 @@
 .landing-panel {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 16px;
   border: 1px solid var(--border, #e5e4e7);
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: 12px;
+  padding: 24px;
   margin: 16px 0;
   text-align: left;
+  background-color: var(--social-bg);
 }
 
 .landing-panel h2 {
@@ -21,10 +22,6 @@
   font-size: 16px;
 }
 
-.landing-panel input {
-  padding: 8px 10px;
-  font-size: 16px;
-}
 
 .landing-error {
   color: #d33;
