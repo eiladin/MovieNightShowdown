@@ -376,14 +376,23 @@ Read `docs/PLAN.md > Jellyfin integration` for the exact query and fields.
       `Cache-Control: public, max-age=86400`. A bad id returns `404`.)
 
 ### 2.6 Minimal admin preview UI
-- [ ] Add a `web/src/api.ts` with `getPreview(filters)` using `fetch`.
-- [ ] Add an `AdminSetup.tsx` page with a few filter inputs (genre multiselect,
+- [x] Add a `web/src/api.ts` with `getPreview(filters)` using `fetch`.
+- [x] Add an `AdminSetup.tsx` page with a few filter inputs (genre multiselect,
       year range, unwatched checkbox) and a "Preview" button that shows the count
       and a grid of poster thumbnails (`<img src={movie.posterURL} />`).
-- [ ] Add routes in `App.tsx` with `react-router-dom` (`/` Landing, `/admin`).
+- [x] Add routes in `App.tsx` with `react-router-dom` (`/` Landing, `/admin`).
 - Verify: in the browser, applying a filter shows the correct count and posters
       load through `/api/images/...`.
-- [ ] Commit each group; then update `docs/STATE.md` (Phase 2 done, Next = 3.1).
+      (`cd web && npm run build` succeeds. Verified the full request path with
+      curl against the running server + real Jellyfin instead of a GUI
+      browser: `GET /admin` returns the SPA shell (200); the built JS bundle
+      calls `api/library/preview`; `GET /api/library/preview?genres=Comedy`
+      returns `count=215` with proxied `posterURL` fields; `GET
+      /api/images/<id>` for a returned movie returns `200`
+      `Content-Type: image/jpeg`. This exercises the same request path the
+      browser UI makes; no interactive browser session was available in this
+      environment to visually confirm the rendered grid.)
+- [x] Commit each group; then update `docs/STATE.md` (Phase 2 done, Next = 3.1).
 
 ---
 
