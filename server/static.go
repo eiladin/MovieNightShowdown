@@ -22,6 +22,17 @@ func spaFallback(dist fs.FS, fileServer http.Handler) http.Handler {
 			p = "index.html"
 		}
 		if _, err := fs.Stat(dist, p); err != nil {
+			// If it's an asset requested from a nested route due to base: './'
+			if idx := strings.Index(p, "assets/"); idx != -1 {
+				assetPath := p[idx:]
+				if _, err := fs.Stat(dist, assetPath); err == nil {
+					r = r.Clone(r.Context())
+					r.URL.Path = "/" + assetPath
+					fileServer.ServeHTTP(w, r)
+					return
+				}
+			}
+
 			// not a real file -> serve index.html for the SPA router
 			r = r.Clone(r.Context())
 			r.URL.Path = "/"
