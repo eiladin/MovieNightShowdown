@@ -30,6 +30,8 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .swipe-card-active {
@@ -42,8 +44,11 @@
   height: 100%;
   border-radius: 12px;
   overflow: hidden;
-  background: var(--code-bg, #f4f3ec);
+  background: var(--code-bg, #1e1e1e);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 .swipe-card-poster {
