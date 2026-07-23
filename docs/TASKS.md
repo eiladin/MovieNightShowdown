@@ -401,41 +401,64 @@ Read `docs/PLAN.md > Jellyfin integration` for the exact query and fields.
 Goal: create sessions, join by code/QR, live lobby, reconnect.
 
 ### 3.1 Types + store
-- [ ] Create `server/session.go` with the `Session`, `Participant`, `Movie`,
+- [x] Create `server/session.go` with the `Session`, `Participant`, `Movie`,
       `Swipe`, `Status` types from `docs/PLAN.md`. Add a `Locked bool` field on
       `Session` (set true when the admin starts) and leave `RequiredCount` at 0
       until start.
-- [ ] Create a `Store` with `map[string]*Session` guarded by `sync.Mutex` and
+- [x] Create a `Store` with `map[string]*Session` guarded by `sync.Mutex` and
       methods: `Create(adminName) *Session`, `Get(code) (*Session, bool)`,
       `sweepExpired()` (run in a goroutine on a ticker, using `SESSION_TTL`).
-- [ ] Add a code generator: 4 chars from the alphabet `ABCDEFGHJKLMNPQRSTUVWXYZ`
+- [x] Add a code generator: 4 chars from the alphabet `ABCDEFGHJKLMNPQRSTUVWXYZ`
       + digits `23456789` (no confusing `0/O/1/I`). Regenerate on collision.
 - Verify: a unit test creates a session and fetches it by code.
+      (`server/session_test.go`: `go test ./server/... -run
+      TestStore_CreateAndGet -v` -> PASS. Note: `Movie` already existed in
+      `server/library.go` from Phase 2 — reused rather than redefined, to
+      avoid a duplicate type. `Session` also carries an unexported `mu
+      sync.Mutex` and `clients map[string]*Client` used by the Phase 3.4 hub.)
 
 ### 3.2 Create-session endpoint
-- [ ] `POST /api/sessions` body `{ "adminName": "..." }` -> creates a session,
+- [x] `POST /api/sessions` body `{ "adminName": "..." }` -> creates a session,
       returns `{ "code": "ABCD", "joinURL": "<PUBLIC_URL>/join/ABCD",
       "participantId": "...", "token": "..." }`. The admin is participant #1.
 - Verify: `curl -XPOST .../api/sessions -d '{"adminName":"Nate"}'` returns a code.
+      (Against the real server: `{"code":"2TJZ","joinURL":"http://localhost:8080/join/2TJZ","participantId":"7d156726-...","token":"<present>"}`.)
 
 ### 3.3 Message types
-- [ ] Create `server/messages.go` with an envelope `{ "type": string, "payload":
+- [x] Create `server/messages.go` with an envelope `{ "type": string, "payload":
       json.RawMessage }` and typed structs for every message in
       `docs/PLAN.md > API + WebSocket protocol`. Marshal helpers included.
+      (`newEnvelope` helper; typed payloads for join/admin:start/swipe/undo/
+      admin:end (C->S) and session_state/deck/participant_update/progress/
+      match/session_ended (S->C), plus an `error` payload for rejected
+      actions such as joining a started session — a pragmatic addition, not
+      in the PLAN.md table, needed to report that rejection to the client.)
 
 ### 3.4 WebSocket hub
-- [ ] Create `server/hub.go`. Upgrade at `GET /ws?code=&token=` with
+- [x] Create `server/hub.go`. Upgrade at `GET /ws?code=&token=` with
       `gorilla/websocket`. **Concurrency rule (important):** each connected client
       gets its own `send chan []byte`; a single `writePump` goroutine per client
       is the ONLY thing that writes to that socket. A `readPump` goroutine reads
       client messages. Never write to a gorilla socket from two goroutines.
-- [ ] On `join`: attach the connection to the session's participant (match by
+- [x] On `join`: attach the connection to the session's participant (match by
       `token`, or create a new participant if `token` is empty and status is
       Lobby). Broadcast `participant_update` + send `session_state` to the joiner.
-- [ ] On disconnect: mark `Connected=false`, broadcast `participant_update`. Keep
+- [x] On disconnect: mark `Connected=false`, broadcast `participant_update`. Keep
       the participant record so they can resume with their `token`.
 - Verify: connect two `wscat`/browser clients to one code; both appear in the
       participant list broadcasts.
+      (No interactive browser/wscat available; wrote a throwaway Go client
+      using gorilla/websocket (kept out of git, in the scratch dir). Full
+      run against the real server: client A joins with the admin's token
+      from `POST /api/sessions` -> `session_state.yourParticipantId` matches
+      the REST `participantId`; client B joins fresh (no token) -> both A
+      and B receive `participant_update` with 2 participants
+      (`Nate`/admin, `Priya`/guest), both `Connected:true`. B's socket is
+      dropped -> A receives `participant_update` still showing 2
+      participants but `Priya` `Connected:false`. B reconnects with its
+      saved `yourToken` -> `session_state.yourParticipantId` is identical to
+      B's original id -> A's next `participant_update` shows 2 participants
+      (no duplicate), `Priya` back to `Connected:true`.)
 
 ### 3.5 Lobby UI + reconnect
 - [ ] `web/src/ws.ts`: a small WebSocket wrapper that connects, stores the
