@@ -29,6 +29,14 @@
   margin: 16px 0 24px;
 }
 
+.qr-join-code {
+  background: #fff;
+  padding: 16px;
+  border-radius: 12px;
+  width: min(70vw, 240px);
+  box-sizing: border-box;
+}
+
 .qr-join-url {
   font-size: 13px;
   color: var(--muted, #666);
