@@ -1,7 +1,7 @@
 import { createRef, useEffect, useMemo, useRef, useState } from 'react'
 import Card, { type SwipeDirection, type TinderCardApi } from '../components/Card'
 import { useSessionStore, type Vote } from '../store'
-import type { MatchPayload, ProgressPayload, SessionSocket } from '../ws'
+import type { ProgressPayload, SessionSocket } from '../ws'
 import '../styles/swipe.css'
 
 interface SwipeProps {
@@ -20,10 +20,6 @@ export default function Swipe({ socket }: SwipeProps) {
   const setStatus = useSessionStore((s) => s.setStatus)
 
   const [progress, setProgress] = useState<ProgressPayload | null>(null)
-  // matchedMovie is only tracked here so the swipe screen can stop accepting
-  // input the instant a match fires; the full reveal + confetti UI is built
-  // in Phase 5 (Result.tsx / Confetti.tsx).
-  const [matchedMovie, setMatchedMovie] = useState<MatchPayload['movie'] | null>(null)
 
   const childRefs = useMemo(() => deck.map(() => createRef<TinderCardApi>()), [deck])
 
@@ -42,14 +38,8 @@ export default function Swipe({ socket }: SwipeProps) {
 
   useEffect(() => {
     const offProgress = socket.on('progress', (payload) => setProgress(payload as ProgressPayload))
-    const offMatch = socket.on('match', (payload) => {
-      const { movie } = payload as MatchPayload
-      setMatchedMovie(movie)
-      setStatus('matched')
-    })
     return () => {
       offProgress()
-      offMatch()
     }
   }, [socket, setStatus])
 
@@ -93,16 +83,6 @@ export default function Swipe({ socket }: SwipeProps) {
 
   const canSwipe = currentIndex >= 0
   const canUndo = lastSwipeRef.current !== null && currentIndex < deck.length - 1
-
-  if (matchedMovie) {
-    // Placeholder only: the confetti/full-screen reveal is Phase 5 scope.
-    return (
-      <div className="swipe-screen swipe-matched">
-        <h1>It&apos;s a match!</h1>
-        <p>{matchedMovie.title}</p>
-      </div>
-    )
-  }
 
   return (
     <div className="swipe-screen">
