@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 // Config holds server configuration loaded from environment variables.
@@ -13,6 +14,7 @@ type Config struct {
 	PublicURL      string
 	Port           string
 	SessionTTL     string
+	CacheDir       string
 }
 
 // LoadConfig reads configuration from environment variables, applying
@@ -25,6 +27,7 @@ func LoadConfig() Config {
 		PublicURL:      os.Getenv("PUBLIC_URL"),
 		Port:           os.Getenv("PORT"),
 		SessionTTL:     os.Getenv("SESSION_TTL"),
+		CacheDir:       os.Getenv("CACHE_DIR"),
 	}
 	if cfg.Port == "" {
 		cfg.Port = "8080"
@@ -34,6 +37,9 @@ func LoadConfig() Config {
 	}
 	if cfg.SessionTTL == "" {
 		cfg.SessionTTL = "4h"
+	}
+	if cfg.CacheDir == "" {
+		cfg.CacheDir = filepath.Join(os.TempDir(), "mns-posters")
 	}
 	return cfg
 }
@@ -45,7 +51,7 @@ func (c Config) String() string {
 		masked = "***"
 	}
 	return fmt.Sprintf(
-		"JellyfinURL=%s JellyfinAPIKey=%s JellyfinUserID=%s PublicURL=%s Port=%s SessionTTL=%s",
-		c.JellyfinURL, masked, c.JellyfinUserID, c.PublicURL, c.Port, c.SessionTTL,
+		"JellyfinURL=%s JellyfinAPIKey=%s JellyfinUserID=%s PublicURL=%s Port=%s SessionTTL=%s CacheDir=%s",
+		c.JellyfinURL, masked, c.JellyfinUserID, c.PublicURL, c.Port, c.SessionTTL, c.CacheDir,
 	)
 }

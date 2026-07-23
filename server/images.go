@@ -1,46 +1,31 @@
 package server
 
-import (
-	"fmt"
-	"io"
-	"net/http"
-	"net/url"
-)
+import "net/http"
 
-// handleImage proxies a movie's primary poster image from Jellyfin so the
-// API key never reaches the browser and clients never talk to Jellyfin
-// directly.
+// handleImage serves a movie's primary poster from the on-disk cache, fetching
+// from Jellyfin on a miss. Images are keyed by item id + Primary image tag
+// (the ?tag= query param). With a tag the response is immutable for a year,
+// because changed artwork gets a new tag and therefore a new URL.
 func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		http.NotFound(w, r)
 		return
 	}
+	tag := r.URL.Query().Get("tag")
 
-	reqURL := fmt.Sprintf("%s/Items/%s/Images/Primary?maxWidth=600", s.jellyfin.baseURL, url.PathEscape(id))
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, reqURL, nil)
+	data, err := s.cache.ensure(r.Context(), s.jellyfin, id, tag)
 	if err != nil {
-		http.Error(w, "failed to build image request", http.StatusInternalServerError)
-		return
-	}
-	req.Header.Set("X-Emby-Token", s.jellyfin.apiKey)
-
-	resp, err := s.jellyfin.http.Do(req)
-	if err != nil {
-		http.Error(w, "failed to fetch image", http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
 		http.Error(w, "image not found", http.StatusNotFound)
 		return
 	}
 
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		w.Header().Set("Content-Type", ct)
+	w.Header().Set("Content-Type", http.DetectContentType(data))
+	if tag != "" {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		w.Header().Set("Cache-Control", "public, max-age=86400")
 	}
-	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, resp.Body)
+	_, _ = w.Write(data)
 }

@@ -3,6 +3,8 @@ services:
     build: .
     ports:
       - "8080:8080"
+    volumes:
+      - poster-cache:/var/cache/mns
     environment:
       JELLYFIN_URL: ${JELLYFIN_URL}
       JELLYFIN_API_KEY: ${JELLYFIN_API_KEY}
@@ -10,4 +12,8 @@ services:
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
       PORT: "8080"
       SESSION_TTL: ${SESSION_TTL:-4h}
+      CACHE_DIR: /var/cache/mns
     restart: unless-stopped
+
+volumes:
+  poster-cache:
