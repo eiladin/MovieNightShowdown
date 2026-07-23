@@ -1,53 +1,94 @@
+<div align="center">
+
+<img src="docs/screenshots/hero.png" alt="Movie Night Showdown" width="200" />
+
 # Movie Night Showdown
 
-A self-hosted movie matcher for a home network. Stop arguing about what to watch:
-an admin filters a Jellyfin library and sets a headcount, everyone joins from
-their own phone/tablet, and swipes through movie posters (left = no, right = yes).
-The moment one movie gets a "yes" from **everyone**, all devices light up with the
-winning poster and a confetti splash.
+**Stop arguing about what to watch. Swipe until everyone agrees.**
 
-- Runs entirely on your own network — no cloud, no external accounts.
-- Ships as a single container that talks to your existing Jellyfin server.
-- Guests join by session code or QR; no logins.
+</div>
 
-## Quickstart
+---
 
-```bash
-cp .env.example .env      # then edit with your Jellyfin details (created in Phase 1)
-docker compose up --build
-```
+You know the drill. Four people, one couch, a library full of movies, and forty
+minutes of "I don't know, what do *you* want to watch?" before somebody gives up
+and puts on the same show you've all seen six times.
 
-Then open the app at `PUBLIC_URL` (e.g. `https://showdown.example.com`), start a
-session as admin, and share the code/QR with everyone else.
+Movie Night Showdown is a small self-hosted app that ends that stalemate. It
+plugs into the Jellyfin server you already run, turns your library into a deck of
+movie posters, and lets everyone in the room swipe through it at the same time —
+left for no, right for yes, from their own phone. The instant a single movie
+collects a yes from *everyone*, every screen in the room lights up with the
+winner and a burst of confetti. Decision made. Popcorn time.
 
-> Status: under construction. See `docs/STATE.md` for the current phase.
+No accounts, no apps to install, no cloud. People join by scanning a QR code or
+typing a four-character session code, and the whole thing runs on your network
+in a single container.
 
-## Configuration
+## How a showdown works
 
-| Variable | Required | Description |
-|---|---|---|
-| `JELLYFIN_URL` | yes | Base URL of your Jellyfin server |
-| `JELLYFIN_API_KEY` | yes | Jellyfin API key (kept server-side; never exposed to clients) |
-| `JELLYFIN_USER_ID` | optional | Required to filter by "unwatched" |
-| `PUBLIC_URL` | yes | Base URL used to build join links and QR codes |
-| `PORT` | optional | Listen port (default `8080`) |
-| `SESSION_TTL` | optional | How long idle sessions live (default a few hours) |
-| `CACHE_DIR` | optional | Directory for the on-disk poster cache (default a temp dir); mount a volume in Docker to persist it across restarts |
+One person starts the session. They pick a name, and the app spins up a room
+with a shareable code.
 
-TLS and the `showdown.<domain>` subdomain are expected to be handled by your
-existing reverse proxy.
+<div align="center">
+<img src="docs/screenshots/01-landing.png" alt="Start or join a showdown" width="300" />
+</div>
 
-## How it works
+The host then narrows the field. Maybe tonight is a comedy night, or strictly
+PG so the kids can watch, or only films from this century that nobody's seen yet.
+A live preview shows exactly how many movies made the cut before anyone starts
+swiping.
 
-- **Backend (Go):** session engine, WebSocket hub, Jellyfin REST client, and a
-  poster image proxy. Serves the React frontend embedded in the binary.
-- **Frontend (React + Vite):** admin filter/lobby screens and the swipe deck.
-- **The Jellyfin API key never leaves the server** — all library queries and
-  poster images are proxied through the backend.
+<div align="center">
+<img src="docs/screenshots/02-admin.png" alt="Filter the library by genre, year, and rating" width="300" />
+</div>
 
-## Documentation
+Everyone else joins by scanning the QR code or punching in the session code — no
+sign-up, no download, just a link. The lobby fills up in real time as people
+arrive, and the host decides how many "yes" votes it takes to call a match
+(usually everyone in the room).
 
-- `docs/PLAN.md` — full design and architecture.
-- `docs/EXECUTION.md` — the phased build plan.
-- `docs/HANDOFF.md` — how work is handed between contributors/agents.
-- `docs/STATE.md` — current progress.
+<div align="center">
+<img src="docs/screenshots/03-lobby.png" alt="The lobby with a join QR code and live roster" width="300" />
+</div>
+
+Then the swiping starts. Everyone gets the same shuffled deck of posters and goes
+at their own pace. Yes, no, undo if your thumb slips. Nobody sees how anyone else
+voted — only the quiet running tally of how close the room is to agreeing.
+
+<div align="center">
+<img src="docs/screenshots/04-swipe.png" alt="Swiping through the movie poster deck" width="300" />
+</div>
+
+And when a movie finally gets a yes from everyone, it's over. Every device in the
+room jumps to the same winning poster at the same moment, confetti and all.
+
+<div align="center">
+<img src="docs/screenshots/05-result.png" alt="It's a match — the winning movie with confetti" width="300" />
+</div>
+
+## Why you'd want it
+
+It's yours. Everything runs on your own hardware against your own Jellyfin
+library — no third-party service ever sees what you watch, and your Jellyfin API
+key never leaves the server. It's frictionless for guests, because "scan this
+code" is the entire onboarding story; nobody makes an account to pick a movie on
+your couch. And it ships as one container that sits next to Jellyfin and does one
+job well.
+
+It's the kind of thing you set up once and quietly rely on every Friday night.
+
+## Get it running
+
+If you already run Jellyfin with Docker, you're a compose file and two
+environment variables away from your first showdown. The full walkthrough —
+example `docker-compose.yml`, how to get a Jellyfin API key, and reverse-proxy
+notes — lives in **[docs/INSTALL.md](docs/INSTALL.md)**.
+
+## Under the hood
+
+The backend is a single Go binary: it manages sessions, talks to Jellyfin, keeps
+every device in sync over WebSockets, and proxies (and caches) poster images so
+your Jellyfin key stays server-side. The frontend is a React app that's embedded
+right into that binary, so there's nothing else to deploy. Configuration is a
+handful of environment variables, all documented in the install guide.
