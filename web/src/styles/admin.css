@@ -12,7 +12,7 @@
   margin: 0 0 16px;
 }
 
-.genre-filter {
+.chip-group {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 16px;
@@ -22,7 +22,7 @@
   margin: 16px 0;
 }
 
-.genre-option {
+.chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -38,16 +38,16 @@
   user-select: none;
 }
 
-.genre-option:hover {
+.chip:hover {
   border-color: var(--accent-border);
 }
 
-.genre-option:focus-within {
+.chip:focus-within {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.genre-option.checked {
+.chip.checked {
   background: var(--chip-fill);
   color: #fff;
   border-color: var(--chip-fill);
