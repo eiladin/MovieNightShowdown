@@ -24,6 +24,10 @@ var (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "-healthcheck" {
+		healthcheck()
+	}
+
 	cfg := server.LoadConfig()
 	log.Printf("config: %s", cfg)
 	log.Printf("movie-night-showdown %s (commit %s)", version, commit)
@@ -61,4 +65,20 @@ func main() {
 	}
 
 	log.Println("Server exiting")
+}
+
+// healthcheck pings the local /healthz endpoint and exits 0 if healthy,
+// 1 otherwise. Invoked as `showdown -healthcheck` by the deployment's
+// container healthcheck, since the distroless image has no curl/wget/shell.
+func healthcheck() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080" // must match server.LoadConfig's default
+	}
+	client := http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:" + port + "/healthz")
+	if err != nil || resp.StatusCode != http.StatusOK {
+		os.Exit(1)
+	}
+	os.Exit(0)
 }
