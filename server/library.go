@@ -42,3 +42,24 @@ func (s *Server) handleLibraryFilters(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(filters)
 }
+
+// handleLibraryWarm pre-fetches every poster for the filtered library into the
+// on-disk cache so the session starts warm. It returns the candidate count
+// immediately and warms in the background.
+func (s *Server) handleLibraryWarm(w http.ResponseWriter, r *http.Request) {
+	filters := ParseFilters(r.URL.Query())
+
+	movies, count, err := s.jellyfin.Movies(r.Context(), filters)
+	if err != nil {
+		log.Printf("library warm: %v", err)
+		http.Error(w, "failed to query Jellyfin library", http.StatusBadGateway)
+		return
+	}
+
+	if s.cache.enabled() {
+		go s.cache.warm(movies, s.jellyfin)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]int{"count": count})
+}

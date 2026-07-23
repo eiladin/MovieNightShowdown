@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -48,14 +49,15 @@ type jellyfinItemsResponse struct {
 }
 
 type jellyfinItem struct {
-	ID              string   `json:"Id"`
-	Name            string   `json:"Name"`
-	ProductionYear  int      `json:"ProductionYear"`
-	Genres          []string `json:"Genres"`
-	Overview        string   `json:"Overview"`
-	RunTimeTicks    int64    `json:"RunTimeTicks"`
-	CommunityRating float64  `json:"CommunityRating"`
-	OfficialRating  string   `json:"OfficialRating"`
+	ID              string            `json:"Id"`
+	Name            string            `json:"Name"`
+	ProductionYear  int               `json:"ProductionYear"`
+	Genres          []string          `json:"Genres"`
+	Overview        string            `json:"Overview"`
+	RunTimeTicks    int64             `json:"RunTimeTicks"`
+	CommunityRating float64           `json:"CommunityRating"`
+	OfficialRating  string            `json:"OfficialRating"`
+	ImageTags       map[string]string `json:"ImageTags"`
 }
 
 // Movies fetches movies from Jellyfin, applying filters, and maps them onto
@@ -101,6 +103,10 @@ func (c *JellyfinClient) Movies(ctx context.Context, filters Filters) ([]Movie, 
 
 	movies := make([]Movie, 0, len(parsed.Items))
 	for _, it := range parsed.Items {
+		posterURL := "/api/images/" + it.ID
+		if tag := it.ImageTags["Primary"]; tag != "" {
+			posterURL += "?tag=" + url.QueryEscape(tag)
+		}
 		m := Movie{
 			ID:              it.ID,
 			Title:           it.Name,
@@ -110,7 +116,7 @@ func (c *JellyfinClient) Movies(ctx context.Context, filters Filters) ([]Movie, 
 			Runtime:         int(it.RunTimeTicks / 10_000_000 / 60),
 			CommunityRating: it.CommunityRating,
 			OfficialRating:  it.OfficialRating,
-			PosterURL:       "/api/images/" + it.ID,
+			PosterURL:       posterURL,
 		}
 		if filters.RuntimeMax > 0 && m.Runtime > filters.RuntimeMax {
 			continue
@@ -163,4 +169,27 @@ func (c *JellyfinClient) GetAvailableFilters(ctx context.Context) (AvailableFilt
 		Genres:          parsed.Genres,
 		OfficialRatings: parsed.OfficialRatings,
 	}, nil
+}
+
+// fetchPoster downloads a movie's Primary poster from Jellyfin. A non-empty
+// tag pins the exact image version so the cache key and the bytes agree.
+func (c *JellyfinClient) fetchPoster(ctx context.Context, id, tag string) ([]byte, error) {
+	reqURL := fmt.Sprintf("%s/Items/%s/Images/Primary?maxWidth=600", c.baseURL, url.PathEscape(id))
+	if tag != "" {
+		reqURL += "&tag=" + url.QueryEscape(tag)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Emby-Token", c.apiKey)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("jellyfin: fetch poster %s: %w", id, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("jellyfin: poster %s returned %s", id, resp.Status)
+	}
+	return io.ReadAll(resp.Body)
 }
