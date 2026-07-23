@@ -461,17 +461,27 @@ Goal: create sessions, join by code/QR, live lobby, reconnect.
       (no duplicate), `Priya` back to `Connected:true`.)
 
 ### 3.5 Lobby UI + reconnect
-- [ ] `web/src/ws.ts`: a small WebSocket wrapper that connects, stores the
+- [x] `web/src/ws.ts`: a small WebSocket wrapper that connects, stores the
       `token` in `localStorage`, auto-reconnects with backoff, and replays `join`.
-- [ ] `web/src/store.ts` (zustand): session, participants, deck, status, myVoteState.
-- [ ] `Landing.tsx`: "Start a Showdown" (calls `POST /api/sessions`, routes to
+- [x] `web/src/store.ts` (zustand): session, participants, deck, status, myVoteState.
+- [x] `Landing.tsx`: "Start a Showdown" (calls `POST /api/sessions`, routes to
       `/admin`) and a "Join" box (enter code -> `/join/:code`).
-- [ ] `Lobby.tsx`: admin view shows code + `<QRCode value={joinURL} />`
+- [x] `Lobby.tsx`: admin view shows code + `<QRCode value={joinURL} />`
       (react-qr-code) + participant list; guest view shows name entry then the
       participant list. Reached at `/join/:code` and from `/admin`.
 - Verify: open the session on two devices/tabs; both show in the lobby; kill one
       socket (devtools "Offline"), restore, and it rejoins as the same participant.
-- [ ] Commit groups; update `docs/STATE.md` (Phase 3 done, Next = 4.1).
+      (No interactive browser available in this environment. `cd web && npm
+      run build` succeeds — `Landing`, `AdminSetup`, `Lobby`, `QRJoin`,
+      `ws.ts`, `store.ts` all type-check and are wired into `App.tsx`'s
+      router (`/`, `/admin`, `/join/:code`). With the server running,
+      `GET /join/ABCD` and `GET /admin` both return `200` (SPA fallback
+      serves `index.html` for the client-side routes). The underlying
+      join/reconnect protocol that `ws.ts`/`Lobby.tsx` drive was verified
+      end-to-end at the WS layer in 3.4's headless test (two participants
+      seen, reconnect resumes the same participant id). Visual confirmation
+      of the rendered Lobby UI itself is deferred to a real browser run.)
+- [x] Commit groups; update `docs/STATE.md` (Phase 3 done, Next = 4.1).
 
 ---
 
