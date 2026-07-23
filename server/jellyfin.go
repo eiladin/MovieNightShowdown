@@ -120,3 +120,47 @@ func (c *JellyfinClient) Movies(ctx context.Context, filters Filters) ([]Movie, 
 
 	return movies, parsed.TotalRecordCount, nil
 }
+
+// AvailableFilters represents the possible values for filtering the library.
+type AvailableFilters struct {
+	Genres          []string `json:"genres"`
+	OfficialRatings []string `json:"officialRatings"`
+}
+
+// GetAvailableFilters queries Jellyfin for all unique genres and official ratings
+// present in the Movie library.
+func (c *JellyfinClient) GetAvailableFilters(ctx context.Context) (AvailableFilters, error) {
+	reqURL := fmt.Sprintf("%s/Items/Filters?IncludeItemTypes=Movie", c.baseURL)
+	if c.userID != "" {
+		reqURL += "&userId=" + url.QueryEscape(c.userID)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return AvailableFilters{}, err
+	}
+	req.Header.Set("X-Emby-Token", c.apiKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return AvailableFilters{}, fmt.Errorf("jellyfin: GET /Items/Filters: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return AvailableFilters{}, fmt.Errorf("jellyfin: GET /Items/Filters returned %s", resp.Status)
+	}
+
+	var parsed struct {
+		Genres          []string `json:"Genres"`
+		OfficialRatings []string `json:"OfficialRatings"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return AvailableFilters{}, fmt.Errorf("jellyfin: decode /Items/Filters response: %w", err)
+	}
+
+	return AvailableFilters{
+		Genres:          parsed.Genres,
+		OfficialRatings: parsed.OfficialRatings,
+	}, nil
+}

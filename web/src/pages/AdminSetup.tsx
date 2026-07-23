@@ -1,37 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { getPreview, type PreviewFilters, type PreviewResponse } from '../api'
+import { getAvailableFilters, getPreview, type AvailableFilters, type PreviewFilters, type PreviewResponse } from '../api'
 import { useSessionStore } from '../store'
 import '../styles/admin.css'
-
-const GENRE_OPTIONS = [
-  'Action',
-  'Adventure',
-  'Animation',
-  'Comedy',
-  'Crime',
-  'Documentary',
-  'Drama',
-  'Family',
-  'Fantasy',
-  'History',
-  'Horror',
-  'Music',
-  'Mystery',
-  'Romance',
-  'Science Fiction',
-  'Thriller',
-  'War',
-  'Western',
-]
-
-const RATING_OPTIONS = [
-  'G',
-  'PG',
-  'PG-13',
-  'R',
-  'NC-17',
-]
 
 // AdminSetup is the minimal filter + preview page for Phase 2. Session
 // creation ("Begin") is wired up in Phase 4.
@@ -46,8 +17,15 @@ export default function AdminSetup() {
   const [officialRatings, setOfficialRatings] = useState<string[]>([])
   const [unwatched, setUnwatched] = useState(false)
   const [preview, setPreview] = useState<PreviewResponse | null>(null)
+  const [available, setAvailable] = useState<AvailableFilters | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getAvailableFilters()
+      .then(setAvailable)
+      .catch((err) => console.error('Failed to load available filters:', err))
+  }, [])
 
   function toggleGenre(genre: string) {
     setGenres((prev) => (prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre]))
@@ -102,15 +80,17 @@ export default function AdminSetup() {
         </p>
       )}
 
-      <fieldset className="genre-filter">
-        <legend>Genres</legend>
-        {GENRE_OPTIONS.map((genre) => (
-          <label key={genre} className="genre-option">
-            <input type="checkbox" checked={genres.includes(genre)} onChange={() => toggleGenre(genre)} />
-            {genre}
-          </label>
-        ))}
-      </fieldset>
+      {available && available.genres.length > 0 && (
+        <fieldset className="genre-filter">
+          <legend>Genres</legend>
+          {available.genres.map((genre) => (
+            <label key={genre} className="genre-option">
+              <input type="checkbox" checked={genres.includes(genre)} onChange={() => toggleGenre(genre)} />
+              {genre}
+            </label>
+          ))}
+        </fieldset>
+      )}
 
       <div className="year-range">
         <label>
@@ -123,15 +103,17 @@ export default function AdminSetup() {
         </label>
       </div>
 
-      <fieldset className="genre-filter">
-        <legend>Parental Rating</legend>
-        {RATING_OPTIONS.map((rating) => (
-          <label key={rating} className="genre-option">
-            <input type="checkbox" checked={officialRatings.includes(rating)} onChange={() => toggleRating(rating)} />
-            {rating}
-          </label>
-        ))}
-      </fieldset>
+      {available && available.officialRatings.length > 0 && (
+        <fieldset className="genre-filter">
+          <legend>Parental Rating</legend>
+          {available.officialRatings.map((rating) => (
+            <label key={rating} className="genre-option">
+              <input type="checkbox" checked={officialRatings.includes(rating)} onChange={() => toggleRating(rating)} />
+              {rating}
+            </label>
+          ))}
+        </fieldset>
+      )}
 
       <label className="unwatched-toggle">
         <input type="checkbox" checked={unwatched} onChange={(e) => setUnwatched(e.target.checked)} />

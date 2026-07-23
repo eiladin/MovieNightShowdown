@@ -59,6 +59,19 @@ export async function getPreview(filters: PreviewFilters): Promise<PreviewRespon
   return res.json() as Promise<PreviewResponse>
 }
 
+export interface AvailableFilters {
+  genres: string[]
+  officialRatings: string[]
+}
+
+export async function getAvailableFilters(): Promise<AvailableFilters> {
+  const res = await fetch('/api/library/filters')
+  if (!res.ok) {
+    throw new Error(`filters request failed: ${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<AvailableFilters>
+}
+
 // CreateSessionResponse mirrors server.createSessionResponse (see
 // server/session.go).
 export interface CreateSessionResponse {
