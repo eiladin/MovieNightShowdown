@@ -125,7 +125,7 @@ export default function Lobby() {
             onChange={(e) => setName(e.target.value)}
             autoFocus
           />
-          <button type="submit">Join</button>
+          <button type="submit" className="btn-primary">Join</button>
         </form>
       </div>
     )
@@ -185,7 +185,7 @@ export default function Lobby() {
               onChange={(e) => setRequiredCount(Number(e.target.value))}
             />
           </label>
-          <button type="submit" disabled={participants.length === 0}>
+          <button type="submit" className="btn-primary" disabled={participants.length === 0}>
             Begin
           </button>
         </form>
