@@ -12,11 +12,6 @@
   margin-top: 16px;
 }
 
-.lobby-join-form input {
-  padding: 8px 10px;
-  font-size: 16px;
-}
-
 .lobby-status {
   color: var(--muted, #666);
   margin: 0 0 16px;
@@ -90,5 +85,4 @@
 
 .begin-form input {
   width: 6em;
-  padding: 6px 8px;
 }
