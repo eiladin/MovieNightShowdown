@@ -1,0 +1,122 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+)
+
+// Movie is the shape of a Jellyfin movie exposed to clients.
+type Movie struct {
+	ID              string   `json:"id"`
+	Title           string   `json:"title"`
+	Year            int      `json:"year"`
+	Genres          []string `json:"genres"`
+	Overview        string   `json:"overview"`
+	Runtime         int      `json:"runtime"` // minutes
+	CommunityRating float64  `json:"communityRating"`
+	OfficialRating  string   `json:"officialRating"`
+	PosterURL       string   `json:"posterURL"` // always proxied, never the raw Jellyfin URL
+}
+
+// JellyfinClient talks to a Jellyfin server's REST API.
+type JellyfinClient struct {
+	baseURL string
+	apiKey  string
+	userID  string
+	http    *http.Client
+}
+
+// NewJellyfinClient builds a client from the server Config.
+func NewJellyfinClient(cfg Config) *JellyfinClient {
+	return &JellyfinClient{
+		baseURL: strings.TrimRight(cfg.JellyfinURL, "/"),
+		apiKey:  cfg.JellyfinAPIKey,
+		userID:  cfg.JellyfinUserID,
+		http:    &http.Client{Timeout: 10 * time.Second},
+	}
+}
+
+// jellyfinItemsResponse is the shape of GET /Items.
+type jellyfinItemsResponse struct {
+	Items            []jellyfinItem `json:"Items"`
+	TotalRecordCount int            `json:"TotalRecordCount"`
+}
+
+type jellyfinItem struct {
+	ID              string   `json:"Id"`
+	Name            string   `json:"Name"`
+	ProductionYear  int      `json:"ProductionYear"`
+	Genres          []string `json:"Genres"`
+	Overview        string   `json:"Overview"`
+	RunTimeTicks    int64    `json:"RunTimeTicks"`
+	CommunityRating float64  `json:"CommunityRating"`
+	OfficialRating  string   `json:"OfficialRating"`
+}
+
+// Movies fetches movies from Jellyfin, applying filters, and maps them onto
+// the Movie type used by the rest of the app.
+//
+// It returns two counts on purpose: the movie list (capped server-side via
+// Jellyfin's Limit param at filters.MaxMovies, then further reduced by the
+// client-side RuntimeMax filter) for display, and the true total number of
+// items Jellyfin reports as matching the filters (TotalRecordCount, which
+// Jellyfin reports uncapped regardless of Limit) for an accurate preview
+// count.
+func (c *JellyfinClient) Movies(ctx context.Context, filters Filters) ([]Movie, int, error) {
+	q := url.Values{}
+	q.Set("IncludeItemTypes", "Movie")
+	q.Set("Recursive", "true")
+	q.Set("Fields", "Genres,Overview,ProductionYear,OfficialRating,CommunityRating,RunTimeTicks")
+	if c.userID != "" {
+		q.Set("userId", c.userID)
+	}
+	filters.apply(q, c.userID != "")
+
+	reqURL := fmt.Sprintf("%s/Items?%s", c.baseURL, q.Encode())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("X-Emby-Token", c.apiKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("jellyfin: GET /Items: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, 0, fmt.Errorf("jellyfin: GET /Items returned %s", resp.Status)
+	}
+
+	var parsed jellyfinItemsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return nil, 0, fmt.Errorf("jellyfin: decode /Items response: %w", err)
+	}
+
+	movies := make([]Movie, 0, len(parsed.Items))
+	for _, it := range parsed.Items {
+		m := Movie{
+			ID:              it.ID,
+			Title:           it.Name,
+			Year:            it.ProductionYear,
+			Genres:          it.Genres,
+			Overview:        it.Overview,
+			Runtime:         int(it.RunTimeTicks / 10_000_000 / 60),
+			CommunityRating: it.CommunityRating,
+			OfficialRating:  it.OfficialRating,
+			PosterURL:       "/api/images/" + it.ID,
+		}
+		if filters.RuntimeMax > 0 && m.Runtime > filters.RuntimeMax {
+			continue
+		}
+		movies = append(movies, m)
+	}
+
+	return movies, parsed.TotalRecordCount, nil
+}

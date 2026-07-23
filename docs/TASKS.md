@@ -328,27 +328,34 @@ Read `docs/PLAN.md > Jellyfin integration` for the exact query and fields.
 - Verify: log the loaded config (mask the API key) on startup.
 
 ### 2.2 Jellyfin client
-- [ ] Create `server/jellyfin.go` with a `JellyfinClient` holding `baseURL`,
+- [x] Create `server/jellyfin.go` with a `JellyfinClient` holding `baseURL`,
       `apiKey`, `userID`, and an `*http.Client` with a 10s timeout.
-- [ ] Method `Movies(ctx, filters) ([]Movie, error)`. Build this request:
+- [x] Method `Movies(ctx, filters) ([]Movie, error)`. Build this request:
       `GET {baseURL}/Items?IncludeItemTypes=Movie&Recursive=true&Fields=Genres,Overview,ProductionYear,OfficialRating,CommunityRating,RunTimeTicks`
       Send the API key in the header `X-Emby-Token: <apiKey>` (not the query
       string). Add `userId` when set (needed for unwatched).
-- [ ] Map Jellyfin JSON items to the `Movie` struct from `docs/PLAN.md`. Convert
+- [x] Map Jellyfin JSON items to the `Movie` struct from `docs/PLAN.md`. Convert
       `RunTimeTicks` to minutes: `ticks / 10_000_000 / 60`.
-- [ ] Set each `Movie.PosterURL` to the **proxied** path `/api/images/<ItemId>`
+- [x] Set each `Movie.PosterURL` to the **proxied** path `/api/images/<ItemId>`
       (never the raw Jellyfin URL).
 - Verify: a temporary unit test or log prints N movies from real Jellyfin.
+      (`go test ./server/... -run TestJellyfinClient_Movies -v` against the real
+      server: no filters -> 508 movies (TotalRecordCount); note the method
+      signature was extended to `([]Movie, int, error)` — the second value is
+      Jellyfin's true `TotalRecordCount`, needed so the 2.4 preview `count` is
+      accurate even though the movie list itself is capped via `Limit`.)
 
 ### 2.3 Filters
-- [ ] Define a `Filters` struct parsed from query params on `/api/library/preview`:
+- [x] Define a `Filters` struct parsed from query params on `/api/library/preview`:
       `genres` (repeatable), `yearMin`, `yearMax`, `ratingMin` (community),
       `officialRating`, `runtimeMax`, `unwatched` (bool), `libraryId`,
       `maxMovies` (deck cap, **default 50**).
-- [ ] Map them onto the Jellyfin request: `Genres`, `Years`, `MinCommunityRating`,
+- [x] Map them onto the Jellyfin request: `Genres`, `Years`, `MinCommunityRating`,
       `OfficialRatings`, `Filters=IsUnplayed` (requires `userId`), `ParentId`,
       `Limit`. Filter `runtimeMax` client-side after mapping runtime to minutes.
 - Verify: adding `?genres=Action` reduces the count vs no filter.
+      (Confirmed against real Jellyfin: no filter TotalRecordCount=508,
+      `genres=Action` TotalRecordCount=205 — same test run as 2.2.)
 
 ### 2.4 Preview endpoint
 - [ ] Add `GET /api/library/preview` -> returns JSON `{ "count": N, "movies": [...] }`.
