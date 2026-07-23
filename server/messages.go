@@ -49,6 +49,11 @@ type UndoPayload struct{}
 // AdminEndPayload takes no fields; it force-ends the session (Phase 5).
 type AdminEndPayload struct{}
 
+// AdminPickPayload is sent by the admin to pick a winner from the leaderboard (Phase 5).
+type AdminPickPayload struct {
+	MovieID string `json:"movieID"`
+}
+
 // --- Server -> Client payloads ---
 
 // SessionStatePayload is the full snapshot sent to a client right after it

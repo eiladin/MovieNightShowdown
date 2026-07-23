@@ -163,6 +163,8 @@ func (c *Client) handleMessage(env Envelope) {
 		c.handleSwipe(env.Payload)
 	case "undo":
 		c.handleUndo(env.Payload)
+	case "admin:pick":
+		c.handleAdminPick(env.Payload)
 	default:
 		// admin:end lands in Phase 5.
 		log.Printf("ws: unhandled message type %q", env.Type)
@@ -319,16 +321,25 @@ func (c *Client) handleSwipe(raw json.RawMessage) {
 	}
 	winner, matched := session.recordSwipe(c.participantID, p.MovieID, yes)
 	var progress ProgressPayload
+	var lb []LeaderboardEntry
 	if matched {
 		session.Status = StatusMatched
 		session.WinnerID = p.MovieID
 	} else {
 		progress = session.progressLocked(p.MovieID)
+		lb = session.checkSessionEndedLocked()
+		if lb != nil {
+			session.Status = StatusEnded
+		}
 	}
 	session.mu.Unlock()
 
 	if matched {
 		session.broadcast("match", MatchPayload{Movie: *winner})
+		return
+	}
+	if lb != nil {
+		session.broadcast("session_ended", SessionEndedPayload{Leaderboard: lb})
 		return
 	}
 	session.broadcast("progress", progress)
@@ -358,6 +369,39 @@ func (c *Client) handleUndo(raw json.RawMessage) {
 	session.mu.Unlock()
 
 	session.broadcast("progress", progress)
+}
+
+// handleAdminPick allows the admin to manually pick a winner from the leaderboard
+// when the session has ended with no match (Phase 5).
+func (c *Client) handleAdminPick(raw json.RawMessage) {
+	var p AdminPickPayload
+	if err := json.Unmarshal(raw, &p); err != nil {
+		c.sendError("invalid admin:pick payload")
+		return
+	}
+	session := c.session
+	session.mu.Lock()
+	if c.participantID != session.AdminID {
+		session.mu.Unlock()
+		c.sendError("only the admin can pick a winner")
+		return
+	}
+	if session.Status != StatusEnded {
+		session.mu.Unlock()
+		c.sendError("session is not ended")
+		return
+	}
+	movie := session.findMovie(p.MovieID)
+	if movie == nil {
+		session.mu.Unlock()
+		c.sendError("movie not found")
+		return
+	}
+	session.Status = StatusMatched
+	session.WinnerID = movie.ID
+	session.mu.Unlock()
+
+	session.broadcast("match", MatchPayload{Movie: *movie})
 }
 
 // findParticipantByTokenLocked returns the participant whose Token matches,
@@ -406,9 +450,19 @@ func (s *Session) removeClient(c *Client) {
 	if p, ok := s.Participants[c.participantID]; ok {
 		p.Connected = false
 	}
+	var lb []LeaderboardEntry
+	if s.Status == StatusActive {
+		lb = s.checkSessionEndedLocked()
+		if lb != nil {
+			s.Status = StatusEnded
+		}
+	}
 	s.mu.Unlock()
 
 	s.broadcastParticipants()
+	if lb != nil {
+		s.broadcast("session_ended", SessionEndedPayload{Leaderboard: lb})
+	}
 }
 
 // broadcastParticipants sends the current roster to every attached client.
