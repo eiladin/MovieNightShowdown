@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/eiladin/movie-night-showdown/server"
 )
@@ -14,19 +13,17 @@ import (
 var webDist embed.FS
 
 func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	cfg := server.LoadConfig()
+	log.Printf("config: %s", cfg)
 
 	dist, err := fs.Sub(webDist, "web/dist")
 	if err != nil {
 		log.Fatalf("embed: %v", err)
 	}
 
-	s := server.New()
+	s := server.New(cfg)
 	s.SetStatic(dist)
 
-	log.Printf("movie-night-showdown listening on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, s.Handler()))
+	log.Printf("movie-night-showdown listening on :%s", cfg.Port)
+	log.Fatal(http.ListenAndServe(":"+cfg.Port, s.Handler()))
 }

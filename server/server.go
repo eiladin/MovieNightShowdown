@@ -4,10 +4,11 @@ import "net/http"
 
 type Server struct {
 	mux *http.ServeMux
+	cfg Config
 }
 
-func New() *Server {
-	s := &Server{mux: http.NewServeMux()}
+func New(cfg Config) *Server {
+	s := &Server{mux: http.NewServeMux(), cfg: cfg}
 	s.routes()
 	return s
 }
