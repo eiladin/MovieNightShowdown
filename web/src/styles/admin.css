@@ -46,19 +46,6 @@
   width: 8em;
 }
 
-.rating-select {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 14px;
-  margin: 16px 0;
-  width: max-content;
-}
-
-.rating-select select {
-  padding: 4px;
-}
-
 .unwatched-toggle {
   display: flex;
   align-items: center;

@@ -18,7 +18,7 @@ export interface PreviewFilters {
   yearMin?: number
   yearMax?: number
   ratingMin?: number
-  officialRating?: string
+  officialRatings?: string[]
   runtimeMax?: number
   unwatched?: boolean
   libraryId?: string
@@ -38,7 +38,9 @@ function buildPreviewParams(filters: PreviewFilters): URLSearchParams {
   if (filters.yearMin) params.set('yearMin', String(filters.yearMin))
   if (filters.yearMax) params.set('yearMax', String(filters.yearMax))
   if (filters.ratingMin) params.set('ratingMin', String(filters.ratingMin))
-  if (filters.officialRating) params.set('officialRating', filters.officialRating)
+  for (const rating of filters.officialRatings ?? []) {
+    params.append('officialRatings', rating)
+  }
   if (filters.runtimeMax) params.set('runtimeMax', String(filters.runtimeMax))
   if (filters.unwatched) params.set('unwatched', 'true')
   if (filters.libraryId) params.set('libraryId', filters.libraryId)

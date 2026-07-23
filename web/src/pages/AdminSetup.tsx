@@ -25,6 +25,14 @@ const GENRE_OPTIONS = [
   'Western',
 ]
 
+const RATING_OPTIONS = [
+  'G',
+  'PG',
+  'PG-13',
+  'R',
+  'NC-17',
+]
+
 // AdminSetup is the minimal filter + preview page for Phase 2. Session
 // creation ("Begin") is wired up in Phase 4.
 export default function AdminSetup() {
@@ -35,7 +43,7 @@ export default function AdminSetup() {
   const [genres, setGenres] = useState<string[]>([])
   const [yearMin, setYearMin] = useState('')
   const [yearMax, setYearMax] = useState('')
-  const [officialRating, setOfficialRating] = useState('')
+  const [officialRatings, setOfficialRatings] = useState<string[]>([])
   const [unwatched, setUnwatched] = useState(false)
   const [preview, setPreview] = useState<PreviewResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -45,12 +53,16 @@ export default function AdminSetup() {
     setGenres((prev) => (prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre]))
   }
 
+  function toggleRating(rating: string) {
+    setOfficialRatings((prev) => (prev.includes(rating) ? prev.filter((r) => r !== rating) : [...prev, rating]))
+  }
+
   function currentFilters(): PreviewFilters {
     return {
       genres,
       yearMin: yearMin ? Number(yearMin) : undefined,
       yearMax: yearMax ? Number(yearMax) : undefined,
-      officialRating: officialRating || undefined,
+      officialRatings: officialRatings.length > 0 ? officialRatings : undefined,
       unwatched,
     }
   }
@@ -111,17 +123,15 @@ export default function AdminSetup() {
         </label>
       </div>
 
-      <label className="rating-select">
-        Parental Rating
-        <select value={officialRating} onChange={(e) => setOfficialRating(e.target.value)}>
-          <option value="">Any</option>
-          <option value="G">G</option>
-          <option value="PG">PG</option>
-          <option value="PG-13">PG-13</option>
-          <option value="R">R</option>
-          <option value="NC-17">NC-17</option>
-        </select>
-      </label>
+      <fieldset className="genre-filter">
+        <legend>Parental Rating</legend>
+        {RATING_OPTIONS.map((rating) => (
+          <label key={rating} className="genre-option">
+            <input type="checkbox" checked={officialRatings.includes(rating)} onChange={() => toggleRating(rating)} />
+            {rating}
+          </label>
+        ))}
+      </fieldset>
 
       <label className="unwatched-toggle">
         <input type="checkbox" checked={unwatched} onChange={(e) => setUnwatched(e.target.checked)} />

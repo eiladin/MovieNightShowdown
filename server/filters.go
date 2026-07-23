@@ -17,8 +17,8 @@ type Filters struct {
 	Genres         []string `json:"genres"`
 	YearMin        int      `json:"yearMin"`
 	YearMax        int      `json:"yearMax"`
-	RatingMin      float64  `json:"ratingMin"`      // minimum CommunityRating
-	OfficialRating string   `json:"officialRating"` // MPAA rating, e.g. "PG-13"
+	RatingMin       float64  `json:"ratingMin"`       // minimum CommunityRating
+	OfficialRatings []string `json:"officialRatings"` // MPAA rating, e.g. ["PG", "PG-13"]
 	RuntimeMax     int      `json:"runtimeMax"`     // minutes; filtered client-side
 	Unwatched      bool     `json:"unwatched"`
 	LibraryID      string   `json:"libraryId"`
@@ -28,8 +28,8 @@ type Filters struct {
 // ParseFilters parses Filters from request query params.
 func ParseFilters(q url.Values) Filters {
 	f := Filters{
-		Genres:         q["genres"],
-		OfficialRating: q.Get("officialRating"),
+		Genres:          q["genres"],
+		OfficialRatings: q["officialRatings"],
 		Unwatched:      q.Get("unwatched") == "true",
 		LibraryID:      q.Get("libraryId"),
 		MaxMovies:      defaultMaxMovies,
@@ -66,8 +66,8 @@ func (f Filters) apply(q url.Values, hasUserID bool) {
 	if f.RatingMin > 0 {
 		q.Set("MinCommunityRating", strconv.FormatFloat(f.RatingMin, 'f', -1, 64))
 	}
-	if f.OfficialRating != "" {
-		q.Set("OfficialRatings", f.OfficialRating)
+	if len(f.OfficialRatings) > 0 {
+		q.Set("OfficialRatings", strings.Join(f.OfficialRatings, "|"))
 	}
 	if f.Unwatched && hasUserID {
 		q.Set("Filters", "IsUnplayed")
