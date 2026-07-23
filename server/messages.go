@@ -63,9 +63,10 @@ type SessionStatePayload struct {
 	Status            Status        `json:"status"`
 	Code              string        `json:"code"`
 	RequiredCount     int           `json:"requiredCount"`
-	Participants      []Participant `json:"participants"`
-	YourParticipantID string        `json:"yourParticipantId"`
-	YourToken         string        `json:"yourToken"`
+	Participants      []Participant     `json:"participants"`
+	YourParticipantID string            `json:"yourParticipantId"`
+	YourToken         string            `json:"yourToken"`
+	YourVotes         map[string]string `json:"yourVotes,omitempty"`
 }
 
 // DeckPayload is the ordered, capped deck dealt at admin:start (Phase 4).

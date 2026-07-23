@@ -21,6 +21,7 @@ interface SessionSnapshot {
   requiredCount: number
   participants: Participant[]
   yourParticipantId: string
+  yourVotes?: Record<string, Vote>
 }
 
 interface SessionStore {
@@ -76,6 +77,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
       requiredCount: snapshot.requiredCount,
       participants: snapshot.participants,
       myParticipantId: snapshot.yourParticipantId,
+      myVoteState: snapshot.yourVotes || {},
     }),
 
   setParticipants: (participants) => set({ participants }),
