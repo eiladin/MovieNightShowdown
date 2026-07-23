@@ -23,7 +23,16 @@ export default function Swipe({ socket }: SwipeProps) {
 
   const childRefs = useMemo(() => deck.map(() => createRef<TinderCardApi>()), [deck])
 
-  const [currentIndex, setCurrentIndex] = useState(deck.length - 1)
+  const [initialIndex, setInitialIndex] = useState(() => {
+    let nextIndex = deck.length - 1
+    const votes = useSessionStore.getState().myVoteState
+    while (nextIndex >= 0 && deck[nextIndex].id in votes) {
+      nextIndex--
+    }
+    return nextIndex
+  })
+
+  const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const currentIndexRef = useRef(currentIndex)
   // lastSwipe tracks this device's own most recent vote, so Undo knows which
   // card to restore and which local vote to clear. The server independently
@@ -36,6 +45,7 @@ export default function Swipe({ socket }: SwipeProps) {
     while (nextIndex >= 0 && deck[nextIndex].id in votes) {
       nextIndex--
     }
+    setInitialIndex(nextIndex)
     setCurrentIndex(nextIndex)
     currentIndexRef.current = nextIndex
     lastSwipeRef.current = null
@@ -99,16 +109,19 @@ export default function Swipe({ socket }: SwipeProps) {
 
       <div className="swipe-deck">
         {deck.length === 0 && <p className="swipe-empty">Waiting for the deck…</p>}
-        {deck.map((movie, index) => (
-          <Card
-            key={movie.id}
-            ref={childRefs[index]}
-            movie={movie}
-            active={index === currentIndex}
-            visible={index <= currentIndex + 1 && index >= currentIndex - 3}
-            onSwipe={(dir) => handleCardSwiped(dir, movie.id, index)}
-          />
-        ))}
+        {deck.map((movie, index) => {
+          if (index > initialIndex) return null
+          return (
+            <Card
+              key={movie.id}
+              ref={childRefs[index]}
+              movie={movie}
+              active={index === currentIndex}
+              visible={index <= currentIndex + 1 && index >= currentIndex - 3}
+              onSwipe={(dir) => handleCardSwiped(dir, movie.id, index)}
+            />
+          )
+        })}
       </div>
 
       <div className="swipe-controls">
