@@ -22,13 +22,15 @@ interface CardProps {
 // the card is dragged past its threshold or programmatically swiped:
 // 'right' = yes, 'left' = no (see Swipe.tsx, which sends the corresponding
 // `swipe` WS message).
-const Card = forwardRef<TinderCardApi, CardProps>(function Card({ movie, active, onSwipe }, ref) {
+const Card = forwardRef<TinderCardApi, CardProps>(function Card({ movie, active, visible, onSwipe }, ref) {
   return (
     <TinderCard
       ref={ref}
       className={`swipe-card${active ? ' swipe-card-active' : ''}`}
       onSwipe={onSwipe}
       preventSwipe={['up', 'down']}
+      swipeRequirementType="position"
+      swipeThreshold={100}
     >
       {visible !== false && (
         <div className="swipe-card-inner">
