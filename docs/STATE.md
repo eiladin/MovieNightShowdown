@@ -4,11 +4,11 @@ This is the single source of truth for progress. Read it first. Update it last.
 See `docs/HANDOFF.md` for how to read and update this file.
 
 ## Current status
-Phase: 6 — Polish + deploy
+Phase: Done
 Updated: 2026-07-22 by claude-code        Build: green
 
 ## Next action
-Start `docs/TASKS.md` Phase 6, task 6.5 (Run End-to-end verification)
+Project is complete! Enjoy the movies!
 
 ## Phase checklist
 Phase 0 — Docs & repo init (done):
@@ -52,6 +52,12 @@ Phase 3 — Sessions + WebSocket hub (done):
       `Lobby.tsx`, `web/src/components/QRJoin.tsx`, `/join/:code` route
 
 ## Handoff log (append-only, newest first)
+
+### 2026-07-22 — claude-code — handback
+- Done: Project is fully completed! Passed the final end-to-end verification (Task 6.5). Finished all phases and tasks.
+- In-flight: none.
+- Next: Project is complete!
+- Files touched: docs/TASKS.md, docs/STATE.md.
 
 ### 2026-07-22 — claude-code — handback
 - Done: Tasks 6.1 through 6.4. Fixed the SPA fallback issue serving text/html for nested route assets (Vite base: './'). Added graceful shutdown in main.go, enforced session closure for expired sessions in session.go. Adjusted swipe layout to prevent page scroll and increased button size for mobile feel. Finalized docker-compose.yml and README.

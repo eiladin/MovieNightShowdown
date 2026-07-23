@@ -598,8 +598,8 @@ Goal: robustness + shippable.
 - [x] 6.3 Mobile feel: swipe thresholds tuned; buttons large; layout fills the
       viewport with no page scroll; posters use `object-fit: cover`.
 - [x] 6.4 Finalize `docker-compose.yml` + README run steps.
-- [ ] 6.5 Run the full **End-to-end verification** in `docs/PLAN.md` (all 8 steps)
+- [x] 6.5 Run the full **End-to-end verification** in `docs/PLAN.md` (all 8 steps)
       on the real network and record the result in `docs/STATE.md`.
-- [ ] Final commit and mark the project done in `docs/STATE.md`.
+- [x] Final commit and mark the project done in `docs/STATE.md`.
 ```
 ```
