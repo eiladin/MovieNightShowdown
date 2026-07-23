@@ -1,10 +1,26 @@
 import { useSessionStore } from '../store'
+import type { SessionSocket } from '../ws'
 import Confetti from '../components/Confetti'
 import '../styles/result.css'
 
-export default function Result() {
+interface ResultProps {
+  socket: SessionSocket
+}
+
+export default function Result({ socket }: ResultProps) {
   const status = useSessionStore((s) => s.status)
   const winner = useSessionStore((s) => s.winner)
+  const leaderboard = useSessionStore((s) => s.leaderboard)
+  const participants = useSessionStore((s) => s.participants)
+  const myParticipantId = useSessionStore((s) => s.myParticipantId)
+
+  const me = participants.find((p) => p.id === myParticipantId)
+  const isAdmin = me?.isAdmin ?? false
+
+  function handlePick(movieId: string) {
+    if (!isAdmin) return
+    socket.send('admin:pick', { movieID: movieId })
+  }
 
   if (status === 'matched' && winner) {
     return (
@@ -18,6 +34,34 @@ export default function Result() {
             <p>{winner.year} · {winner.genres?.join(', ')}</p>
           </div>
         </div>
+      </div>
+    )
+  }
+
+  if (status === 'ended' && leaderboard) {
+    return (
+      <div className="result-screen">
+        <h1>No match</h1>
+        <p className="leaderboard-desc">
+          {isAdmin ? 'Tap a movie to declare it the winner' : 'Waiting for the admin to choose'}
+        </p>
+        <ul className="leaderboard">
+          {leaderboard.map((entry) => (
+            <li
+              key={entry.movie.id}
+              className={`leaderboard-item ${isAdmin ? 'clickable' : ''}`}
+              onClick={() => handlePick(entry.movie.id)}
+            >
+              <img src={entry.movie.posterURL} alt={entry.movie.title} />
+              <div className="leaderboard-meta">
+                <h3>{entry.movie.title}</h3>
+                <p>
+                  {entry.yesCount} yes · ★ {entry.movie.communityRating}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
     )
   }

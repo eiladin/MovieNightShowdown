@@ -36,9 +36,17 @@ export interface ProgressPayload {
   cardsRemaining: number
 }
 
-// MatchPayload mirrors server.MatchPayload: the winning movie (Phase 4/5).
 export interface MatchPayload {
   movie: Movie
+}
+
+export interface LeaderboardEntry {
+  movie: Movie
+  yesCount: number
+}
+
+export interface SessionEndedPayload {
+  leaderboard: LeaderboardEntry[]
 }
 
 export interface ErrorPayload {

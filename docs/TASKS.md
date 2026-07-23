@@ -574,15 +574,15 @@ Goal: match reveal with confetti on all devices; no-match leaderboard.
 - Verify: forcing a `match` shows the poster + confetti on every connected client.
 
 ### 5.2 No-match leaderboard
-- [ ] Server: when every connected participant has swiped the whole deck with no
+- [x] Server: when every connected participant has swiped the whole deck with no
       match, emit `session_ended {leaderboard}` sorted by yes-count desc, tie-break
       by `CommunityRating`.
-- [ ] `Result.tsx` also handles `Ended`: show the ranked leaderboard; the admin
+- [x] `Result.tsx` also handles `Ended`: show the ranked leaderboard; the admin
       can tap a movie to declare the winner -> server sets `Matched`+`WinnerID`
       and broadcasts `match` -> same reveal path (confetti).
 - Verify: exhaust a small deck with no consensus -> leaderboard shows; admin pick
       triggers the reveal.
-- [ ] Commit groups; update `docs/STATE.md` (Phase 5 done, Next = 6.1).
+- [x] Commit groups; update `docs/STATE.md` (Phase 5 done, Next = 6.1).
 
 ---
 
