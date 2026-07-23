@@ -22,6 +22,11 @@ PUBLIC_URL="${PUBLIC_URL:-http://localhost:${PORT}}"
 LOG_DIR="$(mktemp -d)"
 MOCK_LOG="${LOG_DIR}/mock-jellyfin.log"
 APP_LOG="${LOG_DIR}/app.log"
+# Use a fresh, per-run poster cache. The app caches posters on disk keyed by
+# movie id + image tag; a persistent cache (the default is a shared temp dir)
+# would serve stale art after the fixtures change, so point it at this run's
+# throwaway directory to keep captures faithful to the current fixtures.
+CACHE_DIR="${LOG_DIR}/poster-cache"
 
 MOCK_PID=""
 APP_PID=""
@@ -101,6 +106,7 @@ JELLYFIN_URL="http://localhost:${MOCK_PORT}" \
 JELLYFIN_API_KEY="dev" \
 PUBLIC_URL="$PUBLIC_URL" \
 PORT="$PORT" \
+CACHE_DIR="$CACHE_DIR" \
 "$APP_BIN" >"$APP_LOG" 2>&1 &
 APP_PID=$!
 
@@ -127,7 +133,7 @@ log "capturing screenshots"
 log "optimizing regenerated PNGs with oxipng"
 oxipng -o max --strip safe \
   docs/screenshots/01-landing.png \
-  docs/screenshots/02-admin.png \
+  docs/screenshots/02-host.png \
   docs/screenshots/03-lobby.png \
   docs/screenshots/04-swipe.png \
   docs/screenshots/05-result.png

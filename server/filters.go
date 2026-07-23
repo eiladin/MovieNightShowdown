@@ -6,23 +6,23 @@ import (
 	"strings"
 )
 
-// defaultMaxMovies is the deck cap applied when the admin does not set one.
+// defaultMaxMovies is the deck cap applied when the host does not set one.
 const defaultMaxMovies = 50
 
-// Filters holds the admin's library filter selections, parsed from the query
+// Filters holds the host's library filter selections, parsed from the query
 // params of GET /api/library/preview, and also sent as JSON inside the
-// admin:start WS payload (Phase 4) — hence the json tags, matching the
+// host:start WS payload (Phase 4) — hence the json tags, matching the
 // frontend's PreviewFilters shape (web/src/api.ts).
 type Filters struct {
-	Genres         []string `json:"genres"`
-	YearMin        int      `json:"yearMin"`
-	YearMax        int      `json:"yearMax"`
+	Genres          []string `json:"genres"`
+	YearMin         int      `json:"yearMin"`
+	YearMax         int      `json:"yearMax"`
 	RatingMin       float64  `json:"ratingMin"`       // minimum CommunityRating
 	OfficialRatings []string `json:"officialRatings"` // MPAA rating, e.g. ["PG", "PG-13"]
-	RuntimeMax     int      `json:"runtimeMax"`     // minutes; filtered client-side
-	Unwatched      bool     `json:"unwatched"`
-	LibraryID      string   `json:"libraryId"`
-	MaxMovies      int      `json:"maxMovies"` // deck cap, default 50
+	RuntimeMax      int      `json:"runtimeMax"`      // minutes; filtered client-side
+	Unwatched       bool     `json:"unwatched"`
+	LibraryID       string   `json:"libraryId"`
+	MaxMovies       int      `json:"maxMovies"` // deck cap, default 50
 }
 
 // ParseFilters parses Filters from request query params.
@@ -30,9 +30,9 @@ func ParseFilters(q url.Values) Filters {
 	f := Filters{
 		Genres:          q["genres"],
 		OfficialRatings: q["officialRatings"],
-		Unwatched:      q.Get("unwatched") == "true",
-		LibraryID:      q.Get("libraryId"),
-		MaxMovies:      defaultMaxMovies,
+		Unwatched:       q.Get("unwatched") == "true",
+		LibraryID:       q.Get("libraryId"),
+		MaxMovies:       defaultMaxMovies,
 	}
 	if v, err := strconv.Atoi(q.Get("yearMin")); err == nil {
 		f.YearMin = v

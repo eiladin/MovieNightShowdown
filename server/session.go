@@ -35,7 +35,7 @@ type Swipe struct {
 type Participant struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
-	IsAdmin   bool   `json:"isAdmin"`
+	IsHost    bool   `json:"isHost"`
 	Connected bool   `json:"connected"`
 	Token     string `json:"-"`
 }
@@ -43,7 +43,7 @@ type Participant struct {
 // Session is one in-memory "movie night". See docs/PLAN.md > Data model.
 type Session struct {
 	Code          string
-	AdminID       string
+	HostID        string
 	RequiredCount int
 	Locked        bool
 	Status        Status
@@ -85,21 +85,21 @@ func NewStore(ttl time.Duration) *Store {
 	return st
 }
 
-// Create makes a new Session with a unique code and the admin as its first
+// Create makes a new Session with a unique code and the host as its first
 // (not-yet-connected) participant.
-func (st *Store) Create(adminName string) *Session {
+func (st *Store) Create(hostName string) *Session {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
 	code := st.uniqueCodeLocked()
-	adminID := uuid.NewString()
+	hostID := uuid.NewString()
 
 	session := &Session{
-		Code:    code,
-		AdminID: adminID,
-		Status:  StatusLobby,
+		Code:   code,
+		HostID: hostID,
+		Status: StatusLobby,
 		Participants: map[string]*Participant{
-			adminID: {ID: adminID, Name: adminName, IsAdmin: true, Token: uuid.NewString()},
+			hostID: {ID: hostID, Name: hostName, IsHost: true, Token: uuid.NewString()},
 		},
 		Votes:     map[string]map[string]bool{},
 		LastSwipe: map[string]Swipe{},
@@ -160,7 +160,7 @@ func (s *Session) Close() {
 // --- POST /api/sessions ---
 
 type createSessionRequest struct {
-	AdminName string `json:"adminName"`
+	HostName string `json:"hostName"`
 }
 
 type createSessionResponse struct {
@@ -170,7 +170,7 @@ type createSessionResponse struct {
 	Token         string `json:"token"`
 }
 
-// handleCreateSession lets an admin start a new session. The admin becomes
+// handleCreateSession lets an host start a new session. The host becomes
 // participant #1; the response carries the resume token their browser must
 // keep (localStorage) and send back on the /ws connection.
 func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
@@ -179,23 +179,23 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	req.AdminName = strings.TrimSpace(req.AdminName)
-	if req.AdminName == "" {
-		http.Error(w, "adminName is required", http.StatusBadRequest)
+	req.HostName = strings.TrimSpace(req.HostName)
+	if req.HostName == "" {
+		http.Error(w, "hostName is required", http.StatusBadRequest)
 		return
 	}
 
-	session := s.store.Create(req.AdminName)
-	admin := session.Participants[session.AdminID]
+	session := s.store.Create(req.HostName)
+	host := session.Participants[session.HostID]
 
 	resp := createSessionResponse{
 		Code:          session.Code,
 		JoinURL:       strings.TrimRight(s.cfg.PublicURL, "/") + "/join/" + session.Code,
-		ParticipantID: admin.ID,
-		Token:         admin.Token,
+		ParticipantID: host.ID,
+		Token:         host.Token,
 	}
 
-	log.Printf("session created: code=%s admin=%s", session.Code, req.AdminName)
+	log.Printf("session created: code=%s host=%s", session.Code, req.HostName)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
 }

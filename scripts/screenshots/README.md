@@ -30,7 +30,7 @@ instance or the network.
   server and the app against it, runs the capture driver, optimizes the
   output PNGs with `oxipng`, and tears everything down on exit.
 
-The placeholder admin name used throughout the flow is **"Alex"** — the only
+The placeholder host name used throughout the flow is **"Alex"** — the only
 name that appears anywhere in the generated screenshots.
 
 ## Running it
@@ -45,7 +45,7 @@ automatically on first run). It overwrites:
 
 ```
 docs/screenshots/01-landing.png
-docs/screenshots/02-admin.png
+docs/screenshots/02-host.png
 docs/screenshots/03-lobby.png
 docs/screenshots/04-swipe.png
 docs/screenshots/05-result.png
@@ -78,8 +78,8 @@ fixture catalog hardcoded in `mock-jellyfin/main.go`.
 | Screenshot | Viewport | Device pixel ratio | Mode | Notes |
 |---|---|---|---|---|
 | `01-landing.png` | 390×844 | 3x | viewport | Landing page, before any input |
-| `02-admin.png` | 390×844 | 2x | full page | Admin filter screen with Action/Adventure/Comedy + PG-13 selected, after "Preview" |
-| `03-lobby.png` | 390×844 | 3x | viewport | Lobby with QR code and the admin roster entry |
+| `02-host.png` | 390×844 | 2x | full page | Host filter screen with Action/Adventure/Comedy + PG-13 selected, after "Preview" |
+| `03-lobby.png` | 390×844 | 3x | viewport | Lobby with QR code and the host roster entry |
 | `04-swipe.png` | 390×844 | 3x | viewport | Swipe deck, first card |
 | `05-result.png` | 390×844 | 3x | viewport | Match screen after a single "Yes" swipe (`requiredCount=1`) |
 

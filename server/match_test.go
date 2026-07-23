@@ -117,7 +117,7 @@ func TestUndo_OfANoReenablesAMatch(t *testing.T) {
 // must fire as soon as RequiredCount participants have voted YES, and neither
 // an extra YES nor an unrelated NO may block it.
 func TestRecordSwipe_SubRosterThresholdFires(t *testing.T) {
-	// Roster of 5, admin requires only 3 to agree.
+	// Roster of 5, host requires only 3 to agree.
 	s := newTestSession(3, Movie{ID: "m1", Title: "Arrival"})
 
 	// One "no" arrives first: under the old exact-count logic this alone

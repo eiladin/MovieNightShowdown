@@ -5,7 +5,7 @@ It is the standing instruction set. Read it fully before doing anything.
 
 ## What this project is
 
-A self-hosted "movie matcher" for a home network. An admin starts a session
+A self-hosted "movie matcher" for a home network. A host starts a session
 against a Jellyfin library, filters it, and sets a headcount N. Up to N people
 join from their own devices (session code / QR, no accounts), swipe through a
 shared deck of movie posters, and when one movie collects a "yes" from all N

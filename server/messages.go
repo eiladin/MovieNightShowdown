@@ -28,10 +28,10 @@ type JoinPayload struct {
 	Name string `json:"name"`
 }
 
-// AdminStartPayload is sent by the admin to lock the roster and deal the
+// HostStartPayload is sent by the host to lock the roster and deal the
 // deck (Phase 4). RequiredCount is optional: 0 means "default to the locked
 // headcount".
-type AdminStartPayload struct {
+type HostStartPayload struct {
 	Filters       Filters `json:"filters"`
 	MaxMovies     int     `json:"maxMovies"`
 	RequiredCount int     `json:"requiredCount"`
@@ -46,11 +46,11 @@ type SwipePayload struct {
 // UndoPayload takes no fields; it reverses the sender's last swipe (Phase 4).
 type UndoPayload struct{}
 
-// AdminEndPayload takes no fields; it force-ends the session (Phase 5).
-type AdminEndPayload struct{}
+// HostEndPayload takes no fields; it force-ends the session (Phase 5).
+type HostEndPayload struct{}
 
-// AdminPickPayload is sent by the admin to pick a winner from the leaderboard (Phase 5).
-type AdminPickPayload struct {
+// HostPickPayload is sent by the host to pick a winner from the leaderboard (Phase 5).
+type HostPickPayload struct {
 	MovieID string `json:"movieID"`
 }
 
@@ -60,16 +60,16 @@ type AdminPickPayload struct {
 // joins. YourParticipantID/YourToken are only meaningful to the recipient —
 // they are never included in the broadcast participant_update payload.
 type SessionStatePayload struct {
-	Status            Status        `json:"status"`
-	Code              string        `json:"code"`
-	RequiredCount     int           `json:"requiredCount"`
+	Status            Status            `json:"status"`
+	Code              string            `json:"code"`
+	RequiredCount     int               `json:"requiredCount"`
 	Participants      []Participant     `json:"participants"`
 	YourParticipantID string            `json:"yourParticipantId"`
 	YourToken         string            `json:"yourToken"`
 	YourVotes         map[string]string `json:"yourVotes,omitempty"`
 }
 
-// DeckPayload is the ordered, capped deck dealt at admin:start (Phase 4).
+// DeckPayload is the ordered, capped deck dealt at host:start (Phase 4).
 type DeckPayload struct {
 	Movies []Movie `json:"movies"`
 }
