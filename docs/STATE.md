@@ -4,11 +4,11 @@ This is the single source of truth for progress. Read it first. Update it last.
 See `docs/HANDOFF.md` for how to read and update this file.
 
 ## Current status
-Phase: 3 — Sessions + WebSocket hub        Status: not_started
+Phase: 4 — Swipe deck + vote engine        Status: not_started
 Updated: 2026-07-22 by claude-code        Build: green
 
 ## Next action
-Start `docs/TASKS.md` Phase 3, task 3.1
+Start `docs/TASKS.md` Phase 4, task 4.1
 
 ## Phase checklist
 Phase 0 — Docs & repo init (done):
@@ -41,7 +41,77 @@ Phase 2 — Jellyfin client + image proxy (done):
 - [x] Admin preview UI (`web/src/api.ts`, `AdminSetup.tsx`, `Landing.tsx`,
       routes in `App.tsx`)
 
+Phase 3 — Sessions + WebSocket hub (done):
+- [x] Session/Participant/Store types + TTL sweeper + join-code generator
+      (`server/session.go`, `server/session_test.go`)
+- [x] `POST /api/sessions` create-session endpoint
+- [x] WS message envelope + typed payloads (`server/messages.go`)
+- [x] WebSocket hub with per-client send channels, single reader/writer
+      goroutines, join/resume/disconnect handling (`server/hub.go`)
+- [x] Frontend: `web/src/ws.ts`, `web/src/store.ts`, `Landing.tsx`,
+      `Lobby.tsx`, `web/src/components/QRJoin.tsx`, `/join/:code` route
+
 ## Handoff log (append-only, newest first)
+
+### 2026-07-22 — claude-code — handback
+- Done: Phase 3 complete (tasks 3.1–3.5). 3.1: `server/session.go` —
+  Status/Swipe/Participant/Session types (reusing the `Movie` type already
+  defined in `server/library.go` from Phase 2 rather than redefining it),
+  `Store` (`map[string]*Session` + `sync.Mutex`, `Create`/`Get`/
+  `sweepExpired` on a 1-minute ticker against `SESSION_TTL`), and a 4-char
+  join-code generator over `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` regenerating
+  on collision; `server/session_test.go` (`TestStore_CreateAndGet`) passes.
+  3.2: `POST /api/sessions` — confirmed against the running server:
+  `{"code":"2TJZ","joinURL":"http://localhost:8080/join/2TJZ",
+  "participantId":"...","token":"<present>"}`. 3.3: `server/messages.go` —
+  `Envelope{type,payload}` + `newEnvelope` helper, typed payloads for every
+  message in `docs/PLAN.md`'s protocol table, plus a pragmatic `error`
+  payload (not in that table) so the hub can report a rejected join back to
+  the one client that caused it. 3.4: `server/hub.go` — gorilla/websocket
+  hub; each `Client` owns its own `send chan []byte`, exactly one
+  `writePump` per client is the sole writer to its socket, one `readPump`
+  reads and dispatches; `join` matches an existing participant by the
+  `?token=` query value or creates one while `Status==Lobby`; disconnect
+  marks `Connected=false` without deleting the participant. Verified with a
+  throwaway Go/gorilla-websocket script (not committed, lived only under
+  the scratch dir): created a session via REST, connected client A with the
+  admin's token (session_state.yourParticipantId matched the REST
+  participantId), connected client B fresh (no token) — both A and B then
+  saw `participant_update` with 2 participants; dropped B's socket — A saw
+  the roster stay at 2 with B `Connected:false`; reconnected B with its
+  saved `yourToken` — B's `session_state.yourParticipantId` was identical
+  to its original id, and A's next `participant_update` showed 2
+  participants (no duplicate) with B back to `Connected:true`. 3.5: added
+  `web/src/ws.ts` (native WebSocket wrapper: persists the resume token in
+  `localStorage`, replays `join` on connect, reconnects with exponential
+  backoff), `web/src/store.ts` (zustand: code/status/requiredCount/
+  participants/deck/myParticipantId/myVoteState), `web/src/components/
+  QRJoin.tsx`, `Lobby.tsx` (name-entry for guests, then code + QR (admin
+  only) + live roster; reached at `/join/:code`, also linked from `/admin`
+  once a session exists), and updated `Landing.tsx`/`AdminSetup.tsx`/
+  `App.tsx` accordingly. Note: `web/package.json` already pinned
+  `react-router-dom` to `^7.18.1` (a Phase 1 decision, predating this
+  session) rather than the `v6` named in Locked tech choices; left as-is —
+  out of Phase 3's scope to relitigate, and the `useParams`/`useSearchParams`
+  APIs used here are unaffected by that major-version difference.
+- In-flight: none.
+- Next: Start `docs/TASKS.md` Phase 4, task 4.1.
+- Files touched: server/{session,session_test,messages,hub,server}.go,
+  go.mod, web/src/{ws,store,api,App}.ts(x), web/src/components/QRJoin.tsx,
+  web/src/pages/{Landing,Lobby,AdminSetup}.tsx, web/src/styles/{admin,
+  landing,lobby}.css, docs/TASKS.md, docs/STATE.md
+- Verify: `go build ./... && go vet ./...` clean; `go test ./...` passes
+  (`TestStore_CreateAndGet`); `cd web && npm run build` succeeds (`tsc -b`
+  + `vite build`, no errors); with the server running against the real
+  Jellyfin env, `curl -XPOST localhost:8080/api/sessions -d
+  '{"adminName":"Nate"}'` returns a code/joinURL/participantId/token;
+  `curl -I localhost:8080/join/ABCD` and `/admin` both return `200` (SPA
+  fallback); the headless WS script (2 clients, drop + reconnect via saved
+  token) reproduced the exact scenario in the task instructions and passed,
+  as detailed above. Not done: visual confirmation of the rendered Lobby/
+  Landing UI in an actual browser — no interactive browser is available in
+  this environment; the underlying protocol and page compilation were
+  verified instead, as instructed.
 
 ### 2026-07-22 — claude-code — handback
 - Done: Phase 2 complete (tasks 2.1–2.6), verified against the real Jellyfin
