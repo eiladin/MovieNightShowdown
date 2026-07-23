@@ -13,7 +13,9 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web /web/dist ./web/dist
-RUN CGO_ENABLED=0 go build -o /out/showdown .
+ARG VERSION=dev
+ARG COMMIT=none
+RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" -o /out/showdown .
 
 # --- Runtime ---
 FROM gcr.io/distroless/static-debian12

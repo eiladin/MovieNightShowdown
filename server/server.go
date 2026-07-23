@@ -11,6 +11,8 @@ type Server struct {
 	cfg      Config
 	jellyfin *JellyfinClient
 	store    *Store
+	version  string
+	commit   string
 }
 
 func New(cfg Config) *Server {
@@ -31,6 +33,12 @@ func New(cfg Config) *Server {
 }
 
 func (s *Server) Handler() http.Handler { return s.mux }
+
+// SetBuildInfo records the version and commit baked in at build time.
+func (s *Server) SetBuildInfo(version, commit string) {
+	s.version = version
+	s.commit = commit
+}
 
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /healthz", s.handleHealth)

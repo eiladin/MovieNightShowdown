@@ -17,9 +17,16 @@ import (
 //go:embed all:web/dist
 var webDist embed.FS
 
+// Injected at build time via -ldflags (see scripts/publish.sh).
+var (
+	version = "dev"
+	commit  = "none"
+)
+
 func main() {
 	cfg := server.LoadConfig()
 	log.Printf("config: %s", cfg)
+	log.Printf("movie-night-showdown %s (commit %s)", version, commit)
 
 	dist, err := fs.Sub(webDist, "web/dist")
 	if err != nil {
@@ -28,6 +35,7 @@ func main() {
 
 	s := server.New(cfg)
 	s.SetStatic(dist)
+	s.SetBuildInfo(version, commit)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
