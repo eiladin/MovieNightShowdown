@@ -1,3 +1,4 @@
+import type { Movie } from './api'
 import type { Participant, Status } from './store'
 
 // Envelope mirrors server.Envelope (see server/messages.go).
@@ -19,6 +20,25 @@ export interface SessionStatePayload {
 
 export interface ParticipantUpdatePayload {
   participants: Participant[]
+}
+
+// DeckPayload mirrors server.DeckPayload: the ordered, capped deck dealt at
+// admin:start (Phase 4). Every client receives the same order.
+export interface DeckPayload {
+  movies: Movie[]
+}
+
+// ProgressPayload mirrors server.ProgressPayload: a HUD summary of swipe
+// progress that never reveals who voted which way (Phase 4).
+export interface ProgressPayload {
+  participantsSwiped: number
+  participantsTotal: number
+  cardsRemaining: number
+}
+
+// MatchPayload mirrors server.MatchPayload: the winning movie (Phase 4/5).
+export interface MatchPayload {
+  movie: Movie
 }
 
 export interface ErrorPayload {

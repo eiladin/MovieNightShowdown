@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Movie } from './api'
+import type { Movie, PreviewFilters } from './api'
 
 // Status mirrors server.Status (see server/session.go).
 export type Status = 'lobby' | 'active' | 'matched' | 'ended'
@@ -34,6 +34,10 @@ interface SessionStore {
   // movieID -> the vote I last cast, so the swipe screen can render the
   // right state after an undo or a reconnect replay.
   myVoteState: Record<string, Vote>
+  // filters is the admin's chosen library filters, carried from AdminSetup
+  // (where they're picked) to Lobby (where "Begin" sends them in
+  // admin:start). Not session state from the server — purely local UI state.
+  filters: PreviewFilters
 
   applySessionState: (snapshot: SessionSnapshot) => void
   setParticipants: (participants: Participant[]) => void
@@ -41,6 +45,7 @@ interface SessionStore {
   setStatus: (status: Status) => void
   recordVote: (movieId: string, vote: Vote) => void
   clearVote: (movieId: string) => void
+  setFilters: (filters: PreviewFilters) => void
   reset: () => void
 }
 
@@ -52,6 +57,7 @@ const initialState = {
   deck: [],
   myParticipantId: null,
   myVoteState: {},
+  filters: {} as PreviewFilters,
 }
 
 export const useSessionStore = create<SessionStore>((set) => ({
@@ -79,6 +85,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
       delete next[movieId]
       return { myVoteState: next }
     }),
+
+  setFilters: (filters) => set({ filters }),
 
   reset: () => set(initialState),
 }))

@@ -2,7 +2,13 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router-dom'
 import QRJoin from '../components/QRJoin'
 import { useSessionStore } from '../store'
-import { SessionSocket, type ErrorPayload, type ParticipantUpdatePayload, type SessionStatePayload } from '../ws'
+import {
+  SessionSocket,
+  type DeckPayload,
+  type ErrorPayload,
+  type ParticipantUpdatePayload,
+  type SessionStatePayload,
+} from '../ws'
 import '../styles/lobby.css'
 
 // Lobby is reached at /join/:code (guest link, and the admin arrives here
@@ -16,14 +22,32 @@ export default function Lobby() {
   const status = useSessionStore((s) => s.status)
   const participants = useSessionStore((s) => s.participants)
   const myParticipantId = useSessionStore((s) => s.myParticipantId)
+  const filters = useSessionStore((s) => s.filters)
   const applySessionState = useSessionStore((s) => s.applySessionState)
   const setParticipants = useSessionStore((s) => s.setParticipants)
+  const setDeck = useSessionStore((s) => s.setDeck)
   const reset = useSessionStore((s) => s.reset)
 
   const [name, setName] = useState('')
   const [joined, setJoined] = useState(() => SessionSocket.getToken(upperCode) !== '')
   const [socketError, setSocketError] = useState<string | null>(null)
   const socketRef = useRef<SessionSocket | null>(null)
+
+  const [maxMovies, setMaxMovies] = useState(50)
+  const [requiredCount, setRequiredCountRaw] = useState(1)
+  const [requiredTouched, setRequiredTouched] = useState(false)
+
+  // Default "required to agree" to the current roster size until the admin
+  // deliberately overrides it (never raise above the roster — see
+  // docs/TASKS.md > Locked product rules).
+  useEffect(() => {
+    if (!requiredTouched) setRequiredCountRaw(Math.max(participants.length, 1))
+  }, [participants.length, requiredTouched])
+
+  function setRequiredCount(value: number) {
+    setRequiredTouched(true)
+    setRequiredCountRaw(value)
+  }
 
   // Reset session state when navigating to a different code.
   useEffect(() => {
@@ -42,6 +66,7 @@ export default function Lobby() {
     const offParticipants = socket.on('participant_update', (payload) =>
       setParticipants((payload as ParticipantUpdatePayload).participants),
     )
+    const offDeck = socket.on('deck', (payload) => setDeck((payload as DeckPayload).movies))
     const offError = socket.on('error', (payload) => setSocketError((payload as ErrorPayload).message))
 
     socket.connect()
@@ -49,6 +74,7 @@ export default function Lobby() {
     return () => {
       offState()
       offParticipants()
+      offDeck()
       offError()
       socket.close()
     }
@@ -60,6 +86,11 @@ export default function Lobby() {
     e.preventDefault()
     if (!name.trim()) return
     setJoined(true)
+  }
+
+  function handleBegin(e: FormEvent) {
+    e.preventDefault()
+    socketRef.current?.send('admin:start', { filters, maxMovies, requiredCount })
   }
 
   const me = participants.find((p) => p.id === myParticipantId)
@@ -105,6 +136,33 @@ export default function Lobby() {
           </li>
         ))}
       </ul>
+
+      {isAdmin && (
+        <form className="begin-form" onSubmit={handleBegin}>
+          <label>
+            Max movies
+            <input
+              type="number"
+              min={1}
+              value={maxMovies}
+              onChange={(e) => setMaxMovies(Number(e.target.value))}
+            />
+          </label>
+          <label>
+            Required to agree
+            <input
+              type="number"
+              min={1}
+              max={Math.max(participants.length, 1)}
+              value={requiredCount}
+              onChange={(e) => setRequiredCount(Number(e.target.value))}
+            />
+          </label>
+          <button type="submit" disabled={participants.length === 0}>
+            Begin
+          </button>
+        </form>
+      )}
     </div>
   )
 }
