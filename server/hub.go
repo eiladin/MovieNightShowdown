@@ -38,7 +38,7 @@ type Client struct {
 	send          chan []byte
 	done          chan struct{} // closed by readPump on exit; signals writePump to stop
 	session       *Session
-	jellyfin      *JellyfinClient // used by handleAdminStart to deal the deck (Phase 4)
+	jellyfin      *JellyfinClient // used by handleHostStart to deal the deck (Phase 4)
 	participantID string          // set once join() attaches this client to a participant
 	token         string          // from ?token=; used to match/resume a participant
 }
@@ -171,16 +171,16 @@ func (c *Client) handleMessage(env Envelope) {
 	switch env.Type {
 	case "join":
 		c.handleJoin(env.Payload)
-	case "admin:start":
-		c.handleAdminStart(env.Payload)
+	case "host:start":
+		c.handleHostStart(env.Payload)
 	case "swipe":
 		c.handleSwipe(env.Payload)
 	case "undo":
 		c.handleUndo(env.Payload)
-	case "admin:pick":
-		c.handleAdminPick(env.Payload)
+	case "host:pick":
+		c.handleHostPick(env.Payload)
 	default:
-		// admin:end lands in Phase 5.
+		// host:end lands in Phase 5.
 		log.Printf("ws: unhandled message type %q", env.Type)
 	}
 }
@@ -243,11 +243,11 @@ func (c *Client) handleJoin(raw json.RawMessage) {
 		YourToken:         participant.Token,
 		YourVotes:         yourVotes,
 	}
-	
+
 	var deck []Movie
 	var match *Movie
 	var lb []LeaderboardEntry
-	
+
 	if session.Status != StatusLobby {
 		deck = make([]Movie, len(session.Deck))
 		copy(deck, session.Deck)
@@ -262,11 +262,11 @@ func (c *Client) handleJoin(raw json.RawMessage) {
 		// Wait, if they reconnect, they need the HUD text! Let's just find their current card.
 		// We'll let the client calculate it, or just leave progress empty until next swipe.
 	}
-	
+
 	session.mu.Unlock()
 
 	c.sendJSON("session_state", state)
-	
+
 	if deck != nil {
 		c.sendJSON("deck", DeckPayload{Movies: deck})
 	}
@@ -279,22 +279,22 @@ func (c *Client) handleJoin(raw json.RawMessage) {
 	session.broadcastParticipants()
 }
 
-// handleAdminStart locks the current roster, deals a shuffled+capped deck
+// handleHostStart locks the current roster, deals a shuffled+capped deck
 // from Jellyfin, and activates the session (Phase 4, task 4.1). Only the
-// admin may call this; it is rejected once the roster is already locked.
-func (c *Client) handleAdminStart(raw json.RawMessage) {
-	var p AdminStartPayload
+// host may call this; it is rejected once the roster is already locked.
+func (c *Client) handleHostStart(raw json.RawMessage) {
+	var p HostStartPayload
 	if err := json.Unmarshal(raw, &p); err != nil {
-		c.sendError("invalid admin:start payload")
+		c.sendError("invalid host:start payload")
 		return
 	}
 
 	session := c.session
 
 	session.mu.Lock()
-	if c.participantID != session.AdminID {
+	if c.participantID != session.HostID {
 		session.mu.Unlock()
-		c.sendError("only the admin can start the session")
+		c.sendError("only the host can start the session")
 		return
 	}
 	if session.Locked {
@@ -308,7 +308,7 @@ func (c *Client) handleAdminStart(raw json.RawMessage) {
 	// holding session.mu so it can never stall other participants.
 	movies, _, err := c.jellyfin.Movies(context.Background(), p.Filters)
 	if err != nil {
-		log.Printf("admin:start: jellyfin fetch failed: %v", err)
+		log.Printf("host:start: jellyfin fetch failed: %v", err)
 		c.sendError("failed to load the movie library")
 		return
 	}
@@ -323,9 +323,9 @@ func (c *Client) handleAdminStart(raw json.RawMessage) {
 	}
 
 	session.mu.Lock()
-	if c.participantID != session.AdminID {
+	if c.participantID != session.HostID {
 		session.mu.Unlock()
-		c.sendError("only the admin can start the session")
+		c.sendError("only the host can start the session")
 		return
 	}
 	if session.Locked {
@@ -427,19 +427,19 @@ func (c *Client) handleUndo(raw json.RawMessage) {
 	session.broadcast("progress", progress)
 }
 
-// handleAdminPick allows the admin to manually pick a winner from the leaderboard
+// handleHostPick allows the host to manually pick a winner from the leaderboard
 // when the session has ended with no match (Phase 5).
-func (c *Client) handleAdminPick(raw json.RawMessage) {
-	var p AdminPickPayload
+func (c *Client) handleHostPick(raw json.RawMessage) {
+	var p HostPickPayload
 	if err := json.Unmarshal(raw, &p); err != nil {
-		c.sendError("invalid admin:pick payload")
+		c.sendError("invalid host:pick payload")
 		return
 	}
 	session := c.session
 	session.mu.Lock()
-	if c.participantID != session.AdminID {
+	if c.participantID != session.HostID {
 		session.mu.Unlock()
-		c.sendError("only the admin can pick a winner")
+		c.sendError("only the host can pick a winner")
 		return
 	}
 	if session.Status != StatusEnded {
@@ -544,7 +544,7 @@ func (s *Session) broadcastDeck() {
 // broadcastSessionState sends every attached client its own personalized
 // session_state snapshot — status/requiredCount/roster are shared, but
 // YourParticipantID/YourToken differ per recipient, so this cannot reuse the
-// plain broadcast() helper. Used after admin:start locks the roster and
+// plain broadcast() helper. Used after host:start locks the roster and
 // activates the session (Phase 4, task 4.1).
 func (s *Session) broadcastSessionState() {
 	s.mu.Lock()
@@ -563,8 +563,8 @@ func (s *Session) broadcastSessionState() {
 	s.mu.Unlock()
 
 	for pid, c := range clients {
-		// We don't bother recalculating YourVotes for broadcastSessionState because 
-		// it only happens at admin:start when Votes is empty anyway!
+		// We don't bother recalculating YourVotes for broadcastSessionState because
+		// it only happens at host:start when Votes is empty anyway!
 		c.sendJSON("session_state", SessionStatePayload{
 			Status:            status,
 			Code:              code,

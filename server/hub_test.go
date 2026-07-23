@@ -25,7 +25,7 @@ import (
 // race.
 func TestHub_BroadcastDuringDisconnect_NoPanic(t *testing.T) {
 	srv := New(Config{SessionTTL: "1h"})
-	session := srv.store.Create("Admin")
+	session := srv.store.Create("Host")
 
 	httpSrv := httptest.NewServer(srv.Handler())
 	defer httpSrv.Close()

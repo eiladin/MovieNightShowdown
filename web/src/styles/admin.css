@@ -1,120 +1,120 @@
-.admin-setup {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 24px 16px 48px;
-  text-align: left;
+.host-setup {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 24px 16px 48px;
+    text-align: left;
 }
 
-.admin-session-banner {
-  background: var(--code-bg, #f4f3ec);
-  border-radius: 8px;
-  padding: 10px 14px;
-  margin: 0 0 16px;
+.host-session-banner {
+    background: var(--code-bg, #f4f3ec);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 16px;
 }
 
 .chip-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  border: 1px solid var(--border, #e5e4e7);
-  border-radius: 8px;
-  padding: 12px 16px 16px;
-  margin: 16px 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    border: 1px solid var(--border, #e5e4e7);
+    border-radius: 8px;
+    padding: 12px 16px 16px;
+    margin: 16px 0;
 }
 
 .chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 18px;
-  border-radius: 24px;
-  background-color: var(--code-bg);
-  border: 1px solid var(--border);
-  cursor: pointer;
-  font-size: 15px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  user-select: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 24px;
+    background-color: var(--code-bg);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    user-select: none;
 }
 
 .chip:hover {
-  border-color: var(--accent-border);
+    border-color: var(--accent-border);
 }
 
 .chip:focus-within {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 .chip.checked {
-  background: var(--chip-fill);
-  color: #fff;
-  border-color: var(--chip-fill);
-  box-shadow: 0 4px 12px var(--accent-bg);
+    background: var(--chip-fill);
+    color: #fff;
+    border-color: var(--chip-fill);
+    box-shadow: 0 4px 12px var(--accent-bg);
 }
 
 .year-range {
-  display: flex;
-  gap: 16px;
-  margin: 16px 0;
+    display: flex;
+    gap: 16px;
+    margin: 16px 0;
 }
 
 .year-range label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 14px;
 }
 
 .year-range input {
-  width: 8em;
+    width: 8em;
 }
 
 .unwatched-toggle {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 8px 0 16px;
-  min-height: 44px;
-  padding: 8px 4px;
-  cursor: pointer;
-  font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 8px 0 16px;
+    min-height: 44px;
+    padding: 8px 4px;
+    cursor: pointer;
+    font-size: 16px;
 }
 
 .unwatched-toggle input[type='checkbox'] {
-  width: 24px;
-  height: 24px;
-  flex: none;
-  accent-color: var(--accent);
-  cursor: pointer;
+    width: 24px;
+    height: 24px;
+    flex: none;
+    accent-color: var(--accent);
+    cursor: pointer;
 }
 
 .preview-error {
-  color: #d33;
+    color: #d33;
 }
 
 .preview-count {
-  font-weight: 600;
-  margin: 16px 0 8px;
+    font-weight: 600;
+    margin: 16px 0 8px;
 }
 
 .poster-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
 }
 
 .poster-grid img {
-  width: 100%;
-  aspect-ratio: 2 / 3;
-  object-fit: cover;
-  border-radius: 6px;
-  background: var(--code-bg, #f4f3ec);
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    object-fit: cover;
+    border-radius: 6px;
+    background: var(--code-bg, #f4f3ec);
 }
 
-.admin-setup > button,
-.admin-setup > .btn {
-  margin-top: 24px;
-  width: 100%;
+.host-setup>button,
+.host-setup>.btn {
+    margin-top: 24px;
+    width: 100%;
 }

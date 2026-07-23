@@ -40,7 +40,7 @@ A live preview shows exactly how many movies made the cut before anyone starts
 swiping.
 
 <div align="center">
-<img src="docs/screenshots/02-admin.png" alt="Filter the library by genre, year, and rating" width="300" />
+<img src="docs/screenshots/02-host.png" alt="Filter the library by genre, year, and rating" width="300" />
 </div>
 
 Everyone else joins by scanning the QR code or punching in the session code — no
