@@ -322,7 +322,7 @@ Goal: query/filter the Jellyfin library and proxy posters; admin can preview.
 Read `docs/PLAN.md > Jellyfin integration` for the exact query and fields.
 
 ### 2.1 Config loader
-- [ ] Create a small `Config` struct (in `server/server.go` or a `config.go`)
+- [x] Create a small `Config` struct (in `server/server.go` or a `config.go`)
       read from env: `JellyfinURL`, `JellyfinAPIKey`, `JellyfinUserID`,
       `PublicURL`, `Port`, `SessionTTL`. Pass `Config` into `server.New`.
 - Verify: log the loaded config (mask the API key) on startup.
