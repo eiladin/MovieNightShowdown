@@ -1,0 +1,13 @@
+services:
+  showdown:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      JELLYFIN_URL: ${JELLYFIN_URL}
+      JELLYFIN_API_KEY: ${JELLYFIN_API_KEY}
+      JELLYFIN_USER_ID: ${JELLYFIN_USER_ID:-}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+      PORT: "8080"
+      SESSION_TTL: ${SESSION_TTL:-4h}
+    restart: unless-stopped
