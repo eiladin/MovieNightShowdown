@@ -14,15 +14,20 @@ func (s *Session) recordSwipe(participantID, movieID string, yes bool) (winner *
 	if !yes {
 		return nil, false // a "no" can never create a match (secret-kill)
 	}
-	// Win = every participant voted, and all votes are "yes".
-	votes := s.Votes[movieID]
-	if len(votes) != s.RequiredCount {
-		return nil, false
-	}
-	for _, v := range votes {
-		if !v {
-			return nil, false
+	// Win = at least RequiredCount participants voted "yes" on this movie.
+	// Count "yes" votes rather than requiring an exact total-vote count so the
+	// threshold works when RequiredCount is below the roster size: extra votes
+	// and unrelated "no" votes neither trigger nor block a match, and a "no"
+	// only holds the card back while it keeps enough YES votes out of reach
+	// (undoing that "no" can revive it).
+	yesCount := 0
+	for _, v := range s.Votes[movieID] {
+		if v {
+			yesCount++
 		}
+	}
+	if yesCount < s.RequiredCount {
+		return nil, false
 	}
 	return s.findMovie(movieID), true
 }

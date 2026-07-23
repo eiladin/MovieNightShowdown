@@ -110,3 +110,56 @@ func TestUndo_OfANoReenablesAMatch(t *testing.T) {
 		t.Fatalf("expected winner m1, got %+v", winner)
 	}
 }
+
+// TestRecordSwipe_SubRosterThresholdFires exercises the case the win condition
+// used to get wrong: RequiredCount is set below the roster size, everyone
+// swipes every card, and there is an unrelated "no" among the votes. A match
+// must fire as soon as RequiredCount participants have voted YES, and neither
+// an extra YES nor an unrelated NO may block it.
+func TestRecordSwipe_SubRosterThresholdFires(t *testing.T) {
+	// Roster of 5, admin requires only 3 to agree.
+	s := newTestSession(3, Movie{ID: "m1", Title: "Arrival"})
+
+	// One "no" arrives first: under the old exact-count logic this alone
+	// permanently poisoned the card. It must not here.
+	if _, matched := s.recordSwipe("p1", "m1", false); matched {
+		t.Fatal("expected no match after a lone no vote")
+	}
+	// First two yes votes: threshold of 3 not yet met.
+	if _, matched := s.recordSwipe("p2", "m1", true); matched {
+		t.Fatal("expected no match after 1 yes vote")
+	}
+	if _, matched := s.recordSwipe("p3", "m1", true); matched {
+		t.Fatal("expected no match after 2 yes votes (threshold is 3)")
+	}
+	// Third yes vote reaches the threshold even though total votes (4, incl.
+	// the "no") already exceed RequiredCount.
+	winner, matched := s.recordSwipe("p4", "m1", true)
+	if !matched {
+		t.Fatal("expected a match once 3 participants voted yes, despite an unrelated no and total votes > RequiredCount")
+	}
+	if winner == nil || winner.ID != "m1" {
+		t.Fatalf("expected winner m1, got %+v", winner)
+	}
+}
+
+// TestRecordSwipe_ExtraVotesPastThresholdStillMatch guards the other half of
+// the old bug: once the YES threshold is reached, further votes (from a fifth
+// participant swiping the whole deck) must not make the card stop matching.
+func TestRecordSwipe_ExtraVotesPastThresholdStillMatch(t *testing.T) {
+	s := newTestSession(3, Movie{ID: "m1", Title: "Dune"})
+
+	s.recordSwipe("p1", "m1", true)
+	s.recordSwipe("p2", "m1", true)
+	if _, matched := s.recordSwipe("p3", "m1", true); !matched {
+		t.Fatal("expected a match at exactly 3 yes votes")
+	}
+	// A late-arriving yes from a 4th person keeps the threshold satisfied.
+	winner, matched := s.recordSwipe("p4", "m1", true)
+	if !matched {
+		t.Fatalf("expected the card to stay matched with a 4th yes vote, got matched=false")
+	}
+	if winner == nil || winner.ID != "m1" {
+		t.Fatalf("expected winner m1, got %+v", winner)
+	}
+}
