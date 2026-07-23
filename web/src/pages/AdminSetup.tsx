@@ -4,23 +4,6 @@ import { getAvailableFilters, getPreview, type AvailableFilters, type PreviewFil
 import { useSessionStore } from '../store'
 import '../styles/admin.css'
 
-// AdminSetup is the minimal filter + preview page for Phase 2. Session
-// creation ("Begin") is wired up in Phase 4.
-export default function AdminSetup() {
-  const [searchParams] = useSearchParams()
-  const sessionCode = searchParams.get('code')
-  const setFilters = useSessionStore((s) => s.setFilters)
-
-  const [genres, setGenres] = useState<string[]>([])
-  const [yearMin, setYearMin] = useState('')
-  const [yearMax, setYearMax] = useState('')
-  const [officialRatings, setOfficialRatings] = useState<string[]>([])
-  const [unwatched, setUnwatched] = useState(false)
-  const [preview, setPreview] = useState<PreviewResponse | null>(null)
-  const [available, setAvailable] = useState<AvailableFilters | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
 const RATING_ORDER: Record<string, number> = {
   'G': 10,
   'TV-Y': 11,
@@ -50,6 +33,23 @@ function sortRatings(ratings: string[]): string[] {
 function sortGenres(genres: string[]): string[] {
   return [...genres].sort((a, b) => a.localeCompare(b))
 }
+
+// AdminSetup is the minimal filter + preview page for Phase 2. Session
+// creation ("Begin") is wired up in Phase 4.
+export default function AdminSetup() {
+  const [searchParams] = useSearchParams()
+  const sessionCode = searchParams.get('code')
+  const setFilters = useSessionStore((s) => s.setFilters)
+
+  const [genres, setGenres] = useState<string[]>([])
+  const [yearMin, setYearMin] = useState('')
+  const [yearMax, setYearMax] = useState('')
+  const [officialRatings, setOfficialRatings] = useState<string[]>([])
+  const [unwatched, setUnwatched] = useState(false)
+  const [preview, setPreview] = useState<PreviewResponse | null>(null)
+  const [available, setAvailable] = useState<AvailableFilters | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     getAvailableFilters()
@@ -120,11 +120,11 @@ function sortGenres(genres: string[]): string[] {
           <legend>Genres</legend>
           {available.genres.map((genre) => (
             <label key={genre} className={`genre-option ${genres.includes(genre) ? 'checked' : ''}`}>
-              <input 
-                type="checkbox" 
-                checked={genres.includes(genre)} 
-                onChange={() => toggleGenre(genre)} 
-                style={{ display: 'none' }}
+              <input
+                type="checkbox"
+                className="sr-only"
+                checked={genres.includes(genre)}
+                onChange={() => toggleGenre(genre)}
               />
               {genre}
             </label>
@@ -148,11 +148,11 @@ function sortGenres(genres: string[]): string[] {
           <legend>Parental Rating</legend>
           {available.officialRatings.map((rating) => (
             <label key={rating} className={`genre-option ${officialRatings.includes(rating) ? 'checked' : ''}`}>
-              <input 
-                type="checkbox" 
-                checked={officialRatings.includes(rating)} 
-                onChange={() => toggleRating(rating)} 
-                style={{ display: 'none' }}
+              <input
+                type="checkbox"
+                className="sr-only"
+                checked={officialRatings.includes(rating)}
+                onChange={() => toggleRating(rating)}
               />
               {rating}
             </label>
