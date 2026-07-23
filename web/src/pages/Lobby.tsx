@@ -9,6 +9,7 @@ import {
   type ParticipantUpdatePayload,
   type SessionStatePayload,
 } from '../ws'
+import Swipe from './Swipe'
 import '../styles/lobby.css'
 
 // Lobby is reached at /join/:code (guest link, and the admin arrives here
@@ -113,6 +114,13 @@ export default function Lobby() {
         </form>
       </div>
     )
+  }
+
+  // Once the admin starts the session, the deck takes over the same screen
+  // (same socket, same mounted component) rather than a route change — the
+  // WS connection must survive the transition.
+  if (socketRef.current && status !== 'lobby') {
+    return <Swipe socket={socketRef.current} />
   }
 
   return (

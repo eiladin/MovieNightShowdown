@@ -550,15 +550,15 @@ func (s *Session) recordSwipe(participantID, movieID string, yes bool) (winner *
       server emits `match`. Swipe then undo -> the vote is gone from state.
 
 ### 4.3 Swipe UI
-- [ ] `components/Card.tsx`: wrap `react-tinder-card`. Props: the movie; call
+- [x] `components/Card.tsx`: wrap `react-tinder-card`. Props: the movie; call
       `onSwipe(dir)` -> send `swipe` (`right`=yes, `left`=no). Show poster
       (`/api/images/id`), title, year, genres, runtime.
-- [ ] `Swipe.tsx`: render the deck as a stack of `Card`s; yes/no buttons that call
+- [x] `Swipe.tsx`: render the deck as a stack of `Card`s; yes/no buttons that call
       the card ref's `.swipe('right'|'left')`; an Undo button that calls the last
       card's `.restoreCard()` and sends `undo`. A HUD from `progress` ("2 of 4
       still swiping", cards left) — never show other people's individual votes.
 - Verify: swiping on the phone updates server state; undo restores the last card.
-- [ ] Commit groups; update `docs/STATE.md` (Phase 4 done, Next = 5.1).
+- [x] Commit groups; update `docs/STATE.md` (Phase 4 done, Next = 5.1).
 
 ---
 
