@@ -109,3 +109,21 @@
   color: #88ff5a;
   font-weight: bold;
 }
+
+.result-home-btn {
+  margin-top: 2rem;
+  padding: 12px 28px;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: transparent;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex: none;
+}
+
+.result-home-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}

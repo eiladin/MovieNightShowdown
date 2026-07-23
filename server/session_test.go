@@ -24,15 +24,15 @@ func TestStore_CreateAndGet(t *testing.T) {
 		t.Fatal("expected Get to return the same Session pointer created by Create")
 	}
 
-	admin, ok := got.Participants[got.AdminID]
+	host, ok := got.Participants[got.HostID]
 	if !ok {
-		t.Fatal("expected the admin to be registered as a participant")
+		t.Fatal("expected the host to be registered as a participant")
 	}
-	if admin.Name != "Nate" || !admin.IsAdmin {
-		t.Fatalf("expected admin participant named Nate with IsAdmin=true, got %+v", admin)
+	if host.Name != "Nate" || !host.IsHost {
+		t.Fatalf("expected host participant named Nate with IsHost=true, got %+v", host)
 	}
-	if admin.Token == "" {
-		t.Fatal("expected the admin participant to have a resume token")
+	if host.Token == "" {
+		t.Fatal("expected the host participant to have a resume token")
 	}
 	if got.Status != StatusLobby {
 		t.Fatalf("expected a new session to start in StatusLobby, got %q", got.Status)

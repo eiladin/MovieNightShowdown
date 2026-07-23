@@ -12,7 +12,7 @@ type libraryPreviewResponse struct {
 	Movies []Movie `json:"movies"`
 }
 
-// handleLibraryPreview lets the admin preview the filtered Jellyfin library
+// handleLibraryPreview lets the host preview the filtered Jellyfin library
 // (count + a capped list of movies for poster thumbnails) before starting a
 // session.
 func (s *Server) handleLibraryPreview(w http.ResponseWriter, r *http.Request) {
