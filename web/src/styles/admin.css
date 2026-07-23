@@ -101,7 +101,8 @@
   background: var(--code-bg, #f4f3ec);
 }
 
-.admin-setup > button {
+.admin-setup > button,
+.admin-setup > .btn {
   margin-top: 24px;
   width: 100%;
 }
