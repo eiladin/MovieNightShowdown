@@ -358,17 +358,22 @@ Read `docs/PLAN.md > Jellyfin integration` for the exact query and fields.
       `genres=Action` TotalRecordCount=205 — same test run as 2.2.)
 
 ### 2.4 Preview endpoint
-- [ ] Add `GET /api/library/preview` -> returns JSON `{ "count": N, "movies": [...] }`.
+- [x] Add `GET /api/library/preview` -> returns JSON `{ "count": N, "movies": [...] }`.
 - Verify: `curl -fsS "localhost:8080/api/library/preview?genres=Action" | jq '.count'`
       returns a number matching Jellyfin's Action count.
+      (Ran against the real server: no filter `.count`=508; `genres=Action`
+      `.count`=205, an exact match to Jellyfin's own `Items?Genres=Action`
+      `TotalRecordCount`. `.movies` length capped at the default `maxMovies`=50.)
 
 ### 2.5 Image proxy
-- [ ] Create `server/images.go`, add `GET /api/images/{id}`:
+- [x] Create `server/images.go`, add `GET /api/images/{id}`:
       fetch `{baseURL}/Items/{id}/Images/Primary?maxWidth=600` with the
       `X-Emby-Token` header, stream the body through, copy `Content-Type`, and set
       `Cache-Control: public, max-age=86400`.
 - Verify: `curl -I localhost:8080/api/images/<realItemId>` -> `200` and
       `Content-Type: image/*`.
+      (Confirmed: `HTTP/1.1 200 OK`, `Content-Type: image/jpeg`,
+      `Cache-Control: public, max-age=86400`. A bad id returns `404`.)
 
 ### 2.6 Minimal admin preview UI
 - [ ] Add a `web/src/api.ts` with `getPreview(filters)` using `fetch`.
