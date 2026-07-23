@@ -31,8 +31,13 @@ export default function Swipe({ socket }: SwipeProps) {
   const lastSwipeRef = useRef<{ movieId: string; vote: Vote } | null>(null)
 
   useEffect(() => {
-    setCurrentIndex(deck.length - 1)
-    currentIndexRef.current = deck.length - 1
+    let nextIndex = deck.length - 1
+    const votes = useSessionStore.getState().myVoteState
+    while (nextIndex >= 0 && deck[nextIndex].id in votes) {
+      nextIndex--
+    }
+    setCurrentIndex(nextIndex)
+    currentIndexRef.current = nextIndex
     lastSwipeRef.current = null
   }, [deck])
 

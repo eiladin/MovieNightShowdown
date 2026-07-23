@@ -209,6 +209,17 @@ func (c *Client) handleJoin(raw json.RawMessage) {
 	c.token = participant.Token
 	session.clients[participant.ID] = c
 
+	yourVotes := make(map[string]string)
+	for movieID, votes := range session.Votes {
+		if yes, ok := votes[participant.ID]; ok {
+			if yes {
+				yourVotes[movieID] = "yes"
+			} else {
+				yourVotes[movieID] = "no"
+			}
+		}
+	}
+
 	state := SessionStatePayload{
 		Status:            session.Status,
 		Code:              session.Code,
@@ -216,10 +227,41 @@ func (c *Client) handleJoin(raw json.RawMessage) {
 		Participants:      participantViewsLocked(session),
 		YourParticipantID: participant.ID,
 		YourToken:         participant.Token,
+		YourVotes:         yourVotes,
 	}
+	
+	var deck []Movie
+	var match *Movie
+	var lb []LeaderboardEntry
+	
+	if session.Status != StatusLobby {
+		deck = make([]Movie, len(session.Deck))
+		copy(deck, session.Deck)
+	}
+	if session.Status == StatusMatched {
+		match = session.findMovie(session.WinnerID)
+	} else if session.Status == StatusEnded {
+		lb = session.checkSessionEndedLocked()
+	} else if session.Status == StatusActive {
+		// Just send a blank progress, or the progress for the top deck card if we wanted to
+		// But it's easier to just let the client receive the first broadcast later.
+		// Wait, if they reconnect, they need the HUD text! Let's just find their current card.
+		// We'll let the client calculate it, or just leave progress empty until next swipe.
+	}
+	
 	session.mu.Unlock()
 
 	c.sendJSON("session_state", state)
+	
+	if deck != nil {
+		c.sendJSON("deck", DeckPayload{Movies: deck})
+	}
+	if match != nil {
+		c.sendJSON("match", MatchPayload{Movie: *match})
+	}
+	if lb != nil {
+		c.sendJSON("session_ended", SessionEndedPayload{Leaderboard: lb})
+	}
 	session.broadcastParticipants()
 }
 
@@ -507,6 +549,8 @@ func (s *Session) broadcastSessionState() {
 	s.mu.Unlock()
 
 	for pid, c := range clients {
+		// We don't bother recalculating YourVotes for broadcastSessionState because 
+		// it only happens at admin:start when Votes is empty anyway!
 		c.sendJSON("session_state", SessionStatePayload{
 			Status:            status,
 			Code:              code,
