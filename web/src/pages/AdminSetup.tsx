@@ -21,9 +21,44 @@ export default function AdminSetup() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+const RATING_ORDER: Record<string, number> = {
+  'G': 10,
+  'TV-Y': 11,
+  'TV-Y7': 12,
+  'TV-G': 13,
+  'PG': 20,
+  'TV-PG': 21,
+  'PG-13': 30,
+  'TV-14': 31,
+  'R': 40,
+  'TV-MA': 41,
+  'NC-17': 50,
+  'X': 51,
+  'NR': 99,
+  'UR': 100,
+}
+
+function sortRatings(ratings: string[]): string[] {
+  return [...ratings].sort((a, b) => {
+    const valA = RATING_ORDER[a.toUpperCase()] ?? 1000
+    const valB = RATING_ORDER[b.toUpperCase()] ?? 1000
+    if (valA !== valB) return valA - valB
+    return a.localeCompare(b)
+  })
+}
+
+function sortGenres(genres: string[]): string[] {
+  return [...genres].sort((a, b) => a.localeCompare(b))
+}
+
   useEffect(() => {
     getAvailableFilters()
-      .then(setAvailable)
+      .then((f) => {
+        setAvailable({
+          genres: sortGenres(f.genres),
+          officialRatings: sortRatings(f.officialRatings),
+        })
+      })
       .catch((err) => console.error('Failed to load available filters:', err))
   }, [])
 
@@ -84,8 +119,13 @@ export default function AdminSetup() {
         <fieldset className="genre-filter">
           <legend>Genres</legend>
           {available.genres.map((genre) => (
-            <label key={genre} className="genre-option">
-              <input type="checkbox" checked={genres.includes(genre)} onChange={() => toggleGenre(genre)} />
+            <label key={genre} className={`genre-option ${genres.includes(genre) ? 'checked' : ''}`}>
+              <input 
+                type="checkbox" 
+                checked={genres.includes(genre)} 
+                onChange={() => toggleGenre(genre)} 
+                style={{ display: 'none' }}
+              />
               {genre}
             </label>
           ))}
@@ -107,8 +147,13 @@ export default function AdminSetup() {
         <fieldset className="genre-filter">
           <legend>Parental Rating</legend>
           {available.officialRatings.map((rating) => (
-            <label key={rating} className="genre-option">
-              <input type="checkbox" checked={officialRatings.includes(rating)} onChange={() => toggleRating(rating)} />
+            <label key={rating} className={`genre-option ${officialRatings.includes(rating) ? 'checked' : ''}`}>
+              <input 
+                type="checkbox" 
+                checked={officialRatings.includes(rating)} 
+                onChange={() => toggleRating(rating)} 
+                style={{ display: 'none' }}
+              />
               {rating}
             </label>
           ))}

@@ -23,10 +23,30 @@
 }
 
 .genre-option {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 14px;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 24px;
+  background-color: var(--code-bg);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.genre-option:hover {
+  border-color: var(--accent-border);
+}
+
+.genre-option.checked {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px var(--accent-bg);
 }
 
 .year-range {
