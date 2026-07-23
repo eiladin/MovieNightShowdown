@@ -15,6 +15,9 @@ happens:
      the one concrete `Next action`.
    - The current phase in `docs/EXECUTION.md` — goal, tasks, definition of done,
      verification, and continuation logic for where work was interrupted.
+   - `docs/TASKS.md` — the granular, spoon-fed step-by-step checklist with locked
+     tech/product choices and copy-paste code. **This is where the actual build
+     work happens**; `STATE.md > Next action` points at a specific task here.
    - `docs/PLAN.md` — design/architecture reference, as needed.
 3. Run the current phase's **smoke check / verification** (see that phase in
    `docs/EXECUTION.md`) to confirm reality matches what `STATE.md` claims.
@@ -40,6 +43,7 @@ README.md            Human quickstart: run, configure, env vars.
 docs/
   PLAN.md            Design + architecture (the "what" and "why").
   EXECUTION.md       Phased execution plan; each phase self-contained.
+  TASKS.md           Granular step-by-step checklist (locked choices; copy-paste code).
   HANDOFF.md         Handoff/handback protocol between agents.
   STATE.md           Living ledger. Read first, update last.
 main.go / go.mod     Go backend (added in Phase 1).

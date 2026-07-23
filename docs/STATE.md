@@ -8,10 +8,10 @@ Phase: 1 — Scaffold        Status: not_started
 Updated: 2026-07-22 by claude-code        Build: n/a (no code yet)
 
 ## Next action
-Begin Phase 1 (Scaffold) per `docs/EXECUTION.md`: `go mod init` and stand up the
-minimal `net/http` server with `GET /healthz` returning 200. Then scaffold the
-Vite React app in `web/`, wire `//go:embed web/dist`, and add the multi-stage
-`Dockerfile` + `docker-compose.yml` + `.env.example`.
+Start `docs/TASKS.md` Phase 1, task **1.1** ("Initialize the Go module"):
+`go mod init github.com/eiladin/movie-night-showdown`. Then work straight down
+`docs/TASKS.md` in order — it has the locked tech/product choices and copy-paste
+code. Check off each `- [ ]` only after its "Verify:" passes.
 
 ## Phase checklist
 Phase 0 — Docs & repo init (done):
@@ -33,6 +33,13 @@ Phase 1 — Scaffold (not started):
 - [ ] .env.example with all env vars
 
 ## Handoff log (append-only, newest first)
+
+### 2026-07-22 — claude-code — handback
+- Done: Added `docs/TASKS.md` (granular junior checklist with locked tech + copy-paste code). Locked four owner decisions into PLAN.md/TASKS.md: roster locks at Begin (RequiredCount = locked headcount, adjustable down); admin-set deck cap default 50; admin access open on LAN (no auth); module path `github.com/eiladin/movie-night-showdown`. Threaded TASKS.md into CLAUDE.md resume order.
+- In-flight: none.
+- Next: Start `docs/TASKS.md` Phase 1, task 1.1.
+- Files touched: docs/TASKS.md, docs/PLAN.md, CLAUDE.md, docs/STATE.md
+- Verify: `docs/TASKS.md` exists; `git log --oneline` shows the tasks commit.
 
 ### 2026-07-22 — claude-code — handback
 - Done: Phase 0 complete. Wrote CLAUDE.md, README.md, and docs/{PLAN,EXECUTION,HANDOFF,STATE}.md; `git init`; added .gitignore; initial commit.

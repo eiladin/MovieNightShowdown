@@ -24,6 +24,9 @@ single container that talks to an existing Jellyfin server.
 | Match rule | Win = a movie gets a "yes" from all N participants. A "no" secretly zeroes a movie's chance (it can't reach N), but cards are **not** removed from the client — users still swipe them normally |
 | No match | Session ends with a ranked leaderboard (most yeses) for the admin to break the tie |
 | Undo | One-step undo of the last swipe (reverses the vote) |
+| Quorum | Roster locks when the admin hits "Begin"; required yeses = the locked lobby headcount (admin may adjust it down). Match = all locked participants said yes |
+| Deck cap | Admin-set "max movies" per session, default 50, shuffled. Late joiners are allowed during Lobby, rejected once Active |
+| Admin access | Open on the LAN — no password; anyone who can reach the app can start a session and be admin |
 
 ## Architecture
 
@@ -102,6 +105,11 @@ Sessions expire via a TTL sweeper (`SESSION_TTL`, default a few hours).
 
 ## Match engine
 
+`RequiredCount` is set when the admin hits "Begin": the current lobby roster is
+locked, and `RequiredCount` defaults to the number of locked-in participants (the
+admin may adjust it down before starting). New participants cannot join once the
+session is Active.
+
 On every swipe the server records `Votes[movieID][participantID] = (dir == yes)`
 and updates `LastSwipe`.
 
@@ -133,7 +141,7 @@ and updates `LastSwipe`.
 | Direction | type | payload |
 |---|---|---|
 | C->S | `join` | `{ code, name }` -> server issues a resume `token` |
-| C->S | `admin:start` | `{ requiredCount, filters }` |
+| C->S | `admin:start` | `{ filters, maxMovies, requiredCount? }` (locks roster; `requiredCount` defaults to locked headcount, may be lowered; `maxMovies` defaults to 50) |
 | C->S | `swipe` | `{ movieID, dir: "yes"\|"no" }` |
 | C->S | `undo` | `{}` |
 | C->S | `admin:end` | `{}` (force end -> leaderboard) |
