@@ -51,7 +51,8 @@ on, then come here.
 
 **Frontend** (in `web/`, package manager = **npm**)
 - **Vite + React 18 + TypeScript**.
-- Routing: **`react-router-dom`** v6.
+- Routing: **`react-router-dom`** v7 (installed in Phase 1; the `useParams` /
+  `useSearchParams` APIs used here are the same as v6).
 - State: **`zustand`**.
 - Swipe cards: **`react-tinder-card`** (has built-in swipe + programmatic
   `swipe()` / `restoreCard()` for undo). No custom gesture engine.
