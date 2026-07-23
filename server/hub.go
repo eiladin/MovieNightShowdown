@@ -1,8 +1,10 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"log"
+	"math/rand"
 	"net/http"
 	"sort"
 	"strings"
@@ -35,8 +37,9 @@ type Client struct {
 	conn          *websocket.Conn
 	send          chan []byte
 	session       *Session
-	participantID string // set once join() attaches this client to a participant
-	token         string // from ?token=; used to match/resume a participant
+	jellyfin      *JellyfinClient // used by handleAdminStart to deal the deck (Phase 4)
+	participantID string          // set once join() attaches this client to a participant
+	token         string          // from ?token=; used to match/resume a participant
 }
 
 // handleWS upgrades GET /ws?code=&token= to a WebSocket connection and
@@ -58,10 +61,11 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := &Client{
-		conn:    conn,
-		send:    make(chan []byte, sendBufferSize),
-		session: session,
-		token:   token,
+		conn:     conn,
+		send:     make(chan []byte, sendBufferSize),
+		session:  session,
+		jellyfin: s.jellyfin,
+		token:    token,
 	}
 
 	go client.writePump()
@@ -153,8 +157,10 @@ func (c *Client) handleMessage(env Envelope) {
 	switch env.Type {
 	case "join":
 		c.handleJoin(env.Payload)
+	case "admin:start":
+		c.handleAdminStart(env.Payload)
 	default:
-		// swipe/undo/admin:start/admin:end land in later phases.
+		// swipe/undo/admin:end land in the rest of Phase 4 / Phase 5.
 		log.Printf("ws: unhandled message type %q", env.Type)
 	}
 }
@@ -209,6 +215,75 @@ func (c *Client) handleJoin(raw json.RawMessage) {
 
 	c.sendJSON("session_state", state)
 	session.broadcastParticipants()
+}
+
+// handleAdminStart locks the current roster, deals a shuffled+capped deck
+// from Jellyfin, and activates the session (Phase 4, task 4.1). Only the
+// admin may call this; it is rejected once the roster is already locked.
+func (c *Client) handleAdminStart(raw json.RawMessage) {
+	var p AdminStartPayload
+	if err := json.Unmarshal(raw, &p); err != nil {
+		c.sendError("invalid admin:start payload")
+		return
+	}
+
+	session := c.session
+
+	session.mu.Lock()
+	if c.participantID != session.AdminID {
+		session.mu.Unlock()
+		c.sendError("only the admin can start the session")
+		return
+	}
+	if session.Locked {
+		session.mu.Unlock()
+		c.sendError("session already started")
+		return
+	}
+	session.mu.Unlock()
+
+	// The Jellyfin fetch is a blocking network call; it must run without
+	// holding session.mu so it can never stall other participants.
+	movies, _, err := c.jellyfin.Movies(context.Background(), p.Filters)
+	if err != nil {
+		log.Printf("admin:start: jellyfin fetch failed: %v", err)
+		c.sendError("failed to load the movie library")
+		return
+	}
+	rand.Shuffle(len(movies), func(i, j int) { movies[i], movies[j] = movies[j], movies[i] })
+
+	maxMovies := p.MaxMovies
+	if maxMovies <= 0 {
+		maxMovies = defaultMaxMovies
+	}
+	if len(movies) > maxMovies {
+		movies = movies[:maxMovies]
+	}
+
+	session.mu.Lock()
+	if c.participantID != session.AdminID {
+		session.mu.Unlock()
+		c.sendError("only the admin can start the session")
+		return
+	}
+	if session.Locked {
+		session.mu.Unlock()
+		c.sendError("session already started")
+		return
+	}
+	rosterCount := len(session.Participants)
+	session.Locked = true
+	if p.RequiredCount >= 1 && p.RequiredCount <= rosterCount {
+		session.RequiredCount = p.RequiredCount
+	} else {
+		session.RequiredCount = rosterCount
+	}
+	session.Deck = movies
+	session.Status = StatusActive
+	session.mu.Unlock()
+
+	session.broadcastDeck()
+	session.broadcastSessionState()
 }
 
 // findParticipantByTokenLocked returns the participant whose Token matches,
@@ -269,6 +344,50 @@ func (s *Session) broadcastParticipants() {
 	s.mu.Unlock()
 
 	s.broadcast("participant_update", ParticipantUpdatePayload{Participants: views})
+}
+
+// broadcastDeck sends the just-dealt, ordered deck to every attached client
+// (Phase 4, task 4.1). Every client receives the exact same ordering.
+func (s *Session) broadcastDeck() {
+	s.mu.Lock()
+	deck := make([]Movie, len(s.Deck))
+	copy(deck, s.Deck)
+	s.mu.Unlock()
+
+	s.broadcast("deck", DeckPayload{Movies: deck})
+}
+
+// broadcastSessionState sends every attached client its own personalized
+// session_state snapshot — status/requiredCount/roster are shared, but
+// YourParticipantID/YourToken differ per recipient, so this cannot reuse the
+// plain broadcast() helper. Used after admin:start locks the roster and
+// activates the session (Phase 4, task 4.1).
+func (s *Session) broadcastSessionState() {
+	s.mu.Lock()
+	status := s.Status
+	code := s.Code
+	requiredCount := s.RequiredCount
+	participants := participantViewsLocked(s)
+	clients := make(map[string]*Client, len(s.clients))
+	for id, c := range s.clients {
+		clients[id] = c
+	}
+	tokens := make(map[string]string, len(s.Participants))
+	for id, p := range s.Participants {
+		tokens[id] = p.Token
+	}
+	s.mu.Unlock()
+
+	for pid, c := range clients {
+		c.sendJSON("session_state", SessionStatePayload{
+			Status:            status,
+			Code:              code,
+			RequiredCount:     requiredCount,
+			Participants:      participants,
+			YourParticipantID: pid,
+			YourToken:         tokens[pid],
+		})
+	}
 }
 
 // broadcast sends msgType/payload to every client currently attached to the

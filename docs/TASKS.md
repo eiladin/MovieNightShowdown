@@ -491,7 +491,7 @@ Goal: create sessions, join by code/QR, live lobby, reconnect.
 Goal: shared deck, swipe/undo, server-side votes, match detection.
 
 ### 4.1 Start + deck
-- [ ] Handle `admin:start {filters, maxMovies, requiredCount?}`. Reject if the
+- [x] Handle `admin:start {filters, maxMovies, requiredCount?}`. Reject if the
       caller is not the admin. Then:
       1. **Lock the roster:** set `session.Locked = true`. Count the current
          participants; set `session.RequiredCount = requiredCount` if provided and
@@ -500,10 +500,10 @@ Goal: shared deck, swipe/undo, server-side votes, match detection.
       3. Shuffle (`math/rand.Shuffle`), then **truncate to `maxMovies`** (default
          50 if not provided). Store as `session.Deck`.
       4. Set `Status=Active`; broadcast `deck` to everyone.
-- [ ] Once `session.Locked`/`Active`, the WS `join` handler must **reject new
+- [x] Once `session.Locked`/`Active`, the WS `join` handler must **reject new
       participants** (return a clear "session already started" error). Existing
       participants may still reconnect with their `token`.
-- [ ] Admin UI (in `Lobby.tsx`): a "Begin" button, a "max movies" number input
+- [x] Admin UI (in `Lobby.tsx`): a "Begin" button, a "max movies" number input
       (default 50), and a "required to agree" number input (default = current
       participant count, min 1, max = participant count). "Begin" sends
       `admin:start` with `{filters, maxMovies, requiredCount}` and routes everyone

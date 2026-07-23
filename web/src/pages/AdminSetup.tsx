@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { getPreview, type PreviewResponse } from '../api'
+import { getPreview, type PreviewFilters, type PreviewResponse } from '../api'
+import { useSessionStore } from '../store'
 import '../styles/admin.css'
 
 const GENRE_OPTIONS = [
@@ -29,6 +30,7 @@ const GENRE_OPTIONS = [
 export default function AdminSetup() {
   const [searchParams] = useSearchParams()
   const sessionCode = searchParams.get('code')
+  const setFilters = useSessionStore((s) => s.setFilters)
 
   const [genres, setGenres] = useState<string[]>([])
   const [yearMin, setYearMin] = useState('')
@@ -42,16 +44,20 @@ export default function AdminSetup() {
     setGenres((prev) => (prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre]))
   }
 
+  function currentFilters(): PreviewFilters {
+    return {
+      genres,
+      yearMin: yearMin ? Number(yearMin) : undefined,
+      yearMax: yearMax ? Number(yearMax) : undefined,
+      unwatched,
+    }
+  }
+
   async function handlePreview() {
     setLoading(true)
     setError(null)
     try {
-      const result = await getPreview({
-        genres,
-        yearMin: yearMin ? Number(yearMin) : undefined,
-        yearMax: yearMax ? Number(yearMax) : undefined,
-        unwatched,
-      })
+      const result = await getPreview(currentFilters())
       setPreview(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Preview failed')
@@ -61,6 +67,13 @@ export default function AdminSetup() {
     }
   }
 
+  // Carry the chosen filters over to the Lobby, where "Begin" sends them in
+  // admin:start (Phase 4). Filters live in the shared session store rather
+  // than the URL since they can include an arbitrary list of genres.
+  function handleGoToLobby() {
+    setFilters(currentFilters())
+  }
+
   return (
     <div className="admin-setup">
       <h1>Start a Showdown</h1>
@@ -68,7 +81,10 @@ export default function AdminSetup() {
       {sessionCode && (
         <p className="admin-session-banner">
           Session <strong>{sessionCode}</strong> created —{' '}
-          <Link to={`/join/${sessionCode}`}>go to the Lobby</Link> to see who has joined.
+          <Link to={`/join/${sessionCode}`} onClick={handleGoToLobby}>
+            go to the Lobby
+          </Link>{' '}
+          to see who has joined.
         </p>
       )}
 

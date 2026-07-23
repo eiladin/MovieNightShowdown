@@ -10,17 +10,19 @@ import (
 const defaultMaxMovies = 50
 
 // Filters holds the admin's library filter selections, parsed from the query
-// params of GET /api/library/preview (and reused for admin:start in Phase 4).
+// params of GET /api/library/preview, and also sent as JSON inside the
+// admin:start WS payload (Phase 4) — hence the json tags, matching the
+// frontend's PreviewFilters shape (web/src/api.ts).
 type Filters struct {
-	Genres         []string
-	YearMin        int
-	YearMax        int
-	RatingMin      float64 // minimum CommunityRating
-	OfficialRating string  // MPAA rating, e.g. "PG-13"
-	RuntimeMax     int     // minutes; filtered client-side
-	Unwatched      bool
-	LibraryID      string
-	MaxMovies      int // deck cap, default 50
+	Genres         []string `json:"genres"`
+	YearMin        int      `json:"yearMin"`
+	YearMax        int      `json:"yearMax"`
+	RatingMin      float64  `json:"ratingMin"`      // minimum CommunityRating
+	OfficialRating string   `json:"officialRating"` // MPAA rating, e.g. "PG-13"
+	RuntimeMax     int      `json:"runtimeMax"`     // minutes; filtered client-side
+	Unwatched      bool     `json:"unwatched"`
+	LibraryID      string   `json:"libraryId"`
+	MaxMovies      int      `json:"maxMovies"` // deck cap, default 50
 }
 
 // ParseFilters parses Filters from request query params.
