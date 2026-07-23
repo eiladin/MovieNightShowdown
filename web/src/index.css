@@ -115,7 +115,8 @@ code {
   background: var(--code-bg);
 }
 
-button {
+button, .btn {
+  box-sizing: border-box;
   font-family: var(--sans);
   font-size: 16px;
   font-weight: 600;
@@ -126,6 +127,9 @@ button {
   color: var(--text-h);
   cursor: pointer;
   transition: all 0.2s ease;
+  display: inline-block;
+  text-decoration: none;
+  text-align: center;
 }
 button:disabled {
   opacity: 0.5;

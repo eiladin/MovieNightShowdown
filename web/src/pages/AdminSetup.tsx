@@ -112,11 +112,7 @@ export default function AdminSetup() {
 
       {sessionCode && (
         <p className="admin-session-banner">
-          Session <strong>{sessionCode}</strong> created —{' '}
-          <Link to={`/join/${sessionCode}`} onClick={handleGoToLobby} className="btn-primary">
-            go to the Lobby
-          </Link>{' '}
-          to see who has joined.
+          Session <strong>{sessionCode}</strong> created
         </p>
       )}
 
@@ -170,7 +166,13 @@ export default function AdminSetup() {
         Unwatched only
       </label>
 
-      <button type="button" className="btn-primary" onClick={handlePreview} disabled={loading}>
+      {sessionCode && (
+        <Link to={`/join/${sessionCode}`} onClick={handleGoToLobby} className="btn btn-primary">
+          Go to the Lobby →
+        </Link>
+      )}
+
+      <button type="button" onClick={handlePreview} disabled={loading}>
         {loading ? 'Loading…' : 'Preview'}
       </button>
 
