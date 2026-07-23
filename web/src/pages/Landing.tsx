@@ -54,7 +54,7 @@ export default function Landing() {
           value={adminName}
           onChange={(e) => setAdminName(e.target.value)}
         />
-        <button type="submit" disabled={starting}>
+        <button type="submit" className="btn-primary" disabled={starting}>
           {starting ? 'Starting…' : 'Start a Showdown'}
         </button>
         {startError && <p className="landing-error">{startError}</p>}

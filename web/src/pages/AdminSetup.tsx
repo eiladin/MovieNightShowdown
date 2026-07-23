@@ -116,10 +116,10 @@ function sortGenres(genres: string[]): string[] {
       )}
 
       {available && available.genres.length > 0 && (
-        <fieldset className="genre-filter">
+        <fieldset className="chip-group">
           <legend>Genres</legend>
           {available.genres.map((genre) => (
-            <label key={genre} className={`genre-option ${genres.includes(genre) ? 'checked' : ''}`}>
+            <label key={genre} className={`chip ${genres.includes(genre) ? 'checked' : ''}`}>
               <input 
                 type="checkbox" 
                 checked={genres.includes(genre)} 
@@ -144,10 +144,10 @@ function sortGenres(genres: string[]): string[] {
       </div>
 
       {available && available.officialRatings.length > 0 && (
-        <fieldset className="genre-filter">
+        <fieldset className="chip-group">
           <legend>Parental Rating</legend>
           {available.officialRatings.map((rating) => (
-            <label key={rating} className={`genre-option ${officialRatings.includes(rating) ? 'checked' : ''}`}>
+            <label key={rating} className={`chip ${officialRatings.includes(rating) ? 'checked' : ''}`}>
               <input 
                 type="checkbox" 
                 checked={officialRatings.includes(rating)} 
@@ -165,7 +165,7 @@ function sortGenres(genres: string[]): string[] {
         Unwatched only
       </label>
 
-      <button type="button" onClick={handlePreview} disabled={loading}>
+      <button type="button" className="btn-primary" onClick={handlePreview} disabled={loading}>
         {loading ? 'Loading…' : 'Preview'}
       </button>
 
