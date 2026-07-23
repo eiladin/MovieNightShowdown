@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { useSessionStore } from '../store'
 import type { SessionSocket } from '../ws'
 import Confetti from '../components/Confetti'
@@ -13,6 +14,7 @@ export default function Result({ socket }: ResultProps) {
   const leaderboard = useSessionStore((s) => s.leaderboard)
   const participants = useSessionStore((s) => s.participants)
   const myParticipantId = useSessionStore((s) => s.myParticipantId)
+  const navigate = useNavigate()
 
   const me = participants.find((p) => p.id === myParticipantId)
   const isAdmin = me?.isAdmin ?? false
@@ -34,6 +36,7 @@ export default function Result({ socket }: ResultProps) {
             <p>{winner.year} · {winner.genres?.join(', ')}</p>
           </div>
         </div>
+        <button type="button" className="result-home-btn" onClick={() => navigate('/')}>Back to home</button>
       </div>
     )
   }
@@ -62,6 +65,7 @@ export default function Result({ socket }: ResultProps) {
             </li>
           ))}
         </ul>
+        <button type="button" className="result-home-btn" onClick={() => navigate('/')}>Back to home</button>
       </div>
     )
   }
