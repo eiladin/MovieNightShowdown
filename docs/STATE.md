@@ -4,11 +4,11 @@ This is the single source of truth for progress. Read it first. Update it last.
 See `docs/HANDOFF.md` for how to read and update this file.
 
 ## Current status
-Phase: Done
-Updated: 2026-07-22 by claude-code        Build: green
+Phase: 7 — Poster caching & warming     Status: in_progress
+Updated: 2026-07-23 by claude-code     Build: green
 
 ## Next action
-Project is complete! Enjoy the movies!
+Start docs/TASKS.md Phase 7, task 7.1 (add golang.org/x/sync).
 
 ## Phase checklist
 Phase 0 — Docs & repo init (done):
@@ -50,6 +50,18 @@ Phase 3 — Sessions + WebSocket hub (done):
       goroutines, join/resume/disconnect handling (`server/hub.go`)
 - [x] Frontend: `web/src/ws.ts`, `web/src/store.ts`, `Landing.tsx`,
       `Lobby.tsx`, `web/src/components/QRJoin.tsx`, `/join/:code` route
+
+Phase 7 — Poster caching & warming (in progress):
+- [ ] Add golang.org/x/sync dependency
+- [ ] Add CACHE_DIR to config
+- [ ] Jellyfin: emit image tag + add fetch helper
+- [ ] On-disk poster cache with singleflight
+- [ ] Wire cache into server
+- [ ] Frontend: warm at "go to the Lobby"
+- [ ] Unit test for cache primitives
+- [ ] Config plumbing + deploy volume + docs
+- [ ] (Optional) Button styling for "go to Lobby"
+- [ ] End-to-end verification + handback
 
 ## Handoff log (append-only, newest first)
 

@@ -59,6 +59,19 @@ export async function getPreview(filters: PreviewFilters): Promise<PreviewRespon
   return res.json() as Promise<PreviewResponse>
 }
 
+// warmLibrary asks the server to pre-fetch every poster for the filtered
+// library into its cache before the session starts. Returns the candidate
+// count; warming happens in the background server-side.
+export async function warmLibrary(filters: PreviewFilters): Promise<number> {
+  const params = buildPreviewParams(filters)
+  const res = await fetch(`/api/library/warm?${params.toString()}`, { method: 'POST' })
+  if (!res.ok) {
+    throw new Error(`warm request failed: ${res.status} ${res.statusText}`)
+  }
+  const body = (await res.json()) as { count: number }
+  return body.count
+}
+
 export interface AvailableFilters {
   genres: string[]
   officialRatings: string[]

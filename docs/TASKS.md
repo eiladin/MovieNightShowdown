@@ -111,495 +111,426 @@ movie-night-showdown/
 
 ---
 
-## Phase 1 — Scaffold
+## Phases 1–6 — COMPLETE ✅
 
-Goal: one container that serves a placeholder React page and `GET /healthz`.
-
-### 1.1 Initialize the Go module
-- [x] From the repo root run: `go mod init github.com/eiladin/movie-night-showdown`
-- [x] Confirm Go version: `go version` shows 1.23.x (install via mise if not).
-- Verify: `go.mod` exists with the module path and `go 1.23`.
-
-### 1.2 Scaffold the Vite React app
-- [x] Run: `npm create vite@latest web -- --template react-ts`
-- [x] Run: `cd web && npm install`
-- [x] Install runtime deps:
-      `npm install react-router-dom zustand react-tinder-card canvas-confetti react-qr-code`
-- [x] Install types where needed: `npm install -D @types/canvas-confetti`
-- [x] Edit `web/vite.config.ts` to set `base: './'` so embedded assets load from
-      any path. Keep the rest of the generated config.
-- [x] Replace `web/src/App.tsx` body with a placeholder: a `<h1>Movie Night
-      Showdown</h1>` and the text `Coming soon`.
-- Verify: `cd web && npm run build` succeeds and creates `web/dist/index.html`.
-
-### 1.3 Backend: server package + health endpoint
-- [x] Create `server/server.go`:
-```go
-package server
-
-import "net/http"
-
-type Server struct {
-	mux *http.ServeMux
-}
-
-func New() *Server {
-	s := &Server{mux: http.NewServeMux()}
-	s.routes()
-	return s
-}
-
-func (s *Server) Handler() http.Handler { return s.mux }
-
-func (s *Server) routes() {
-	s.mux.HandleFunc("GET /healthz", s.handleHealth)
-	// static handler is registered in main.go via SetStatic (needs the embed.FS)
-}
-```
-- [x] Create `server/health.go`:
-```go
-package server
-
-import (
-	"encoding/json"
-	"net/http"
-)
-
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-}
-```
-- Verify: nothing to run yet; it compiles after 1.4/1.5.
-
-### 1.4 Backend: SPA embed + fallback handler
-- [x] Create `server/static.go`:
-```go
-package server
-
-import (
-	"io/fs"
-	"net/http"
-	"strings"
-)
-
-// SetStatic registers the SPA handler using the embedded dist filesystem.
-// dist must be the sub-filesystem rooted at the built web/dist directory.
-func (s *Server) SetStatic(dist fs.FS) {
-	fileServer := http.FileServer(http.FS(dist))
-	s.mux.Handle("/", spaFallback(dist, fileServer))
-}
-
-// spaFallback serves the requested file if it exists, otherwise index.html
-// (so client-side routes like /join/ABCD work on refresh).
-func spaFallback(dist fs.FS, fileServer http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		p := strings.TrimPrefix(r.URL.Path, "/")
-		if p == "" {
-			p = "index.html"
-		}
-		if _, err := fs.Stat(dist, p); err != nil {
-			// not a real file -> serve index.html for the SPA router
-			r = r.Clone(r.Context())
-			r.URL.Path = "/"
-		}
-		fileServer.ServeHTTP(w, r)
-	})
-}
-```
-
-### 1.5 Backend: entrypoint with embed
-- [x] Create `main.go` at repo root:
-```go
-package main
-
-import (
-	"io/fs"
-	"log"
-	"net/http"
-	"os"
-
-	"embed"
-
-	"github.com/eiladin/movie-night-showdown/server"
-)
-
-//go:embed all:web/dist
-var webDist embed.FS
-
-func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	dist, err := fs.Sub(webDist, "web/dist")
-	if err != nil {
-		log.Fatalf("embed: %v", err)
-	}
-
-	s := server.New()
-	s.SetStatic(dist)
-
-	log.Printf("movie-night-showdown listening on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, s.Handler()))
-}
-```
-- [x] IMPORTANT: `//go:embed all:web/dist` needs `web/dist` to exist. Always run
-      `cd web && npm run build` **before** `go build`.
-- [x] Run: `go mod tidy`
-- [x] Run: `cd web && npm run build && cd .. && go build ./...`
-- Verify: `go run .` starts; `curl -fsS localhost:8080/healthz` returns
-      `{"status":"ok"}`; opening `http://localhost:8080/` shows the placeholder.
-- [x] Commit: `feat(server): scaffold Go server with health check and embedded SPA`
-
-### 1.6 Dockerfile
-- [x] Create `Dockerfile`:
-```dockerfile
-# --- Build frontend ---
-FROM node:22-alpine AS web
-WORKDIR /web
-COPY web/package*.json ./
-RUN npm ci
-COPY web/ ./
-RUN npm run build
-
-# --- Build backend ---
-FROM golang:1.23-alpine AS build
-WORKDIR /src
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-COPY --from=web /web/dist ./web/dist
-RUN CGO_ENABLED=0 go build -o /out/showdown .
-
-# --- Runtime ---
-FROM gcr.io/distroless/static-debian12
-COPY --from=build /out/showdown /showdown
-EXPOSE 8080
-ENTRYPOINT ["/showdown"]
-```
-
-### 1.7 docker-compose.yml
-- [x] Create `docker-compose.yml`:
-```yaml
-services:
-  showdown:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      JELLYFIN_URL: ${JELLYFIN_URL}
-      JELLYFIN_API_KEY: ${JELLYFIN_API_KEY}
-      JELLYFIN_USER_ID: ${JELLYFIN_USER_ID:-}
-      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
-      PORT: "8080"
-      SESSION_TTL: ${SESSION_TTL:-4h}
-    restart: unless-stopped
-```
-
-### 1.8 .env.example
-- [x] Create `.env.example`:
-```
-JELLYFIN_URL=https://jellyfin.example.com
-JELLYFIN_API_KEY=replace-me
-JELLYFIN_USER_ID=
-PUBLIC_URL=http://localhost:8080
-PORT=8080
-SESSION_TTL=4h
-```
-- Verify (whole phase): `docker compose up --build -d`, then
-      `curl -fsS localhost:8080/healthz` returns `{"status":"ok"}` and `/` renders.
-      Then `docker compose down`.
-- [x] Commit: `chore(deploy): add Dockerfile, compose, and env example`
-- [x] Update `docs/STATE.md`: Phase 1 done, Next action = Phase 2 step 2.1.
+Phases 1–6 (scaffold, Jellyfin client + image proxy, sessions + WS hub, swipe
++ vote engine, reveal + leaderboard, polish + deploy) are fully built and
+shipped. The granular build steps have been archived — see the git history and
+the `docs/STATE.md` handoff log for what each phase delivered.
 
 ---
 
-## Phase 2 — Jellyfin client + image proxy
+## Phase 7 — Poster caching & proactive warming
 
-Goal: query/filter the Jellyfin library and proxy posters; admin can preview.
+Goal: serve posters from an on-disk cache keyed by Jellyfin's image tag;
+cache-bust on artwork changes; warm the cache at "go to the Lobby" so swiping
+starts hot.
 
-Read `docs/PLAN.md > Jellyfin integration` for the exact query and fields.
+### 7.1 Add the `golang.org/x/sync` dependency
+- [ ] From repo root run: `go get golang.org/x/sync@latest`
+- [ ] Run `go mod tidy`
+- Verify: `grep golang.org/x/sync go.mod` shows the require line; `go build ./...`
+  passes.
 
-### 2.1 Config loader
-- [x] Create a small `Config` struct (in `server/server.go` or a `config.go`)
-      read from env: `JellyfinURL`, `JellyfinAPIKey`, `JellyfinUserID`,
-      `PublicURL`, `Port`, `SessionTTL`. Pass `Config` into `server.New`.
-- Verify: log the loaded config (mask the API key) on startup.
+### 7.2 Add `CACHE_DIR` to config — `server/config.go`
+- [ ] Add the field to the `Config` struct (after `SessionTTL`):
+  ```go
+  	CacheDir string
+  ```
+- [ ] In `LoadConfig`, add to the `Config{...}` literal:
+  ```go
+  		CacheDir: os.Getenv("CACHE_DIR"),
+  ```
+- [ ] After the `SessionTTL` default block, add:
+  ```go
+  	if cfg.CacheDir == "" {
+  		cfg.CacheDir = filepath.Join(os.TempDir(), "mns-posters")
+  	}
+  ```
+- [ ] Add `"path/filepath"` to the imports.
+- [ ] In `String()`, add `CacheDir` to the format string and args, e.g. append
+  ` CacheDir=%s` and `c.CacheDir`.
+- Verify: `go build ./...` passes.
 
-### 2.2 Jellyfin client
-- [x] Create `server/jellyfin.go` with a `JellyfinClient` holding `baseURL`,
-      `apiKey`, `userID`, and an `*http.Client` with a 10s timeout.
-- [x] Method `Movies(ctx, filters) ([]Movie, error)`. Build this request:
-      `GET {baseURL}/Items?IncludeItemTypes=Movie&Recursive=true&Fields=Genres,Overview,ProductionYear,OfficialRating,CommunityRating,RunTimeTicks`
-      Send the API key in the header `X-Emby-Token: <apiKey>` (not the query
-      string). Add `userId` when set (needed for unwatched).
-- [x] Map Jellyfin JSON items to the `Movie` struct from `docs/PLAN.md`. Convert
-      `RunTimeTicks` to minutes: `ticks / 10_000_000 / 60`.
-- [x] Set each `Movie.PosterURL` to the **proxied** path `/api/images/<ItemId>`
-      (never the raw Jellyfin URL).
-- Verify: a temporary unit test or log prints N movies from real Jellyfin.
-      (`go test ./server/... -run TestJellyfinClient_Movies -v` against the real
-      server: no filters -> 508 movies (TotalRecordCount); note the method
-      signature was extended to `([]Movie, int, error)` — the second value is
-      Jellyfin's true `TotalRecordCount`, needed so the 2.4 preview `count` is
-      accurate even though the movie list itself is capped via `Limit`.)
+### 7.3 Jellyfin: emit the image tag + add a poster fetch helper — `server/jellyfin.go`
+- [ ] Add `"io"` to the imports.
+- [ ] Add a field to `jellyfinItem` (after `OfficialRating`):
+  ```go
+  	ImageTags map[string]string `json:"ImageTags"`
+  ```
+- [ ] In `Movies`, replace the `PosterURL: "/api/images/" + it.ID,` line inside
+  the mapping loop with a tag-aware URL. Just before building `m`, add:
+  ```go
+  		posterURL := "/api/images/" + it.ID
+  		if tag := it.ImageTags["Primary"]; tag != "" {
+  			posterURL += "?tag=" + url.QueryEscape(tag)
+  		}
+  ```
+  and set `PosterURL: posterURL,` in the `Movie{...}` literal.
+- [ ] Add a fetch helper at the end of the file:
+  ```go
+  // fetchPoster downloads a movie's Primary poster from Jellyfin. A non-empty
+  // tag pins the exact image version so the cache key and the bytes agree.
+  func (c *JellyfinClient) fetchPoster(ctx context.Context, id, tag string) ([]byte, error) {
+  	reqURL := fmt.Sprintf("%s/Items/%s/Images/Primary?maxWidth=600", c.baseURL, url.PathEscape(id))
+  	if tag != "" {
+  		reqURL += "&tag=" + url.QueryEscape(tag)
+  	}
+  	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+  	if err != nil {
+  		return nil, err
+  	}
+  	req.Header.Set("X-Emby-Token", c.apiKey)
+  	resp, err := c.http.Do(req)
+  	if err != nil {
+  		return nil, fmt.Errorf("jellyfin: fetch poster %s: %w", id, err)
+  	}
+  	defer resp.Body.Close()
+  	if resp.StatusCode != http.StatusOK {
+  		return nil, fmt.Errorf("jellyfin: poster %s returned %s", id, resp.Status)
+  	}
+  	return io.ReadAll(resp.Body)
+  }
+  ```
+- Note: `ImageTags` is normally returned by `GET /Items` by default. Confirm in
+  7.10 that `posterURL` includes `?tag=`; if it does not, add `ImageTags` to the
+  `Fields` value in `Movies` and re-check.
+- Verify: `go build ./...` passes.
 
-### 2.3 Filters
-- [x] Define a `Filters` struct parsed from query params on `/api/library/preview`:
-      `genres` (repeatable), `yearMin`, `yearMax`, `ratingMin` (community),
-      `officialRating`, `runtimeMax`, `unwatched` (bool), `libraryId`,
-      `maxMovies` (deck cap, **default 50**).
-- [x] Map them onto the Jellyfin request: `Genres`, `Years`, `MinCommunityRating`,
-      `OfficialRatings`, `Filters=IsUnplayed` (requires `userId`), `ParentId`,
-      `Limit`. Filter `runtimeMax` client-side after mapping runtime to minutes.
-- Verify: adding `?genres=Action` reduces the count vs no filter.
-      (Confirmed against real Jellyfin: no filter TotalRecordCount=508,
-      `genres=Action` TotalRecordCount=205 — same test run as 2.2.)
+### 7.4 New on-disk poster cache — `server/imagecache.go` (new file)
+- [ ] Create `server/imagecache.go` with exactly:
+  ```go
+  package server
 
-### 2.4 Preview endpoint
-- [x] Add `GET /api/library/preview` -> returns JSON `{ "count": N, "movies": [...] }`.
-- Verify: `curl -fsS "localhost:8080/api/library/preview?genres=Action" | jq '.count'`
-      returns a number matching Jellyfin's Action count.
-      (Ran against the real server: no filter `.count`=508; `genres=Action`
-      `.count`=205, an exact match to Jellyfin's own `Items?Genres=Action`
-      `TotalRecordCount`. `.movies` length capped at the default `maxMovies`=50.)
+  import (
+  	"context"
+  	"log"
+  	"net/url"
+  	"os"
+  	"path/filepath"
+  	"strings"
+  	"sync"
+  	"time"
 
-### 2.5 Image proxy
-- [x] Create `server/images.go`, add `GET /api/images/{id}`:
-      fetch `{baseURL}/Items/{id}/Images/Primary?maxWidth=600` with the
-      `X-Emby-Token` header, stream the body through, copy `Content-Type`, and set
-      `Cache-Control: public, max-age=86400`.
-- Verify: `curl -I localhost:8080/api/images/<realItemId>` -> `200` and
-      `Content-Type: image/*`.
-      (Confirmed: `HTTP/1.1 200 OK`, `Content-Type: image/jpeg`,
-      `Cache-Control: public, max-age=86400`. A bad id returns `404`.)
+  	"golang.org/x/sync/singleflight"
+  )
 
-### 2.6 Minimal admin preview UI
-- [x] Add a `web/src/api.ts` with `getPreview(filters)` using `fetch`.
-- [x] Add an `AdminSetup.tsx` page with a few filter inputs (genre multiselect,
-      year range, unwatched checkbox) and a "Preview" button that shows the count
-      and a grid of poster thumbnails (`<img src={movie.posterURL} />`).
-- [x] Add routes in `App.tsx` with `react-router-dom` (`/` Landing, `/admin`).
-- Verify: in the browser, applying a filter shows the correct count and posters
-      load through `/api/images/...`.
-      (`cd web && npm run build` succeeds. Verified the full request path with
-      curl against the running server + real Jellyfin instead of a GUI
-      browser: `GET /admin` returns the SPA shell (200); the built JS bundle
-      calls `api/library/preview`; `GET /api/library/preview?genres=Comedy`
-      returns `count=215` with proxied `posterURL` fields; `GET
-      /api/images/<id>` for a returned movie returns `200`
-      `Content-Type: image/jpeg`. This exercises the same request path the
-      browser UI makes; no interactive browser session was available in this
-      environment to visually confirm the rendered grid.)
-- [x] Commit each group; then update `docs/STATE.md` (Phase 2 done, Next = 3.1).
+  // posterCache is a read-through, on-disk cache of Jellyfin poster images.
+  // Files are named "{id}_{tag}"; when a poster's artwork changes in Jellyfin
+  // its Primary image tag changes, so the key changes and the stale file is
+  // pruned. singleflight collapses concurrent misses for the same poster into a
+  // single upstream fetch.
+  type posterCache struct {
+  	dir   string
+  	group singleflight.Group
+  }
 
----
+  // newPosterCache returns a cache rooted at dir, creating the directory. If dir
+  // is empty or cannot be created it returns a disabled cache; callers then fall
+  // back to a live proxy transparently (ensure still fetches, it just skips the
+  // write).
+  func newPosterCache(dir string) *posterCache {
+  	if dir == "" {
+  		return &posterCache{}
+  	}
+  	if err := os.MkdirAll(dir, 0o755); err != nil {
+  		log.Printf("poster cache: disabled, cannot create %s: %v", dir, err)
+  		return &posterCache{}
+  	}
+  	log.Printf("poster cache: enabled at %s", dir)
+  	return &posterCache{dir: dir}
+  }
 
-## Phase 3 — Sessions + WebSocket hub
+  func (c *posterCache) enabled() bool { return c != nil && c.dir != "" }
 
-Goal: create sessions, join by code/QR, live lobby, reconnect.
+  // sanitize keeps only filename-safe characters so an id/tag can never escape
+  // the cache directory. Jellyfin ids/tags are hex, so this is defensive.
+  func sanitize(s string) string {
+  	return strings.Map(func(r rune) rune {
+  		switch {
+  		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-':
+  			return r
+  		default:
+  			return '_'
+  		}
+  	}, s)
+  }
 
-### 3.1 Types + store
-- [x] Create `server/session.go` with the `Session`, `Participant`, `Movie`,
-      `Swipe`, `Status` types from `docs/PLAN.md`. Add a `Locked bool` field on
-      `Session` (set true when the admin starts) and leave `RequiredCount` at 0
-      until start.
-- [x] Create a `Store` with `map[string]*Session` guarded by `sync.Mutex` and
-      methods: `Create(adminName) *Session`, `Get(code) (*Session, bool)`,
-      `sweepExpired()` (run in a goroutine on a ticker, using `SESSION_TTL`).
-- [x] Add a code generator: 4 chars from the alphabet `ABCDEFGHJKLMNPQRSTUVWXYZ`
-      + digits `23456789` (no confusing `0/O/1/I`). Regenerate on collision.
-- Verify: a unit test creates a session and fetches it by code.
-      (`server/session_test.go`: `go test ./server/... -run
-      TestStore_CreateAndGet -v` -> PASS. Note: `Movie` already existed in
-      `server/library.go` from Phase 2 — reused rather than redefined, to
-      avoid a duplicate type. `Session` also carries an unexported `mu
-      sync.Mutex` and `clients map[string]*Client` used by the Phase 3.4 hub.)
+  func (c *posterCache) path(id, tag string) string {
+  	return filepath.Join(c.dir, sanitize(id)+"_"+sanitize(tag))
+  }
 
-### 3.2 Create-session endpoint
-- [x] `POST /api/sessions` body `{ "adminName": "..." }` -> creates a session,
-      returns `{ "code": "ABCD", "joinURL": "<PUBLIC_URL>/join/ABCD",
-      "participantId": "...", "token": "..." }`. The admin is participant #1.
-- Verify: `curl -XPOST .../api/sessions -d '{"adminName":"Nate"}'` returns a code.
-      (Against the real server: `{"code":"2TJZ","joinURL":"http://localhost:8080/join/2TJZ","participantId":"7d156726-...","token":"<present>"}`.)
+  // get returns cached bytes for id+tag, or ok=false on a miss.
+  func (c *posterCache) get(id, tag string) ([]byte, bool) {
+  	if !c.enabled() {
+  		return nil, false
+  	}
+  	data, err := os.ReadFile(c.path(id, tag))
+  	if err != nil {
+  		return nil, false
+  	}
+  	return data, true
+  }
 
-### 3.3 Message types
-- [x] Create `server/messages.go` with an envelope `{ "type": string, "payload":
-      json.RawMessage }` and typed structs for every message in
-      `docs/PLAN.md > API + WebSocket protocol`. Marshal helpers included.
-      (`newEnvelope` helper; typed payloads for join/admin:start/swipe/undo/
-      admin:end (C->S) and session_state/deck/participant_update/progress/
-      match/session_ended (S->C), plus an `error` payload for rejected
-      actions such as joining a started session — a pragmatic addition, not
-      in the PLAN.md table, needed to report that rejection to the client.)
+  // ensure guarantees id+tag is cached, fetching from Jellyfin on a miss.
+  // Concurrent callers for the same id+tag share one fetch. It returns the image
+  // bytes; a cache-write failure is logged but not fatal.
+  func (c *posterCache) ensure(ctx context.Context, jf *JellyfinClient, id, tag string) ([]byte, error) {
+  	if data, ok := c.get(id, tag); ok {
+  		return data, nil
+  	}
+  	v, err, _ := c.group.Do(id+"_"+tag, func() (interface{}, error) {
+  		if data, ok := c.get(id, tag); ok {
+  			return data, nil // populated while we waited
+  		}
+  		data, err := jf.fetchPoster(ctx, id, tag)
+  		if err != nil {
+  			return nil, err
+  		}
+  		if c.enabled() {
+  			c.store(id, tag, data)
+  		}
+  		return data, nil
+  	})
+  	if err != nil {
+  		return nil, err
+  	}
+  	return v.([]byte), nil
+  }
 
-### 3.4 WebSocket hub
-- [x] Create `server/hub.go`. Upgrade at `GET /ws?code=&token=` with
-      `gorilla/websocket`. **Concurrency rule (important):** each connected client
-      gets its own `send chan []byte`; a single `writePump` goroutine per client
-      is the ONLY thing that writes to that socket. A `readPump` goroutine reads
-      client messages. Never write to a gorilla socket from two goroutines.
-- [x] On `join`: attach the connection to the session's participant (match by
-      `token`, or create a new participant if `token` is empty and status is
-      Lobby). Broadcast `participant_update` + send `session_state` to the joiner.
-- [x] On disconnect: mark `Connected=false`, broadcast `participant_update`. Keep
-      the participant record so they can resume with their `token`.
-- Verify: connect two `wscat`/browser clients to one code; both appear in the
-      participant list broadcasts.
-      (No interactive browser/wscat available; wrote a throwaway Go client
-      using gorilla/websocket (kept out of git, in the scratch dir). Full
-      run against the real server: client A joins with the admin's token
-      from `POST /api/sessions` -> `session_state.yourParticipantId` matches
-      the REST `participantId`; client B joins fresh (no token) -> both A
-      and B receive `participant_update` with 2 participants
-      (`Nate`/admin, `Priya`/guest), both `Connected:true`. B's socket is
-      dropped -> A receives `participant_update` still showing 2
-      participants but `Priya` `Connected:false`. B reconnects with its
-      saved `yourToken` -> `session_state.yourParticipantId` is identical to
-      B's original id -> A's next `participant_update` shows 2 participants
-      (no duplicate), `Priya` back to `Connected:true`.)
+  // store writes data atomically (temp file + rename) and prunes older files for
+  // the same id.
+  func (c *posterCache) store(id, tag string, data []byte) {
+  	tmp, err := os.CreateTemp(c.dir, "tmp-*")
+  	if err != nil {
+  		log.Printf("poster cache: temp create failed: %v", err)
+  		return
+  	}
+  	tmpName := tmp.Name()
+  	if _, err := tmp.Write(data); err != nil {
+  		tmp.Close()
+  		os.Remove(tmpName)
+  		log.Printf("poster cache: write failed: %v", err)
+  		return
+  	}
+  	if err := tmp.Close(); err != nil {
+  		os.Remove(tmpName)
+  		log.Printf("poster cache: close failed: %v", err)
+  		return
+  	}
+  	if err := os.Rename(tmpName, c.path(id, tag)); err != nil {
+  		os.Remove(tmpName)
+  		log.Printf("poster cache: rename failed: %v", err)
+  		return
+  	}
+  	c.pruneOld(id, tag)
+  }
 
-### 3.5 Lobby UI + reconnect
-- [x] `web/src/ws.ts`: a small WebSocket wrapper that connects, stores the
-      `token` in `localStorage`, auto-reconnects with backoff, and replays `join`.
-- [x] `web/src/store.ts` (zustand): session, participants, deck, status, myVoteState.
-- [x] `Landing.tsx`: "Start a Showdown" (calls `POST /api/sessions`, routes to
-      `/admin`) and a "Join" box (enter code -> `/join/:code`).
-- [x] `Lobby.tsx`: admin view shows code + `<QRCode value={joinURL} />`
-      (react-qr-code) + participant list; guest view shows name entry then the
-      participant list. Reached at `/join/:code` and from `/admin`.
-- Verify: open the session on two devices/tabs; both show in the lobby; kill one
-      socket (devtools "Offline"), restore, and it rejoins as the same participant.
-      (No interactive browser available in this environment. `cd web && npm
-      run build` succeeds — `Landing`, `AdminSetup`, `Lobby`, `QRJoin`,
-      `ws.ts`, `store.ts` all type-check and are wired into `App.tsx`'s
-      router (`/`, `/admin`, `/join/:code`). With the server running,
-      `GET /join/ABCD` and `GET /admin` both return `200` (SPA fallback
-      serves `index.html` for the client-side routes). The underlying
-      join/reconnect protocol that `ws.ts`/`Lobby.tsx` drive was verified
-      end-to-end at the WS layer in 3.4's headless test (two participants
-      seen, reconnect resumes the same participant id). Visual confirmation
-      of the rendered Lobby UI itself is deferred to a real browser run.)
-- [x] Commit groups; update `docs/STATE.md` (Phase 3 done, Next = 4.1).
+  // pruneOld removes every cached file for id whose tag differs from keepTag.
+  func (c *posterCache) pruneOld(id, keepTag string) {
+  	matches, _ := filepath.Glob(filepath.Join(c.dir, sanitize(id)+"_*"))
+  	keep := c.path(id, keepTag)
+  	for _, m := range matches {
+  		if m != keep {
+  			os.Remove(m)
+  		}
+  	}
+  }
 
----
+  // warm pre-fetches every movie's poster into the cache, bounded to a few
+  // concurrent Jellyfin requests. Intended to run in a background goroutine.
+  func (c *posterCache) warm(movies []Movie, jf *JellyfinClient) {
+  	const workers = 6
+  	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+  	defer cancel()
 
-## Phase 4 — Swipe deck + vote engine
+  	sem := make(chan struct{}, workers)
+  	var wg sync.WaitGroup
+  	for _, m := range movies {
+  		id, tag := parsePosterRef(m.PosterURL)
+  		if id == "" {
+  			continue
+  		}
+  		if _, ok := c.get(id, tag); ok {
+  			continue // already warm
+  		}
+  		wg.Add(1)
+  		sem <- struct{}{}
+  		go func(id, tag string) {
+  			defer wg.Done()
+  			defer func() { <-sem }()
+  			if _, err := c.ensure(ctx, jf, id, tag); err != nil {
+  				log.Printf("poster cache warm: %s: %v", id, err)
+  			}
+  		}(id, tag)
+  	}
+  	wg.Wait()
+  }
 
-Goal: shared deck, swipe/undo, server-side votes, match detection.
+  // parsePosterRef extracts the item id and image tag from a proxied poster URL
+  // of the form "/api/images/{id}?tag={tag}".
+  func parsePosterRef(posterURL string) (id, tag string) {
+  	u, err := url.Parse(posterURL)
+  	if err != nil {
+  		return "", ""
+  	}
+  	return strings.TrimPrefix(u.Path, "/api/images/"), u.Query().Get("tag")
+  }
+  ```
+- Verify: `go build ./...` passes (the cache is defined but not yet wired).
 
-### 4.1 Start + deck
-- [x] Handle `admin:start {filters, maxMovies, requiredCount?}`. Reject if the
-      caller is not the admin. Then:
-      1. **Lock the roster:** set `session.Locked = true`. Count the current
-         participants; set `session.RequiredCount = requiredCount` if provided and
-         `1 <= requiredCount <= rosterCount`, otherwise `= rosterCount`.
-      2. Fetch movies via the Jellyfin client using `filters`.
-      3. Shuffle (`math/rand.Shuffle`), then **truncate to `maxMovies`** (default
-         50 if not provided). Store as `session.Deck`.
-      4. Set `Status=Active`; broadcast `deck` to everyone.
-- [x] Once `session.Locked`/`Active`, the WS `join` handler must **reject new
-      participants** (return a clear "session already started" error). Existing
-      participants may still reconnect with their `token`.
-- [x] Admin UI (in `Lobby.tsx`): a "Begin" button, a "max movies" number input
-      (default 50), and a "required to agree" number input (default = current
-      participant count, min 1, max = participant count). "Begin" sends
-      `admin:start` with `{filters, maxMovies, requiredCount}` and routes everyone
-      to the swipe screen.
-- Verify: after start, all clients receive the same ordered deck (length <=
-      maxMovies) and `RequiredCount` equals the locked headcount; a brand-new join
-      attempt is rejected.
+### 7.5 Wire the cache into the server (one group — build goes green at the end)
+Edit three files together; run the group's Verify only after all three.
 
-### 4.2 Vote engine + match detection
-- [x] Create `server/match.go`:
-```go
-// recordSwipe records a vote and returns the winning movie if this swipe caused
-// a match. Caller must hold the session lock.
-func (s *Session) recordSwipe(participantID, movieID string, yes bool) (winner *Movie, matched bool) {
-	if s.Votes[movieID] == nil {
-		s.Votes[movieID] = map[string]bool{}
-	}
-	s.Votes[movieID][participantID] = yes
-	s.LastSwipe[participantID] = Swipe{MovieID: movieID, Yes: yes}
+- [ ] `server/server.go`: add a `cache *posterCache` field to the `Server`
+  struct (after `store`), construct it in `New` (in the `&Server{...}` literal,
+  after `store: NewStore(ttl),`):
+  ```go
+  		cache: newPosterCache(cfg.CacheDir),
+  ```
+  and register the warm route in `routes()` after the preview/filters routes:
+  ```go
+  	s.mux.HandleFunc("POST /api/library/warm", s.handleLibraryWarm)
+  ```
+- [ ] `server/images.go`: replace the whole file body of `handleImage` with a
+  cache-backed version (keep the package + `net/http` import; drop `fmt`, `io`,
+  `net/url`):
+  ```go
+  package server
 
-	if !yes {
-		return nil, false // a "no" can never create a match (secret-kill)
-	}
-	// Win = every participant voted, and all votes are "yes".
-	votes := s.Votes[movieID]
-	if len(votes) != s.RequiredCount {
-		return nil, false
-	}
-	for _, v := range votes {
-		if !v {
-			return nil, false
-		}
-	}
-	return s.findMovie(movieID), true
-}
-```
-- [x] Handle `swipe {movieID, dir}`: call `recordSwipe`. If matched, set
-      `Status=Matched`, `WinnerID`, and broadcast `match {movie}`. Otherwise
-      broadcast `progress`.
-- [x] Handle `undo`: delete the participant's `LastSwipe` vote from
-      `Votes[movieID]`, clear `LastSwipe[participantID]`, broadcast `progress`.
-      (Undo can revive a secretly-killed movie — that is correct.)
-- Verify: with `requiredCount=2`, two clients swipe "yes" on the same movie ->
-      server emits `match`. Swipe then undo -> the vote is gone from state.
+  import "net/http"
 
-### 4.3 Swipe UI
-- [x] `components/Card.tsx`: wrap `react-tinder-card`. Props: the movie; call
-      `onSwipe(dir)` -> send `swipe` (`right`=yes, `left`=no). Show poster
-      (`/api/images/id`), title, year, genres, runtime.
-- [x] `Swipe.tsx`: render the deck as a stack of `Card`s; yes/no buttons that call
-      the card ref's `.swipe('right'|'left')`; an Undo button that calls the last
-      card's `.restoreCard()` and sends `undo`. A HUD from `progress` ("2 of 4
-      still swiping", cards left) — never show other people's individual votes.
-- Verify: swiping on the phone updates server state; undo restores the last card.
-- [x] Commit groups; update `docs/STATE.md` (Phase 4 done, Next = 5.1).
+  // handleImage serves a movie's primary poster from the on-disk cache, fetching
+  // from Jellyfin on a miss. Images are keyed by item id + Primary image tag
+  // (the ?tag= query param). With a tag the response is immutable for a year,
+  // because changed artwork gets a new tag and therefore a new URL.
+  func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
+  	id := r.PathValue("id")
+  	if id == "" {
+  		http.NotFound(w, r)
+  		return
+  	}
+  	tag := r.URL.Query().Get("tag")
 
----
+  	data, err := s.cache.ensure(r.Context(), s.jellyfin, id, tag)
+  	if err != nil {
+  		http.Error(w, "image not found", http.StatusNotFound)
+  		return
+  	}
 
-## Phase 5 — Reveal + confetti + leaderboard
+  	w.Header().Set("Content-Type", http.DetectContentType(data))
+  	if tag != "" {
+  		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+  	} else {
+  		w.Header().Set("Cache-Control", "public, max-age=86400")
+  	}
+  	w.WriteHeader(http.StatusOK)
+  	_, _ = w.Write(data)
+  }
+  ```
+- [ ] `server/library.go`: add the warm handler at the end of the file:
+  ```go
+  // handleLibraryWarm pre-fetches every poster for the filtered library into the
+  // on-disk cache so the session starts warm. It returns the candidate count
+  // immediately and warms in the background.
+  func (s *Server) handleLibraryWarm(w http.ResponseWriter, r *http.Request) {
+  	filters := ParseFilters(r.URL.Query())
 
-Goal: match reveal with confetti on all devices; no-match leaderboard.
+  	movies, count, err := s.jellyfin.Movies(r.Context(), filters)
+  	if err != nil {
+  		log.Printf("library warm: %v", err)
+  		http.Error(w, "failed to query Jellyfin library", http.StatusBadGateway)
+  		return
+  	}
 
-### 5.1 Reveal component
-- [x] `components/Confetti.tsx`: on mount, call `canvas-confetti` a few times
-      (burst + a short interval), then stop after ~3s.
-- [x] `Result.tsx`: full-screen winning poster + metadata. When `store.status`
-      becomes `Matched`, render this over everything and mount `Confetti`.
-- Verify: forcing a `match` shows the poster + confetti on every connected client.
+  	if s.cache.enabled() {
+  		go s.cache.warm(movies, s.jellyfin)
+  	}
 
-### 5.2 No-match leaderboard
-- [x] Server: when every connected participant has swiped the whole deck with no
-      match, emit `session_ended {leaderboard}` sorted by yes-count desc, tie-break
-      by `CommunityRating`.
-- [x] `Result.tsx` also handles `Ended`: show the ranked leaderboard; the admin
-      can tap a movie to declare the winner -> server sets `Matched`+`WinnerID`
-      and broadcasts `match` -> same reveal path (confetti).
-- Verify: exhaust a small deck with no consensus -> leaderboard shows; admin pick
-      triggers the reveal.
-- [x] Commit groups; update `docs/STATE.md` (Phase 5 done, Next = 6.1).
+  	w.Header().Set("Content-Type", "application/json")
+  	_ = json.NewEncoder(w).Encode(map[string]int{"count": count})
+  }
+  ```
+- Verify: `go build ./... && go vet ./...` pass.
 
----
+### 7.6 Frontend: warm the cache at "go to the Lobby"
+- [ ] `web/src/api.ts`: add after `getPreview`:
+  ```ts
+  // warmLibrary asks the server to pre-fetch every poster for the filtered
+  // library into its cache before the session starts. Returns the candidate
+  // count; warming happens in the background server-side.
+  export async function warmLibrary(filters: PreviewFilters): Promise<number> {
+    const params = buildPreviewParams(filters)
+    const res = await fetch(`/api/library/warm?${params.toString()}`, { method: 'POST' })
+    if (!res.ok) {
+      throw new Error(`warm request failed: ${res.status} ${res.statusText}`)
+    }
+    const body = (await res.json()) as { count: number }
+    return body.count
+  }
+  ```
+- [ ] `web/src/pages/AdminSetup.tsx`: add `warmLibrary` to the existing import
+  from `'../api'`, and update `handleGoToLobby` (currently lines 100–102) to:
+  ```tsx
+    function handleGoToLobby() {
+      setFilters(currentFilters())
+      // Warm the poster cache during the lobby-fill window (fire-and-forget;
+      // must never block entering the lobby).
+      warmLibrary(currentFilters()).catch((err) =>
+        console.error('Failed to warm poster cache:', err),
+      )
+    }
+  ```
+- Verify: `cd web && npm run build` succeeds (`tsc -b` + `vite build`, no errors).
 
-## Phase 6 — Polish + deploy
+### 7.7 Unit test — `server/imagecache_test.go` (new file)
+- [ ] Add a test covering: `store` → `get` round-trip; `pruneOld` removes the
+  old-tag file when a new tag is stored for the same id; `parsePosterRef` parses
+  `/api/images/{id}?tag={tag}`; and `sanitize` strips path separators. Use
+  `t.TempDir()` for the cache dir. (No Jellyfin needed — test the cache
+  primitives directly, mirroring the skip-if-unconfigured style of
+  `server/jellyfin_test.go`.)
+- Verify: `go test ./server/... -run TestPosterCache -v` passes.
 
-Goal: robustness + shippable.
+### 7.8 Config plumbing, deploy volume, and docs
+- [ ] `docker-compose.yml`: add a named volume mounted at the container's cache
+  dir and set `CACHE_DIR` to it, so the disk cache survives restarts. Example:
+  add `- poster-cache:/var/cache/mns` under the service `volumes:`,
+  `CACHE_DIR=/var/cache/mns` under `environment:`, and a top-level
+  `volumes:\n  poster-cache:`.
+- [ ] `README.md` and `CLAUDE.md`: add a `CACHE_DIR` row to the env-var table —
+  "optional; directory for the on-disk poster cache (default a temp dir);
+  mount a volume in Docker to persist it across restarts."
+- Verify: `docker compose config` parses; the env table renders the new row.
 
-- [x] 6.1 Reconnection edge cases: a participant dropping mid-swipe keeps their
-      votes; admin dropping does not end the session; a late joiner during Lobby
-      is allowed, during Active is rejected with a clear message.
-- [x] 6.2 TTL sweeper verified: abandoned sessions are removed after `SESSION_TTL`;
-      add graceful shutdown (`http.Server.Shutdown` on SIGINT/SIGTERM).
-- [x] 6.3 Mobile feel: swipe thresholds tuned; buttons large; layout fills the
-      viewport with no page scroll; posters use `object-fit: cover`.
-- [x] 6.4 Finalize `docker-compose.yml` + README run steps.
-- [x] 6.5 Run the full **End-to-end verification** in `docs/PLAN.md` (all 8 steps)
-      on the real network and record the result in `docs/STATE.md`.
-- [x] Final commit and mark the project done in `docs/STATE.md`.
-```
-```
+### 7.9 (Stretch — optional UI) promote "go to the Lobby" to a distinct button
+- [ ] In `web/src/pages/AdminSetup.tsx`, the "go to the Lobby" action is a
+  `<Link>` (line 111). Restyle it as a primary button visually distinct from the
+  secondary "Preview" button — reuse the existing scoped `.btn-primary` style
+  (added in a recent commit). Keep `onClick={handleGoToLobby}` and the
+  `to={`/join/${sessionCode}`}` navigation.
+- Verify: `cd web && npm run build` succeeds; the two actions read as
+  primary (commit) vs secondary (preview).
+
+### 7.10 End-to-end verification + handback
+- [ ] `go build ./... && go vet ./...` clean; `go mod tidy` leaves no diff;
+  `go test ./...` passes; `cd web && npm run build` succeeds.
+- [ ] Tag in URL: `curl -s "localhost:8080/api/library/preview?genres=Action" | jq '.movies[0].posterURL'`
+  → shows `/api/images/{id}?tag=...`. (If not, apply the `Fields` fix noted in
+  7.3.)
+- [ ] Immutable header + cache write:
+  `curl -sD - "localhost:8080/api/images/{id}?tag={tag}" -o /dev/null | grep -i cache-control`
+  → `...immutable`; confirm a `{id}_{tag}` file appears in `CACHE_DIR`.
+- [ ] Cache hit / dedup: fire several concurrent requests for one poster
+  (`seq 8 | xargs -P8 -I_ curl -s -o /dev/null "localhost:8080/api/images/{id}?tag={tag}"`);
+  confirm only one upstream fetch via Jellyfin access logs.
+- [ ] Warming: `curl -s -X POST "localhost:8080/api/library/warm?genres=Action" | jq .count`
+  returns a number immediately; watch `CACHE_DIR` fill shortly after. In the UI,
+  clicking "go to the Lobby" triggers the warm and does not block navigation.
+- [ ] Invalidation: change a poster in Jellyfin, re-run preview → new `tag` in
+  the URL → new cache file written, old `{id}_{oldtag}` file pruned.
+- [ ] Degradation: point `CACHE_DIR` at an unwritable path → images still serve
+  (live proxy), server logs "poster cache: disabled", no crash.
+- [ ] Handback: tick every finished box in `docs/TASKS.md`; update
+  `docs/STATE.md` (status/Next action/checklist) and append a dated handback
+  entry per `docs/HANDOFF.md`. Commit each group with Conventional Commits.

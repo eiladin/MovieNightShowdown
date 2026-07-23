@@ -32,6 +32,7 @@ session as admin, and share the code/QR with everyone else.
 | `PUBLIC_URL` | yes | Base URL used to build join links and QR codes |
 | `PORT` | optional | Listen port (default `8080`) |
 | `SESSION_TTL` | optional | How long idle sessions live (default a few hours) |
+| `CACHE_DIR` | optional | Directory for the on-disk poster cache (default a temp dir); mount a volume in Docker to persist it across restarts |
 
 TLS and the `showdown.<domain>` subdomain are expected to be handled by your
 existing reverse proxy.

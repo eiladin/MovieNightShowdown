@@ -11,6 +11,7 @@ type Server struct {
 	cfg      Config
 	jellyfin *JellyfinClient
 	store    *Store
+	cache    *posterCache
 	version  string
 	commit   string
 }
@@ -27,6 +28,7 @@ func New(cfg Config) *Server {
 		cfg:      cfg,
 		jellyfin: NewJellyfinClient(cfg),
 		store:    NewStore(ttl),
+		cache:    newPosterCache(cfg.CacheDir),
 	}
 	s.routes()
 	return s
@@ -44,6 +46,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /healthz", s.handleHealth)
 	s.mux.HandleFunc("GET /api/library/preview", s.handleLibraryPreview)
 	s.mux.HandleFunc("GET /api/library/filters", s.handleLibraryFilters)
+	s.mux.HandleFunc("POST /api/library/warm", s.handleLibraryWarm)
 	s.mux.HandleFunc("GET /api/images/{id}", s.handleImage)
 	s.mux.HandleFunc("POST /api/sessions", s.handleCreateSession)
 	s.mux.HandleFunc("GET /ws", s.handleWS)
