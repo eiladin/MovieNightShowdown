@@ -4,11 +4,11 @@ This is the single source of truth for progress. Read it first. Update it last.
 See `docs/HANDOFF.md` for how to read and update this file.
 
 ## Current status
-Phase: 5 — Reveal + confetti + leaderboard        Status: in_progress
+Phase: 6 — Polish + deploy
 Updated: 2026-07-22 by claude-code        Build: green
 
 ## Next action
-Start `docs/TASKS.md` Phase 5, task 5.1
+Start `docs/TASKS.md` Phase 6, task 6.5 (Run End-to-end verification)
 
 ## Phase checklist
 Phase 0 — Docs & repo init (done):
@@ -52,6 +52,18 @@ Phase 3 — Sessions + WebSocket hub (done):
       `Lobby.tsx`, `web/src/components/QRJoin.tsx`, `/join/:code` route
 
 ## Handoff log (append-only, newest first)
+
+### 2026-07-22 — claude-code — handback
+- Done: Tasks 6.1 through 6.4. Fixed the SPA fallback issue serving text/html for nested route assets (Vite base: './'). Added graceful shutdown in main.go, enforced session closure for expired sessions in session.go. Adjusted swipe layout to prevent page scroll and increased button size for mobile feel. Finalized docker-compose.yml and README.
+- In-flight: none.
+- Next: Start `docs/TASKS.md` Phase 6, task 6.5 (Run End-to-end verification).
+- Files touched: server/static.go, main.go, server/session.go, web/src/components/Card.tsx, web/src/styles/swipe.css, docs/TASKS.md, docs/STATE.md.
+
+### 2026-07-22 — claude-code — handback
+- Done: Phase 5 complete (tasks 5.1-5.2). Built Result/Confetti components, added end-of-session leaderboard and admin:pick payload for manual tie-breaking.
+- In-flight: none.
+- Next: Start `docs/TASKS.md` Phase 6, task 6.1 (SQLite persistence).
+- Files touched: server/match.go, server/hub.go, server/messages.go, web/src/components/Confetti.tsx, web/src/pages/Result.tsx, web/src/pages/Lobby.tsx, web/src/pages/Swipe.tsx, web/src/store.ts, web/src/ws.ts.
 
 ### 2026-07-22 — claude-code — handback
 - Done: Phase 4 complete (tasks 4.1-4.3). Built vote engine, match detection, swipe deck UI with react-tinder-card. Verified match and undo semantics.

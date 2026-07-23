@@ -138,10 +138,22 @@ func (st *Store) sweepExpired() {
 		now := time.Now()
 		for code, s := range st.sessions {
 			if now.Sub(s.CreatedAt) > st.ttl {
+				s.Close()
 				delete(st.sessions, code)
 			}
 		}
 		st.mu.Unlock()
+	}
+}
+
+// Close gracefully terminates all connected clients when the session expires.
+func (s *Session) Close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range s.clients {
+		if c.conn != nil {
+			c.conn.Close()
+		}
 	}
 }
 

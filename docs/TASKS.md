@@ -590,14 +590,14 @@ Goal: match reveal with confetti on all devices; no-match leaderboard.
 
 Goal: robustness + shippable.
 
-- [ ] 6.1 Reconnection edge cases: a participant dropping mid-swipe keeps their
+- [x] 6.1 Reconnection edge cases: a participant dropping mid-swipe keeps their
       votes; admin dropping does not end the session; a late joiner during Lobby
       is allowed, during Active is rejected with a clear message.
-- [ ] 6.2 TTL sweeper verified: abandoned sessions are removed after `SESSION_TTL`;
+- [x] 6.2 TTL sweeper verified: abandoned sessions are removed after `SESSION_TTL`;
       add graceful shutdown (`http.Server.Shutdown` on SIGINT/SIGTERM).
-- [ ] 6.3 Mobile feel: swipe thresholds tuned; buttons large; layout fills the
+- [x] 6.3 Mobile feel: swipe thresholds tuned; buttons large; layout fills the
       viewport with no page scroll; posters use `object-fit: cover`.
-- [ ] 6.4 Finalize `docker-compose.yml` + README run steps.
+- [x] 6.4 Finalize `docker-compose.yml` + README run steps.
 - [ ] 6.5 Run the full **End-to-end verification** in `docs/PLAN.md` (all 8 steps)
       on the real network and record the result in `docs/STATE.md`.
 - [ ] Final commit and mark the project done in `docs/STATE.md`.
