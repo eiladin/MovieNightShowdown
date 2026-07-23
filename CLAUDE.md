@@ -85,3 +85,4 @@ commands that apply right now.
 | `PUBLIC_URL` | yes | Base URL used to build QR/join links |
 | `PORT` | optional | Listen port (default 8080) |
 | `SESSION_TTL` | optional | Session expiry (default a few hours) |
+| `CACHE_DIR` | optional | Directory for the on-disk poster cache (default a temp dir); mount a volume in Docker to persist it across restarts |
