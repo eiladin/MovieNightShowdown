@@ -6,10 +6,12 @@ import {
   SessionSocket,
   type DeckPayload,
   type ErrorPayload,
+  type MatchPayload,
   type ParticipantUpdatePayload,
   type SessionStatePayload,
 } from '../ws'
 import Swipe from './Swipe'
+import Result from './Result'
 import '../styles/lobby.css'
 
 // Lobby is reached at /join/:code (guest link, and the admin arrives here
@@ -27,6 +29,7 @@ export default function Lobby() {
   const applySessionState = useSessionStore((s) => s.applySessionState)
   const setParticipants = useSessionStore((s) => s.setParticipants)
   const setDeck = useSessionStore((s) => s.setDeck)
+  const setWinner = useSessionStore((s) => s.setWinner)
   const reset = useSessionStore((s) => s.reset)
 
   const [name, setName] = useState('')
@@ -69,6 +72,10 @@ export default function Lobby() {
     )
     const offDeck = socket.on('deck', (payload) => setDeck((payload as DeckPayload).movies))
     const offError = socket.on('error', (payload) => setSocketError((payload as ErrorPayload).message))
+    const offMatch = socket.on('match', (payload) => {
+      const { movie } = payload as MatchPayload
+      setWinner(movie)
+    })
 
     socket.connect()
 
@@ -77,6 +84,7 @@ export default function Lobby() {
       offParticipants()
       offDeck()
       offError()
+      offMatch()
       socket.close()
     }
     // name is intentionally captured only at the moment `joined` flips true.
@@ -119,6 +127,10 @@ export default function Lobby() {
   // Once the admin starts the session, the deck takes over the same screen
   // (same socket, same mounted component) rather than a route change — the
   // WS connection must survive the transition.
+  if (socketRef.current && status === 'matched') {
+    return <Result />
+  }
+
   if (socketRef.current && status !== 'lobby') {
     return <Swipe socket={socketRef.current} />
   }

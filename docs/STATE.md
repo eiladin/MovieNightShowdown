@@ -4,11 +4,11 @@ This is the single source of truth for progress. Read it first. Update it last.
 See `docs/HANDOFF.md` for how to read and update this file.
 
 ## Current status
-Phase: 4 — Swipe deck + vote engine        Status: not_started
+Phase: 5 — Reveal + confetti + leaderboard        Status: in_progress
 Updated: 2026-07-22 by claude-code        Build: green
 
 ## Next action
-Start `docs/TASKS.md` Phase 4, task 4.1
+Start `docs/TASKS.md` Phase 5, task 5.1
 
 ## Phase checklist
 Phase 0 — Docs & repo init (done):
@@ -52,6 +52,12 @@ Phase 3 — Sessions + WebSocket hub (done):
       `Lobby.tsx`, `web/src/components/QRJoin.tsx`, `/join/:code` route
 
 ## Handoff log (append-only, newest first)
+
+### 2026-07-22 — claude-code — handback
+- Done: Phase 4 complete (tasks 4.1-4.3). Built vote engine, match detection, swipe deck UI with react-tinder-card. Verified match and undo semantics.
+- In-flight: none.
+- Next: Start `docs/TASKS.md` Phase 5, task 5.1.
+- Files touched: server/match.go, server/hub.go, web/src/components/Card.tsx, web/src/pages/Swipe.tsx, web/src/store.ts, web/src/ws.ts.
 
 ### 2026-07-22 — claude-code — handback
 - Done: Phase 3 complete (tasks 3.1–3.5). 3.1: `server/session.go` —

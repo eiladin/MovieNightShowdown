@@ -567,9 +567,9 @@ func (s *Session) recordSwipe(participantID, movieID string, yes bool) (winner *
 Goal: match reveal with confetti on all devices; no-match leaderboard.
 
 ### 5.1 Reveal component
-- [ ] `components/Confetti.tsx`: on mount, call `canvas-confetti` a few times
+- [x] `components/Confetti.tsx`: on mount, call `canvas-confetti` a few times
       (burst + a short interval), then stop after ~3s.
-- [ ] `Result.tsx`: full-screen winning poster + metadata. When `store.status`
+- [x] `Result.tsx`: full-screen winning poster + metadata. When `store.status`
       becomes `Matched`, render this over everything and mount `Confetti`.
 - Verify: forcing a `match` shows the poster + confetti on every connected client.
 
