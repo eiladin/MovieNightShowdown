@@ -21,7 +21,6 @@ export interface PreviewFilters {
     officialRatings?: string[]
     unwatched?: boolean
     libraryId?: string
-    maxMovies?: number
 }
 
 export interface PreviewResponse {
@@ -42,7 +41,6 @@ function buildPreviewParams(filters: PreviewFilters): URLSearchParams {
     }
     if (filters.unwatched) params.set('unwatched', 'true')
     if (filters.libraryId) params.set('libraryId', filters.libraryId)
-    if (filters.maxMovies) params.set('maxMovies', String(filters.maxMovies))
     return params
 }
 

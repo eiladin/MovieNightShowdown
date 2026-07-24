@@ -40,7 +40,7 @@ type Participant struct {
 	Token     string `json:"-"`
 }
 
-// Session is one in-memory "movie night". See docs/PLAN.md > Data model.
+// Session is one in-memory "movie night".
 type Session struct {
 	Code          string
 	HostID        string

@@ -67,6 +67,12 @@ room jumps to the same winning poster at the same moment, confetti and all.
 <img src="docs/screenshots/05-result.png" alt="It's a match — the winning movie with confetti" width="300" />
 </div>
 
+Not every showdown ends in a clean sweep, and that's fine. If the deck runs out
+before the room agrees — or the host decides everyone's swiped enough and calls
+it — the session drops to a leaderboard of the movies that came closest, ranked
+by how many yes votes each one drew. The host taps one to crown the winner, and
+it takes over every screen just like a match would.
+
 ## Why you'd want it
 
 It's yours. Everything runs on your own hardware against your own Jellyfin

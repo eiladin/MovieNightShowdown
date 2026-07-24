@@ -8,18 +8,22 @@ interface SwipeProps {
   socket: SessionSocket
 }
 
-// Swipe is the swipe-deck screen (Phase 4, task 4.3): a stack of Cards over
-// the session's dealt deck, yes/no/undo controls, and a HUD driven by the
-// server's `progress` broadcasts. It never shows another participant's
-// individual votes — only aggregate counts.
+// Swipe is the swipe-deck screen: a stack of Cards over the session's dealt
+// deck, yes/no/undo controls, and a HUD driven by the server's `progress`
+// broadcasts. It never shows another participant's individual votes — only
+// aggregate counts.
 export default function Swipe({ socket }: SwipeProps) {
   const deck = useSessionStore((s) => s.deck)
   const requiredCount = useSessionStore((s) => s.requiredCount)
   const recordVote = useSessionStore((s) => s.recordVote)
   const clearVote = useSessionStore((s) => s.clearVote)
   const setStatus = useSessionStore((s) => s.setStatus)
+  const participants = useSessionStore((s) => s.participants)
+  const myParticipantId = useSessionStore((s) => s.myParticipantId)
+  const isHost = participants.find((p) => p.id === myParticipantId)?.isHost ?? false
 
   const [progress, setProgress] = useState<ProgressPayload | null>(null)
+  const [confirmingEnd, setConfirmingEnd] = useState(false)
 
   const childRefs = useMemo(() => deck.map(() => createRef<TinderCardApi>()), [deck])
 
@@ -105,6 +109,37 @@ export default function Swipe({ socket }: SwipeProps) {
         {progress
           ? `${progress.participantsSwiped} of ${progress.participantsTotal} swiped this card · ${progress.cardsRemaining} cards left`
           : `0 of ${requiredCount} swiped · ${deck.length} cards left`}
+        {isHost &&
+          (confirmingEnd ? (
+            <span className="swipe-end-confirm">
+              End for everyone?
+              <button
+                type="button"
+                className="swipe-end-confirm-yes"
+                onClick={() => {
+                  socket.send('host:end', {})
+                  setConfirmingEnd(false)
+                }}
+              >
+                End
+              </button>
+              <button
+                type="button"
+                className="swipe-end-confirm-no"
+                onClick={() => setConfirmingEnd(false)}
+              >
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="swipe-end-btn"
+              onClick={() => setConfirmingEnd(true)}
+            >
+              End session
+            </button>
+          ))}
       </div>
 
       <div className="swipe-deck">

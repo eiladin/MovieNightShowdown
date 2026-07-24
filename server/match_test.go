@@ -164,6 +164,42 @@ func TestRecordSwipe_ExtraVotesPastThresholdStillMatch(t *testing.T) {
 	}
 }
 
+// TestBuildLeaderboard_RanksByYesThenRating exercises buildLeaderboardLocked
+// directly: it must return a leaderboard covering the whole deck even when
+// nobody has finished swiping, ordered by YesCount desc with CommunityRating
+// as the tiebreak.
+func TestBuildLeaderboard_RanksByYesThenRating(t *testing.T) {
+	s := newTestSession(3,
+		Movie{ID: "m1", Title: "Arrival", CommunityRating: 7.5},
+		Movie{ID: "m2", Title: "Dune", CommunityRating: 8.5},
+		Movie{ID: "m3", Title: "Contact", CommunityRating: 6.0},
+	)
+
+	// m2 and m3 tie on yesCount (1 each); m2 has the higher rating and must
+	// rank first between them. m1 has no yes votes and one no vote; the deck
+	// is far from complete (only p1 has voted).
+	s.recordSwipe("p1", "m1", false)
+	s.recordSwipe("p1", "m2", true)
+	s.recordSwipe("p1", "m3", true)
+
+	lb := s.buildLeaderboardLocked()
+	if lb == nil {
+		t.Fatal("expected a non-nil leaderboard even though the deck isn't complete")
+	}
+	if len(lb) != 3 {
+		t.Fatalf("expected all 3 deck movies in the leaderboard, got %d", len(lb))
+	}
+	if lb[0].Movie.ID != "m2" || lb[0].YesCount != 1 {
+		t.Fatalf("expected m2 first (yesCount=1, rating=8.5), got %+v", lb[0])
+	}
+	if lb[1].Movie.ID != "m3" || lb[1].YesCount != 1 {
+		t.Fatalf("expected m3 second (yesCount=1, rating=6.0, tiebreak loser), got %+v", lb[1])
+	}
+	if lb[2].Movie.ID != "m1" || lb[2].YesCount != 0 {
+		t.Fatalf("expected m1 last (yesCount=0), got %+v", lb[2])
+	}
+}
+
 func TestRecordSwipe_UnknownMovieIsIgnored(t *testing.T) {
 	s := newTestSession(1, Movie{ID: "real", Title: "Arrival"})
 
