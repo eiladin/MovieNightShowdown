@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Movie, PreviewFilters } from './api'
+import type { LeaderboardEntry } from './ws'
 
 // Status mirrors server.Status (see server/session.go).
 export type Status = 'lobby' | 'active' | 'matched' | 'ended'
@@ -40,7 +41,7 @@ interface SessionStore {
     // host:start). Not session state from the server — purely local UI state.
     filters: PreviewFilters
     winner: Movie | null
-    leaderboard: any[] | null
+    leaderboard: LeaderboardEntry[] | null
 
     applySessionState: (snapshot: SessionSnapshot) => void
     setParticipants: (participants: Participant[]) => void
@@ -50,7 +51,7 @@ interface SessionStore {
     clearVote: (movieId: string) => void
     setFilters: (filters: PreviewFilters) => void
     setWinner: (movie: Movie) => void
-    setLeaderboard: (lb: any[]) => void
+    setLeaderboard: (lb: LeaderboardEntry[]) => void
     reset: () => void
 }
 

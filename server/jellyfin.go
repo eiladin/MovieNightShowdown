@@ -64,11 +64,10 @@ type jellyfinItem struct {
 // the Movie type used by the rest of the app.
 //
 // It returns two counts on purpose: the movie list (capped server-side via
-// Jellyfin's Limit param at filters.MaxMovies, then further reduced by the
-// client-side RuntimeMax filter) for display, and the true total number of
-// items Jellyfin reports as matching the filters (TotalRecordCount, which
-// Jellyfin reports uncapped regardless of Limit) for an accurate preview
-// count.
+// Jellyfin's Limit param at filters.MaxMovies) for display, and the true
+// total number of items Jellyfin reports as matching the filters
+// (TotalRecordCount, which Jellyfin reports uncapped regardless of Limit)
+// for an accurate preview count.
 func (c *JellyfinClient) Movies(ctx context.Context, filters Filters) ([]Movie, int, error) {
 	q := url.Values{}
 	q.Set("IncludeItemTypes", "Movie")
@@ -117,9 +116,6 @@ func (c *JellyfinClient) Movies(ctx context.Context, filters Filters) ([]Movie, 
 			CommunityRating: it.CommunityRating,
 			OfficialRating:  it.OfficialRating,
 			PosterURL:       posterURL,
-		}
-		if filters.RuntimeMax > 0 && m.Runtime > filters.RuntimeMax {
-			continue
 		}
 		movies = append(movies, m)
 	}

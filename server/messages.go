@@ -24,7 +24,6 @@ func newEnvelope(msgType string, payload interface{}) ([]byte, error) {
 // JoinPayload is sent right after connecting. Name is only used when no
 // existing participant is matched via the connection's ?token=.
 type JoinPayload struct {
-	Code string `json:"code"`
 	Name string `json:"name"`
 }
 
@@ -42,12 +41,6 @@ type SwipePayload struct {
 	MovieID string `json:"movieID"`
 	Dir     string `json:"dir"` // "yes" | "no"
 }
-
-// UndoPayload takes no fields; it reverses the sender's last swipe (Phase 4).
-type UndoPayload struct{}
-
-// HostEndPayload takes no fields; it force-ends the session (Phase 5).
-type HostEndPayload struct{}
 
 // HostPickPayload is sent by the host to pick a winner from the leaderboard (Phase 5).
 type HostPickPayload struct {

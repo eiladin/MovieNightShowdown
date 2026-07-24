@@ -163,3 +163,21 @@ func TestRecordSwipe_ExtraVotesPastThresholdStillMatch(t *testing.T) {
 		t.Fatalf("expected winner m1, got %+v", winner)
 	}
 }
+
+func TestRecordSwipe_UnknownMovieIsIgnored(t *testing.T) {
+	s := newTestSession(1, Movie{ID: "real", Title: "Arrival"})
+
+	winner, matched := s.recordSwipe("p1", "ghost", true)
+	if matched {
+		t.Fatalf("expected no match for a movie not in the deck, got matched=true")
+	}
+	if winner != nil {
+		t.Fatalf("expected nil winner and no match, got winner=%+v", winner)
+	}
+	if _, ok := s.Votes["ghost"]; ok {
+		t.Fatal("expected a vote for an unknown movie to be ignored, not recorded")
+	}
+	if _, ok := s.LastSwipe["p1"]; ok {
+		t.Fatal("expected no LastSwipe recorded for an ignored vote")
+	}
+}

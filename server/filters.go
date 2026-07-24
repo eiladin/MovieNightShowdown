@@ -19,7 +19,6 @@ type Filters struct {
 	YearMax         int      `json:"yearMax"`
 	RatingMin       float64  `json:"ratingMin"`       // minimum CommunityRating
 	OfficialRatings []string `json:"officialRatings"` // MPAA rating, e.g. ["PG", "PG-13"]
-	RuntimeMax      int      `json:"runtimeMax"`      // minutes; filtered client-side
 	Unwatched       bool     `json:"unwatched"`
 	LibraryID       string   `json:"libraryId"`
 	MaxMovies       int      `json:"maxMovies"` // deck cap, default 50
@@ -42,9 +41,6 @@ func ParseFilters(q url.Values) Filters {
 	}
 	if v, err := strconv.ParseFloat(q.Get("ratingMin"), 64); err == nil {
 		f.RatingMin = v
-	}
-	if v, err := strconv.Atoi(q.Get("runtimeMax")); err == nil {
-		f.RuntimeMax = v
 	}
 	if v, err := strconv.Atoi(q.Get("maxMovies")); err == nil && v > 0 {
 		f.MaxMovies = v
