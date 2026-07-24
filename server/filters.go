@@ -72,6 +72,11 @@ func (f Filters) apply(q url.Values, hasUserID bool) {
 		q.Set("ParentId", f.LibraryID)
 	}
 	if f.Limit > 0 {
+		// Randomize server-side so the Limit takes a random sample of the
+		// whole filtered library rather than the first N of Jellyfin's
+		// default (SortName) order, which would deal the same deck to
+		// every session.
+		q.Set("SortBy", "Random")
 		q.Set("Limit", strconv.Itoa(f.Limit))
 	}
 }
