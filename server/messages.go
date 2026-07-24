@@ -3,8 +3,7 @@ package server
 import "encoding/json"
 
 // Envelope is the wire shape of every WebSocket message in both directions:
-// {"type": "...", "payload": {...}}. See docs/PLAN.md > API + WebSocket
-// protocol for the full table of types.
+// {"type": "...", "payload": {...}}.
 type Envelope struct {
 	Type    string          `json:"type"`
 	Payload json.RawMessage `json:"payload"`
@@ -28,7 +27,7 @@ type JoinPayload struct {
 }
 
 // HostStartPayload is sent by the host to lock the roster and deal the
-// deck (Phase 4). RequiredCount is optional: 0 means "default to the locked
+// deck. RequiredCount is optional: 0 means "default to the locked
 // headcount".
 type HostStartPayload struct {
 	Filters       Filters `json:"filters"`
@@ -36,13 +35,13 @@ type HostStartPayload struct {
 	RequiredCount int     `json:"requiredCount"`
 }
 
-// SwipePayload records one participant's vote on one movie (Phase 4).
+// SwipePayload records one participant's vote on one movie.
 type SwipePayload struct {
 	MovieID string `json:"movieID"`
 	Dir     string `json:"dir"` // "yes" | "no"
 }
 
-// HostPickPayload is sent by the host to pick a winner from the leaderboard (Phase 5).
+// HostPickPayload is sent by the host to pick a winner from the leaderboard.
 type HostPickPayload struct {
 	MovieID string `json:"movieID"`
 }
@@ -62,7 +61,7 @@ type SessionStatePayload struct {
 	YourVotes         map[string]string `json:"yourVotes,omitempty"`
 }
 
-// DeckPayload is the ordered, capped deck dealt at host:start (Phase 4).
+// DeckPayload is the ordered, capped deck dealt at host:start.
 type DeckPayload struct {
 	Movies []Movie `json:"movies"`
 }
@@ -74,26 +73,25 @@ type ParticipantUpdatePayload struct {
 }
 
 // ProgressPayload is a lobby/HUD summary of swipe progress; it never reveals
-// who voted which way on a specific movie (Phase 4).
+// who voted which way on a specific movie.
 type ProgressPayload struct {
 	ParticipantsSwiped int `json:"participantsSwiped"`
 	ParticipantsTotal  int `json:"participantsTotal"`
 	CardsRemaining     int `json:"cardsRemaining"`
 }
 
-// MatchPayload announces the winning movie (Phase 4/5).
+// MatchPayload announces the winning movie.
 type MatchPayload struct {
 	Movie Movie `json:"movie"`
 }
 
-// LeaderboardEntry is one row of the no-match leaderboard (Phase 5).
+// LeaderboardEntry is one row of the no-match leaderboard.
 type LeaderboardEntry struct {
 	Movie    Movie `json:"movie"`
 	YesCount int   `json:"yesCount"`
 }
 
-// SessionEndedPayload is sent when the deck is exhausted with no match
-// (Phase 5).
+// SessionEndedPayload is sent when the deck is exhausted with no match.
 type SessionEndedPayload struct {
 	Leaderboard []LeaderboardEntry `json:"leaderboard"`
 }

@@ -11,7 +11,7 @@ const defaultMaxMovies = 50
 
 // Filters holds the host's library filter selections, parsed from the query
 // params of GET /api/library/preview, and also sent as JSON inside the
-// host:start WS payload (Phase 4) — hence the json tags, matching the
+// host:start WS payload — hence the json tags, matching the
 // frontend's PreviewFilters shape (web/src/api.ts).
 type Filters struct {
 	Genres          []string `json:"genres"`
@@ -21,7 +21,7 @@ type Filters struct {
 	OfficialRatings []string `json:"officialRatings"` // MPAA rating, e.g. ["PG", "PG-13"]
 	Unwatched       bool     `json:"unwatched"`
 	LibraryID       string   `json:"libraryId"`
-	MaxMovies       int      `json:"maxMovies"` // deck cap, default 50
+	Limit           int      `json:"limit"` // fetch cap for the preview/library query, default 50
 }
 
 // ParseFilters parses Filters from request query params.
@@ -31,7 +31,7 @@ func ParseFilters(q url.Values) Filters {
 		OfficialRatings: q["officialRatings"],
 		Unwatched:       q.Get("unwatched") == "true",
 		LibraryID:       q.Get("libraryId"),
-		MaxMovies:       defaultMaxMovies,
+		Limit:           defaultMaxMovies,
 	}
 	if v, err := strconv.Atoi(q.Get("yearMin")); err == nil {
 		f.YearMin = v
@@ -42,8 +42,8 @@ func ParseFilters(q url.Values) Filters {
 	if v, err := strconv.ParseFloat(q.Get("ratingMin"), 64); err == nil {
 		f.RatingMin = v
 	}
-	if v, err := strconv.Atoi(q.Get("maxMovies")); err == nil && v > 0 {
-		f.MaxMovies = v
+	if v, err := strconv.Atoi(q.Get("limit")); err == nil && v > 0 {
+		f.Limit = v
 	}
 	return f
 }
@@ -71,8 +71,8 @@ func (f Filters) apply(q url.Values, hasUserID bool) {
 	if f.LibraryID != "" {
 		q.Set("ParentId", f.LibraryID)
 	}
-	if f.MaxMovies > 0 {
-		q.Set("Limit", strconv.Itoa(f.MaxMovies))
+	if f.Limit > 0 {
+		q.Set("Limit", strconv.Itoa(f.Limit))
 	}
 }
 

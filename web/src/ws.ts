@@ -23,13 +23,13 @@ export interface ParticipantUpdatePayload {
 }
 
 // DeckPayload mirrors server.DeckPayload: the ordered, capped deck dealt at
-// host:start (Phase 4). Every client receives the same order.
+// host:start. Every client receives the same order.
 export interface DeckPayload {
     movies: Movie[]
 }
 
 // ProgressPayload mirrors server.ProgressPayload: a HUD summary of swipe
-// progress that never reveals who voted which way (Phase 4).
+// progress that never reveals who voted which way.
 export interface ProgressPayload {
     participantsSwiped: number
     participantsTotal: number

@@ -7,7 +7,7 @@ import (
 
 // TestJellyfinClient_Movies is an integration test against a real Jellyfin
 // server. It skips automatically unless JELLYFIN_URL/JELLYFIN_API_KEY are
-// set in the environment (see docs/TASKS.md 2.2/2.3 Verify).
+// set in the environment.
 func TestJellyfinClient_Movies(t *testing.T) {
 	cfg := LoadConfig()
 	if cfg.JellyfinURL == "" || cfg.JellyfinAPIKey == "" {
@@ -31,7 +31,7 @@ func TestJellyfinClient_Movies(t *testing.T) {
 		}
 	}
 
-	filtered, filteredCount, err := client.Movies(ctx, Filters{Genres: []string{"Action"}, MaxMovies: defaultMaxMovies})
+	filtered, filteredCount, err := client.Movies(ctx, Filters{Genres: []string{"Action"}, Limit: defaultMaxMovies})
 	if err != nil {
 		t.Fatalf("Movies(genres=Action): %v", err)
 	}

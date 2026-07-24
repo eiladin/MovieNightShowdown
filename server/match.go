@@ -95,6 +95,12 @@ func (s *Session) checkSessionEndedLocked() []LeaderboardEntry {
 		}
 	}
 
+	return s.buildLeaderboardLocked()
+}
+
+// buildLeaderboardLocked builds the leaderboard from the votes cast so far,
+// regardless of whether every participant has finished. Caller must hold s.mu.
+func (s *Session) buildLeaderboardLocked() []LeaderboardEntry {
 	var lb []LeaderboardEntry
 	for _, movie := range s.Deck {
 		yesCount := 0
@@ -105,7 +111,6 @@ func (s *Session) checkSessionEndedLocked() []LeaderboardEntry {
 		}
 		lb = append(lb, LeaderboardEntry{Movie: movie, YesCount: yesCount})
 	}
-
 	sort.Slice(lb, func(i, j int) bool {
 		if lb[i].YesCount != lb[j].YesCount {
 			return lb[i].YesCount > lb[j].YesCount

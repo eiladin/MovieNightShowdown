@@ -44,8 +44,7 @@ export default function Lobby() {
     const [requiredTouched, setRequiredTouched] = useState(false)
 
     // Default "required to agree" to the current roster size until the host
-    // deliberately overrides it (never raise above the roster — see
-    // docs/TASKS.md > Locked product rules).
+    // deliberately overrides it (never raise above the roster).
     useEffect(() => {
         if (!requiredTouched) setRequiredCountRaw(Math.max(participants.length, 1))
     }, [participants.length, requiredTouched])

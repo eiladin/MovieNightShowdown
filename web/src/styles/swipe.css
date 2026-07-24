@@ -15,6 +15,48 @@
   text-align: center;
 }
 
+.swipe-end-btn {
+  display: block;
+  margin: 6px auto 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border, #e5e4e7);
+  background: transparent;
+  color: var(--muted, #666);
+  font-size: 12px;
+  font-weight: normal;
+}
+
+.swipe-end-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 6px auto 0;
+  font-size: 0.85rem;
+  color: var(--text-muted, #8b8792);
+}
+
+.swipe-end-confirm-yes,
+.swipe-end-confirm-no {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.swipe-end-confirm-yes {
+  border: 1px solid transparent;
+  background: var(--danger, #d64545);
+  color: #fff;
+}
+
+.swipe-end-confirm-no {
+  border: 1px solid var(--border, #e5e4e7);
+  background: transparent;
+  color: inherit;
+}
+
 .swipe-deck {
   position: relative;
   width: min(90vw, 340px);

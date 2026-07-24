@@ -64,7 +64,7 @@ type jellyfinItem struct {
 // the Movie type used by the rest of the app.
 //
 // It returns two counts on purpose: the movie list (capped server-side via
-// Jellyfin's Limit param at filters.MaxMovies) for display, and the true
+// Jellyfin's Limit param at filters.Limit) for display, and the true
 // total number of items Jellyfin reports as matching the filters
 // (TotalRecordCount, which Jellyfin reports uncapped regardless of Limit)
 // for an accurate preview count.

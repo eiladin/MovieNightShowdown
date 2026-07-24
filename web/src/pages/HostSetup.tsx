@@ -34,8 +34,10 @@ function sortGenres(genres: string[]): string[] {
     return [...genres].sort((a, b) => a.localeCompare(b))
 }
 
-// HostSetup is the minimal filter + preview page for Phase 2. Session
-// creation ("Begin") is wired up in Phase 4.
+// HostSetup is the host's filter + library-preview page. The host arrives
+// here with a session already created (the code comes from the ?code= query
+// param), picks filters, previews the matching library, and proceeds to the
+// lobby.
 export default function HostSetup() {
     const [searchParams] = useSearchParams()
     const sessionCode = searchParams.get('code')
@@ -95,8 +97,8 @@ export default function HostSetup() {
     }
 
     // Carry the chosen filters over to the Lobby, where "Begin" sends them in
-    // admin:start (Phase 4). Filters live in the shared session store rather
-    // than the URL since they can include an arbitrary list of genres.
+    // host:start. Filters live in the shared session store rather than the
+    // URL since they can include an arbitrary list of genres.
     function handleGoToLobby() {
         setFilters(currentFilters())
         // Warm the poster cache during the lobby-fill window (fire-and-forget;

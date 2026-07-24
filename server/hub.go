@@ -25,8 +25,8 @@ const (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	// LAN-only app with no auth (see docs/TASKS.md > Locked product rules);
-	// there is nothing origin-checking would protect here.
+	// LAN-only app with no auth; there is nothing origin-checking would
+	// protect here.
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
@@ -38,7 +38,7 @@ type Client struct {
 	send          chan []byte
 	done          chan struct{} // closed by readPump on exit; signals writePump to stop
 	session       *Session
-	jellyfin      *JellyfinClient // used by handleHostStart to deal the deck (Phase 4)
+	jellyfin      *JellyfinClient // used by handleHostStart to deal the deck
 	participantID string          // set once join() attaches this client to a participant
 	token         string          // from ?token=; used to match/resume a participant
 }
@@ -185,8 +185,9 @@ func (c *Client) handleMessage(env Envelope) {
 		c.handleUndo(env.Payload)
 	case "host:pick":
 		c.handleHostPick(env.Payload)
+	case "host:end":
+		c.handleHostEnd(env.Payload)
 	default:
-		// host:end lands in Phase 5.
 		log.Printf("ws: unhandled message type %q", env.Type)
 	}
 }
@@ -282,8 +283,8 @@ func (c *Client) handleJoin(raw json.RawMessage) {
 }
 
 // handleHostStart locks the current roster, deals a shuffled+capped deck
-// from Jellyfin, and activates the session (Phase 4, task 4.1). Only the
-// host may call this; it is rejected once the roster is already locked.
+// from Jellyfin, and activates the session. Only the host may call this; it
+// is rejected once the roster is already locked.
 func (c *Client) handleHostStart(raw json.RawMessage) {
 	var p HostStartPayload
 	if err := json.Unmarshal(raw, &p); err != nil {
@@ -353,7 +354,7 @@ func (c *Client) handleHostStart(raw json.RawMessage) {
 // handleSwipe records one vote and, on a match, transitions the session to
 // Matched and broadcasts it; otherwise it broadcasts updated progress. A
 // "no" is a secret-kill: it is recorded but never removed from any client's
-// deck (Phase 4, task 4.2).
+// deck.
 func (c *Client) handleSwipe(raw json.RawMessage) {
 	var p SwipePayload
 	if err := json.Unmarshal(raw, &p); err != nil {
@@ -410,7 +411,7 @@ func (c *Client) handleSwipe(raw json.RawMessage) {
 
 // handleUndo reverses the sender's last vote: it deletes their entry from
 // Votes[movieID] and clears LastSwipe, which can revive a secretly-killed
-// movie (Phase 4, task 4.2). No-op if the sender has not swiped yet.
+// movie. No-op if the sender has not swiped yet.
 func (c *Client) handleUndo(raw json.RawMessage) {
 	session := c.session
 	session.mu.Lock()
@@ -435,7 +436,7 @@ func (c *Client) handleUndo(raw json.RawMessage) {
 }
 
 // handleHostPick allows the host to manually pick a winner from the leaderboard
-// when the session has ended with no match (Phase 5).
+// when the session has ended with no match.
 func (c *Client) handleHostPick(raw json.RawMessage) {
 	var p HostPickPayload
 	if err := json.Unmarshal(raw, &p); err != nil {
@@ -465,6 +466,28 @@ func (c *Client) handleHostPick(raw json.RawMessage) {
 	session.mu.Unlock()
 
 	session.broadcast("match", MatchPayload{Movie: *movie})
+}
+
+// handleHostEnd lets the host force-end an active session, jumping straight
+// to the leaderboard built from the votes cast so far. Only the host may do it.
+func (c *Client) handleHostEnd(raw json.RawMessage) {
+	session := c.session
+	session.mu.Lock()
+	if c.participantID != session.HostID {
+		session.mu.Unlock()
+		c.sendError("only the host can end the session")
+		return
+	}
+	if session.Status != StatusActive {
+		session.mu.Unlock()
+		c.sendError("session is not active")
+		return
+	}
+	session.Status = StatusEnded
+	lb := session.buildLeaderboardLocked()
+	session.mu.Unlock()
+
+	session.broadcast("session_ended", SessionEndedPayload{Leaderboard: lb})
 }
 
 // findParticipantByTokenLocked returns the participant whose Token matches,
@@ -513,19 +536,13 @@ func (s *Session) removeClient(c *Client) {
 	if p, ok := s.Participants[c.participantID]; ok {
 		p.Connected = false
 	}
-	var lb []LeaderboardEntry
-	if s.Status == StatusActive {
-		lb = s.checkSessionEndedLocked()
-		if lb != nil {
-			s.Status = StatusEnded
-		}
-	}
 	s.mu.Unlock()
 
+	// A disconnect never ends the session: it ends only when the connected
+	// players finish swiping (handleSwipe) or the host ends it explicitly
+	// (handleHostEnd). This keeps a brief network blip from prematurely
+	// ending everyone's night.
 	s.broadcastParticipants()
-	if lb != nil {
-		s.broadcast("session_ended", SessionEndedPayload{Leaderboard: lb})
-	}
 }
 
 // broadcastParticipants sends the current roster to every attached client.
@@ -537,8 +554,8 @@ func (s *Session) broadcastParticipants() {
 	s.broadcast("participant_update", ParticipantUpdatePayload{Participants: views})
 }
 
-// broadcastDeck sends the just-dealt, ordered deck to every attached client
-// (Phase 4, task 4.1). Every client receives the exact same ordering.
+// broadcastDeck sends the just-dealt, ordered deck to every attached client.
+// Every client receives the exact same ordering.
 func (s *Session) broadcastDeck() {
 	s.mu.Lock()
 	deck := make([]Movie, len(s.Deck))
@@ -552,7 +569,7 @@ func (s *Session) broadcastDeck() {
 // session_state snapshot — status/requiredCount/roster are shared, but
 // YourParticipantID/YourToken differ per recipient, so this cannot reuse the
 // plain broadcast() helper. Used after host:start locks the roster and
-// activates the session (Phase 4, task 4.1).
+// activates the session.
 func (s *Session) broadcastSessionState() {
 	s.mu.Lock()
 	status := s.Status
