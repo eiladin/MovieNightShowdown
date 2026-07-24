@@ -81,7 +81,12 @@ func (c *posterCache) ensure(ctx context.Context, jf *JellyfinClient, id, tag st
 		if data, ok := c.get(id, tag); ok {
 			return data, nil // populated while we waited
 		}
-		data, err := jf.fetchPoster(ctx, id, tag)
+		// Detach from the caller's request context: this fetch is shared by all
+		// concurrent callers for this poster, so one caller disconnecting must not
+		// cancel the fetch for the others.
+		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+		defer cancel()
+		data, err := jf.fetchPoster(fetchCtx, id, tag)
 		if err != nil {
 			return nil, err
 		}

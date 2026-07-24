@@ -85,6 +85,9 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 // selected on; send is never closed, so a concurrent trySend is always safe.
 func (c *Client) readPump() {
 	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("ws: readPump panic for participant %s: %v", c.participantID, r)
+		}
 		c.session.removeClient(c)
 		close(c.done)
 	}()
@@ -113,6 +116,9 @@ func (c *Client) readPump() {
 func (c *Client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("ws: writePump panic for participant %s: %v", c.participantID, r)
+		}
 		ticker.Stop()
 		c.conn.Close()
 	}()
@@ -252,15 +258,11 @@ func (c *Client) handleJoin(raw json.RawMessage) {
 		deck = make([]Movie, len(session.Deck))
 		copy(deck, session.Deck)
 	}
+
 	if session.Status == StatusMatched {
 		match = session.findMovie(session.WinnerID)
 	} else if session.Status == StatusEnded {
 		lb = session.checkSessionEndedLocked()
-	} else if session.Status == StatusActive {
-		// Just send a blank progress, or the progress for the top deck card if we wanted to
-		// But it's easier to just let the client receive the first broadcast later.
-		// Wait, if they reconnect, they need the HUD text! Let's just find their current card.
-		// We'll let the client calculate it, or just leave progress empty until next swipe.
 	}
 
 	session.mu.Unlock()
@@ -373,6 +375,11 @@ func (c *Client) handleSwipe(raw json.RawMessage) {
 	if session.Status != StatusActive {
 		session.mu.Unlock()
 		c.sendError("session is not active")
+		return
+	}
+	if session.findMovie(p.MovieID) == nil {
+		session.mu.Unlock()
+		c.sendError("unknown movie")
 		return
 	}
 	winner, matched := session.recordSwipe(c.participantID, p.MovieID, yes)

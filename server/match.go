@@ -5,6 +5,9 @@ import "sort"
 // recordSwipe records a vote and returns the winning movie if this swipe caused
 // a match. Caller must hold the session lock.
 func (s *Session) recordSwipe(participantID, movieID string, yes bool) (winner *Movie, matched bool) {
+	if s.findMovie(movieID) == nil {
+		return nil, false // ignore votes for movies not in the deck (defensive: guarantees a matched result never has a nil winner)
+	}
 	if s.Votes[movieID] == nil {
 		s.Votes[movieID] = map[string]bool{}
 	}
