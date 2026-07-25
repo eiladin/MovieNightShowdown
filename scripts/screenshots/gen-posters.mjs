@@ -518,12 +518,15 @@ const SCENES_BY_ID = {
 
     // movie-15: a retro TV set with antenna and rays radiating behind it,
     // evoking Sunday-morning static.
-    'movie-15'(rng) {
+    // Scale contrast the other direction: title at the top, and the set sits
+    // small and low in a wide empty field of sunburst.
+    'movie-15'(rng, zone = 'bottom') {
+        const top = zone === 'top'
         const outline = '#1b1b2e'
         const cx = 200
-        const cy = 300
-        const tvW = 220
-        const tvH = 160
+        const cy = top ? 400 : 300
+        const tvW = top ? 140 : 220
+        const tvH = top ? 102 : 160
         return {
             defs: ``,
             layers: `<rect width="${WIDTH}" height="${HEIGHT}" fill="#ffb0c4"/>
@@ -543,11 +546,12 @@ const SCENES_BY_ID = {
 
     // movie-02: a crescent moon over layered rolling hills, cream paper base,
     // halftone dot texture.
-    'movie-02'(rng) {
+    'movie-02'(rng, zone = 'bottom') {
+        const top = zone === 'top'
         return {
             defs: `${halftonePattern('halo2', '#8a5a2a', 5, 1)}`,
             layers: `<rect width="${WIDTH}" height="${HEIGHT}" fill="#f2e6c8"/>
-        ${crescentMoon(210, 150, 72, '#c98a3a')}
+        ${top ? crescentMoon(140, 330, 124, '#c98a3a') : crescentMoon(210, 150, 72, '#c98a3a')}
         ${ridge(rng, 380, 40, '#8a5a2a', 6)}
         ${ridge(rng, 460, 50, '#5c3a1e', 6)}
         ${ridge(rng, 540, 60, '#2e1c10', 7)}
@@ -557,20 +561,29 @@ const SCENES_BY_ID = {
 
     // movie-07: a large cog with a small heart at its center, limited two-ink
     // palette, halftone texture.
-    'movie-07'(rng) {
+    'movie-07'(rng, zone = 'bottom') {
+        const top = zone === 'top'
+        // Scale contrast: the cog is blown up past the frame edges so only a
+        // cropped arc of teeth reads, with the heart low and off the centre.
+        const g = top ? '<g transform="translate(-70,35) scale(1.35)">' : '<g>'
         return {
             defs: `${halftonePattern('halo7', '#6e2a3a', 5, 1)}`,
             layers: `<rect width="${WIDTH}" height="${HEIGHT}" fill="#eee0c4"/>
+        ${g}
         ${gear(200, 300, 150, 118, 12, '#8a3040')}
         ${gear(200, 300, 96, 76, 10, '#eee0c4')}
         <path d="M 200 262 C 172 232 128 246 128 286 C 128 320 200 366 200 366 C 200 366 272 320 272 286 C 272 246 228 232 200 262 Z" fill="#8a3040"/>
+        </g>
         <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#halo7)" opacity="0.4"/>`,
         }
     },
 
     // movie-08: a western desert — saguaro, mesa, and a big setting sun with
     // sunburst rays, warm two-ink palette.
-    'movie-08'(rng) {
+    'movie-08'(rng, zone = 'bottom') {
+        const top = zone === 'top'
+        const sunY = top ? 380 : 330
+        const sunR = top ? 100 : 72
         const sunX = rand(rng, 150, 250)
         let cacti = ''
         for (let i = 0; i < 3; i++) {
@@ -579,8 +592,8 @@ const SCENES_BY_ID = {
         return {
             defs: `${halftonePattern('halo8', '#7a3a12', 5, 1)}`,
             layers: `<rect width="${WIDTH}" height="${HEIGHT}" fill="#f2d9a0"/>
-        ${sunburstRays(sunX, 330, 60, 280, 16, '#c9743a', 0.16)}
-        <circle cx="${sunX}" cy="330" r="72" fill="#d9772f"/>
+        ${sunburstRays(sunX, sunY, 60, 280, 16, '#c9743a', 0.16)}
+        <circle cx="${sunX}" cy="${sunY}" r="${sunR}" fill="#d9772f"/>
         ${ridge(rng, 470, 40, '#a35a24', 6)}
         ${ridge(rng, 520, 50, '#5c3212', 6)}
         ${cacti}
@@ -592,10 +605,14 @@ const SCENES_BY_ID = {
 
     // movie-06: a compass/crosshair on a flat dark field, generous negative
     // space.
-    'movie-06'(rng) {
+    // Scale contrast: with the title at the top, the compass drops low and
+    // grows past the frame edge so it reads as a cropped detail rather than a
+    // small centered icon.
+    'movie-06'(rng, zone = 'bottom') {
+        const top = zone === 'top'
         const cx = 200
-        const cy = 260
-        const r = 90
+        const cy = top ? 430 : 260
+        const r = top ? 205 : 90
         return {
             defs: ``,
             layers: `<rect width="${WIDTH}" height="${HEIGHT}" fill="#0e1a2b"/>
@@ -609,28 +626,34 @@ const SCENES_BY_ID = {
 
     // movie-12: a single triangular mountain peak with one bright star, flat
     // dark field.
-    'movie-12'(rng) {
+    'movie-12'(rng, zone = 'bottom') {
+        const top = zone === 'top'
+        // Scale contrast: the peak fills the frame edge to edge instead of
+        // floating as a small centred triangle.
+        const peak = top ? '0,600 200,285 400,600' : '60,540 200,180 340,540'
+        const star = top ? 'M 330 250' : 'M 300 140'
         return {
             defs: ``,
             layers: `<rect width="${WIDTH}" height="${HEIGHT}" fill="#161b2c"/>
-        <polygon points="60,540 200,180 340,540" fill="#0c1120"/>
-        <path d="M 300 140 l 3 9 9 3 -9 3 -3 9 -3 -9 -9 -3 9 -3 Z" fill="#f5e6b8"/>`,
+        <polygon points="${peak}" fill="${top ? '#232c4a' : '#0c1120'}"/>
+        <path d="${star} l 3 9 9 3 -9 3 -3 9 -3 -9 -9 -3 9 -3 Z" fill="#f5e6b8"/>`,
         }
     },
 
     // movie-14: a single bold umbrella silhouette with a few minimal rain
     // dashes, flat light field.
-    'movie-14'(rng) {
+    'movie-14'(rng, zone = 'bottom') {
+        const top = zone === 'top'
         let rain = ''
         for (let i = 0; i < 6; i++) {
             const x = rand(rng, 60, 340)
-            const y = rand(rng, 300, 400)
+            const y = top ? rand(rng, 440, 530) : rand(rng, 300, 400)
             rain += `<line x1="${x.toFixed(1)}" y1="${y.toFixed(1)}" x2="${(x - 6).toFixed(1)}" y2="${(y + 18).toFixed(1)}" stroke="#8fa6c2" stroke-width="2" stroke-linecap="round"/>`
         }
         return {
             defs: ``,
             layers: `<rect width="${WIDTH}" height="${HEIGHT}" fill="#e7e2d6"/>
-        ${umbrella(200, 260, 110, '#1b1f2b')}
+        ${top ? umbrella(200, 400, 152, '#1b1f2b') : umbrella(200, 260, 110, '#1b1f2b')}
         ${rain}`,
         }
     },
@@ -639,7 +662,10 @@ const SCENES_BY_ID = {
 
     // movie-04: a misty triangular-pine forest under a cold pale moon, fog
     // bands, cold teal palette.
-    'movie-04'(rng) {
+    'movie-04'(rng, zone = 'bottom') {
+        const top = zone === 'top'
+        const moonCy = top ? 330 : 140
+        const moonR = top ? 66 : 46
         let pines = ''
         for (let i = 0; i < 9; i++) {
             pines += pineTree(rand(rng, 10, 390), rand(rng, 540, 580), rand(rng, 120, 240), '#04211f')
@@ -656,8 +682,8 @@ const SCENES_BY_ID = {
         <radialGradient id="mglow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#bfe3dd" stop-opacity="0.35"/><stop offset="1" stop-color="#bfe3dd" stop-opacity="0"/></radialGradient>`,
             layers: `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#sky)"/>
         ${stars(rng, 30, 200)}
-        <circle cx="200" cy="140" r="120" fill="url(#mglow)"/>
-        <circle cx="200" cy="140" r="46" fill="url(#moon)"/>
+        <circle cx="200" cy="${moonCy}" r="${(moonR * 2.6).toFixed(1)}" fill="url(#mglow)"/>
+        <circle cx="200" cy="${moonCy}" r="${moonR}" fill="url(#moon)"/>
         ${pines}
         ${fog}`,
         }
@@ -718,8 +744,11 @@ const SCENES_BY_ID = {
 function posterSVG(movie, index) {
     const style = STYLE_BY_ID[movie.id]
     const rng = mulberry32((index + 1) * 2654435761)
-    const scene = SCENES_BY_ID[movie.id](rng)
-    const cfg = STYLE[style]
+    // Scenes are told which edge the title block occupies so they can compose
+    // around it. Scenes that ignore the argument keep their original layout.
+    const zone = LAYOUT[LAYOUT_BY_ID[movie.id] ?? 'bottomCenter'].zone ?? 'bottom'
+    const scene = SCENES_BY_ID[movie.id](rng, zone)
+    const cfg = { ...STYLE[style], ...(TEXTURE_BY_ID[movie.id] ?? {}) }
 
     let overlayDefs = ''
     let overlay = ''
@@ -791,6 +820,78 @@ const TITLE_STYLE = {
     },
 }
 
+// --- composition layouts ---------------------------------------------------
+// Where the title block sits and which way the scrim falls. Posters with no
+// entry in LAYOUT_BY_ID use 'bottomCenter', the original composition, so they
+// render byte-identically. Anchoring the text off bottom-center is what keeps
+// a wall of these from reading as one repeated template.
+const LAYOUT = {
+    bottomCenter: {
+        scrim: 'linear-gradient(to bottom, transparent 42%, rgba(0,0,0,0.42) 68%, rgba(0,0,0,0.82) 100%)',
+        content: 'left: 0; right: 0; bottom: 0; padding: 0 28px 40px; text-align: center;',
+        rule: 'margin: 16px auto 12px;',
+    },
+    bottomLeft: {
+        scrim: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.46) 66%, rgba(0,0,0,0.85) 100%)',
+        content: 'left: 0; right: 0; bottom: 0; padding: 0 34px 46px; text-align: left;',
+        rule: 'margin: 16px 0 12px;',
+        titleMaxWidth: '86%',
+    },
+    bottomRight: {
+        scrim: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.46) 66%, rgba(0,0,0,0.85) 100%)',
+        content: 'left: 0; right: 0; bottom: 0; padding: 0 34px 46px; text-align: right;',
+        rule: 'margin: 16px 0 12px auto;',
+        titleMaxWidth: '86%',
+        titleAlign: 'margin-left: auto;',
+    },
+    topLeft: {
+        zone: 'top',
+        scrim: 'linear-gradient(to bottom, rgba(0,0,0,0.80) 0%, rgba(0,0,0,0.34) 30%, transparent 56%)',
+        content: 'left: 0; right: 0; top: 0; padding: 46px 34px 0; text-align: left;',
+        rule: 'margin: 16px 0 12px;',
+        titleMaxWidth: '84%',
+    },
+    topRight: {
+        zone: 'top',
+        scrim: 'linear-gradient(to bottom, rgba(0,0,0,0.80) 0%, rgba(0,0,0,0.34) 30%, transparent 56%)',
+        content: 'left: 0; right: 0; top: 0; padding: 46px 34px 0; text-align: right;',
+        rule: 'margin: 16px 0 12px auto;',
+        titleMaxWidth: '84%',
+        titleAlign: 'margin-left: auto;',
+    },
+}
+
+// Per-poster overrides for the style-level finish, so texture reads as a
+// deliberate print process (heavy risograph grain vs. clean flat vector)
+// rather than a uniform low-opacity wash across all fifteen.
+const TEXTURE_BY_ID = {
+    'movie-13': { grain: 0.16, vignetteOpacity: 0.62 },
+    'movie-15': { grain: 0.14, scanlines: 0.06 },
+}
+
+// Only bottom-anchored layouts are used: every scene composes its subject
+// assuming the text sits along the bottom edge, so shifting the block
+// horizontally is safe while a top-anchored variant would collide with the
+// artwork. Assignments are deliberate per poster (chosen against where each
+// scene puts its subject), not random — the output stays deterministic.
+const LAYOUT_BY_ID = {
+    'movie-01': 'bottomCenter', // tower is centred and full-height
+    'movie-02': 'topLeft',
+    'movie-03': 'bottomLeft',
+    'movie-04': 'topRight',
+    'movie-05': 'bottomCenter', // sailboat sits mid-frame under a high sun
+    'movie-06': 'topLeft',
+    'movie-07': 'topLeft',
+    'movie-08': 'topRight',
+    'movie-09': 'bottomCenter', // bolt runs from the top edge down
+    'movie-10': 'bottomRight',  // moon already occupies the upper right
+    'movie-11': 'bottomLeft',   // rocket nose reaches the top edge
+    'movie-12': 'topLeft',
+    'movie-13': 'bottomLeft',
+    'movie-14': 'topRight',
+    'movie-15': 'topRight',
+}
+
 function titleFontSize(style, title) {
     const [big, med, small] = TITLE_STYLE[style].sizes
     return `${title.length > 28 ? small : title.length > 18 ? med : big}px`
@@ -802,16 +903,19 @@ function cardHTML(movie, index) {
     const t = TITLE_STYLE[style]
     const fontSize = titleFontSize(style, title)
     const transform = t.textTransform ? `text-transform: ${t.textTransform};` : ''
+    const l = LAYOUT[LAYOUT_BY_ID[id] ?? 'bottomCenter']
+    const titleWidth = l.titleMaxWidth ? ` max-width: ${l.titleMaxWidth};` : ''
+    const titleAlign = l.titleAlign ? ` ${l.titleAlign}` : ''
     return `<!doctype html>
 <html><head><meta charset="utf-8"><style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: ${WIDTH}px; height: ${HEIGHT}px; overflow: hidden; }
   body { position: relative; font-family: Georgia, 'Times New Roman', serif; background: #000; }
   .art { position: absolute; inset: 0; }
-  .scrim { position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 42%, rgba(0,0,0,0.42) 68%, rgba(0,0,0,0.82) 100%); }
-  .content { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 28px 40px; text-align: center; }
-  .title { color: #fff; font-size: ${fontSize}; font-weight: ${t.fontWeight}; line-height: 1.08; letter-spacing: ${t.letterSpacing}; text-shadow: ${t.textShadow}; font-family: ${t.fontFamily}; ${transform} }
-  .rule { width: 46px; height: 2px; background: rgba(255,255,255,0.55); margin: 16px auto 12px; }
+  .scrim { position: absolute; inset: 0; background: ${l.scrim}; }
+  .content { position: absolute; ${l.content} }
+  .title { color: #fff; font-size: ${fontSize}; font-weight: ${t.fontWeight}; line-height: 1.08; letter-spacing: ${t.letterSpacing}; text-shadow: ${t.textShadow}; font-family: ${t.fontFamily}; ${transform}${titleWidth}${titleAlign} }
+  .rule { width: 46px; height: 2px; background: rgba(255,255,255,0.55); ${l.rule} }
   .meta { color: rgba(255,255,255,0.82); font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 13px; letter-spacing: ${t.metaLetterSpacing}; text-transform: uppercase; }
   .frame { position: absolute; inset: 13px; border: 1px solid rgba(255,255,255,0.16); border-radius: 5px; pointer-events: none; }
 </style></head>
