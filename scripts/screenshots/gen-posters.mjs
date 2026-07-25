@@ -342,6 +342,33 @@ function scanlinePattern(id) {
     return `<pattern id="${id}" width="1" height="3" patternUnits="userSpaceOnUse"><rect width="1" height="1" fill="#000"/></pattern>`
 }
 
+// Stretched, low-frequency noise reading as the fibre and mottle of uncoated
+// paper stock. Much coarser than grainFilter, which is a fine even wash.
+function paperFiberFilter(id) {
+    return `<filter id="${id}"><feTurbulence type="fractalNoise" baseFrequency="0.014 0.55" numOctaves="4" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope="0.7" intercept="0.1"/></feComponentTransfer></filter>`
+}
+
+// Soft, blotchy low-frequency noise — the uneven ink density of a painted or
+// screen-printed ground, as opposed to uniform film grain.
+function mottleFilter(id) {
+    return `<filter id="${id}"><feTurbulence type="fractalNoise" baseFrequency="0.006" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="gamma" exponent="2.4" amplitude="1.1"/></feComponentTransfer></filter>`
+}
+
+// Misregistration: pulls the colour channels apart by a pixel or two, the way
+// a cheap multi-pass print lands its inks slightly out of alignment.
+function misregisterFilter(id, dx = 1.6, dy = 1.1, mix = 0.18) {
+    return `<filter id="${id}" x="-5%" y="-5%" width="110%" height="110%">
+      <feOffset in="SourceGraphic" dx="${-dx}" dy="${-dy}" result="ro"/>
+      <feColorMatrix in="ro" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="rc"/>
+      <feOffset in="SourceGraphic" dx="${dx}" dy="${dy}" result="bo"/>
+      <feColorMatrix in="bo" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="bc"/>
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="gc"/>
+      <feBlend in="rc" in2="gc" mode="screen" result="rg"/>
+      <feBlend in="rg" in2="bc" mode="screen" result="rgb"/>
+      <feComposite in="rgb" in2="SourceGraphic" operator="arithmetic" k1="0" k2="${mix}" k3="${1 - mix}" k4="0"/>
+    </filter>`
+}
+
 function halftonePattern(id, color, size = 6, dot = 1.1) {
     return `<pattern id="${id}" width="${size}" height="${size}" patternUnits="userSpaceOnUse" patternTransform="rotate(18)"><circle cx="${size / 2}" cy="${size / 2}" r="${dot}" fill="${color}"/></pattern>`
 }
@@ -368,12 +395,34 @@ const STYLE_BY_ID = {
     'movie-13': 'painterly',
 }
 
+// Each style is finished as a different print process, not as the same wash at
+// different opacities:
+//   fiber      paper-stock texture opacity (uncoated press stock)
+//   mottle     uneven ink density (hand-painted / screen-printed ground)
+//   misregister  channel offset in px (cheap multi-pass registration error)
+//   screen     visible halftone dot screen { color, size, dot, opacity }
 const STYLE = {
-    synthwave: { grain: 0.05, vignetteColor: '#000', vignetteOpacity: 0.42, scanlines: 0.1 },
-    cartoon: { grain: 0, vignetteColor: null, vignetteOpacity: 0, scanlines: 0 },
-    vintage: { grain: 0.1, vignetteColor: '#2a1608', vignetteOpacity: 0.5, scanlines: 0 },
-    minimalist: { grain: 0, vignetteColor: null, vignetteOpacity: 0, scanlines: 0 },
-    painterly: { grain: 0.06, vignetteColor: '#000', vignetteOpacity: 0.5, scanlines: 0 },
+    synthwave: {
+        grain: 0.05, vignetteColor: '#000', vignetteOpacity: 0.42, scanlines: 0.14,
+        misregister: 1.2,
+    },
+    cartoon: {
+        grain: 0, vignetteColor: null, vignetteOpacity: 0, scanlines: 0,
+        fiber: 0.1, misregister: 1.4,
+        screen: { color: '#1b1b2e', size: 7, dot: 1.5, opacity: 0.1 },
+    },
+    vintage: {
+        grain: 0.06, vignetteColor: '#2a1608', vignetteOpacity: 0.5, scanlines: 0,
+        fiber: 0.11, misregister: 1.8,
+        screen: { color: '#3a1e0a', size: 8, dot: 2.1, opacity: 0.22 },
+    },
+    minimalist: {
+        grain: 0, vignetteColor: null, vignetteOpacity: 0, scanlines: 0,
+    },
+    painterly: {
+        grain: 0.07, vignetteColor: '#000', vignetteOpacity: 0.5, scanlines: 0,
+        mottle: 0.1, fiber: 0.06,
+    },
 }
 
 // Each scene function returns { defs, layers } authored in the 400x600 space.
@@ -764,13 +813,36 @@ function posterSVG(movie, index) {
         overlayDefs += vignette('vig', cfg.vignetteColor, 0.55, cfg.vignetteOpacity)
         overlay += `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#vig)"/>`
     }
+    // Visible dot screen, at a size that actually reads as a printed screen
+    // rather than a texture-flavoured tint.
+    if (cfg.screen) {
+        const sc = cfg.screen
+        overlayDefs += halftonePattern('screen', sc.color, sc.size, sc.dot)
+        overlay += `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#screen)" opacity="${sc.opacity}"/>`
+    }
+    if (cfg.mottle > 0) {
+        overlayDefs += mottleFilter('mottle')
+        overlay += `<rect width="${WIDTH}" height="${HEIGHT}" filter="url(#mottle)" opacity="${cfg.mottle}"/>`
+    }
+    if (cfg.fiber > 0) {
+        overlayDefs += paperFiberFilter('fiber')
+        overlay += `<rect width="${WIDTH}" height="${HEIGHT}" filter="url(#fiber)" opacity="${cfg.fiber}" style="mix-blend-mode:multiply"/>`
+    }
+
+    // Misregistration applies to the artwork itself, not the finish overlays —
+    // the inks are what land out of alignment.
+    const artDefs = cfg.misregister ? misregisterFilter('misreg', cfg.misregister, cfg.misregister * 0.7) : ''
+    const art = cfg.misregister
+        ? `<g filter="url(#misreg)">${scene.layers}</g>`
+        : scene.layers
 
     return `<svg width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
     <defs>
       ${scene.defs}
+      ${artDefs}
       ${overlayDefs}
     </defs>
-    ${scene.layers}
+    ${art}
     ${overlay}
   </svg>`
 }
@@ -865,8 +937,10 @@ const LAYOUT = {
 // deliberate print process (heavy risograph grain vs. clean flat vector)
 // rather than a uniform low-opacity wash across all fifteen.
 const TEXTURE_BY_ID = {
-    'movie-13': { grain: 0.16, vignetteOpacity: 0.62 },
-    'movie-15': { grain: 0.14, scanlines: 0.06 },
+    // Heaviest ink mottle of the painterly set.
+    'movie-13': { mottle: 0.14, grain: 0.1, vignetteOpacity: 0.6 },
+    // Loudest misregistration of the cartoon set.
+    'movie-15': { misregister: 2.2, fiber: 0.16 },
 }
 
 // Only bottom-anchored layouts are used: every scene composes its subject
