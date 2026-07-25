@@ -24,21 +24,21 @@ const OUT_DIR = path.join(__dirname, 'fixtures', 'posters')
 // Keep in sync with the fixture list in mock-jellyfin/main.go: same IDs
 // (used as the output filename), titles, years, and genres.
 const MOVIES = [
-    { id: 'movie-01', title: 'The Last Signal', year: 2019, genre: 'Science Fiction / Thriller' },
-    { id: 'movie-02', title: 'Paper Moons', year: 1994, genre: 'Drama / Romance' },
-    { id: 'movie-03', title: 'Neon Alley Cats', year: 2021, genre: 'Action / Comedy' },
-    { id: 'movie-04', title: 'Whispering Pines', year: 2003, genre: 'Horror / Thriller' },
-    { id: 'movie-05', title: "Captain Fizzbucket's Grand Voyage", year: 1998, genre: 'Family / Adventure' },
-    { id: 'movie-06', title: 'Midnight Cartographers', year: 2016, genre: 'Mystery / Drama' },
-    { id: 'movie-07', title: 'The Clockwork Hearts', year: 2011, genre: 'Romance / Science Fiction' },
-    { id: 'movie-08', title: 'Iron Harvest Blues', year: 1992, genre: 'Drama / Western' },
-    { id: 'movie-09', title: 'Static & Fury', year: 2023, genre: 'Action / Thriller' },
-    { id: 'movie-10', title: 'The Quiet Algorithm', year: 2020, genre: 'Science Fiction / Drama' },
-    { id: 'movie-11', title: "Grandma's Rocket", year: 2001, genre: 'Comedy / Family' },
-    { id: 'movie-12', title: 'Dust and Starlight', year: 2018, genre: 'Adventure / Drama' },
-    { id: 'movie-13', title: 'Bone Orchard Nights', year: 2007, genre: 'Horror' },
-    { id: 'movie-14', title: 'The Umbrella Conspiracy', year: 1996, genre: 'Thriller / Mystery' },
-    { id: 'movie-15', title: 'Sunday Static', year: 2022, genre: 'Comedy / Drama' },
+    { id: 'movie-01', title: 'The Last Signal', year: 2019, genre: 'Science Fiction / Thriller', tagline: 'Something out there is still broadcasting' },
+    { id: 'movie-02', title: 'Paper Moons', year: 1994, genre: 'Drama / Romance', tagline: 'Every love leaves a paper trail' },
+    { id: 'movie-03', title: 'Neon Alley Cats', year: 2021, genre: 'Action / Comedy', tagline: 'Nine lives. One very bad night.' },
+    { id: 'movie-04', title: 'Whispering Pines', year: 2003, genre: 'Horror / Thriller', tagline: 'The forest remembers every name' },
+    { id: 'movie-05', title: "Captain Fizzbucket's Grand Voyage", year: 1998, genre: 'Family / Adventure', tagline: 'Adventure is a terrible idea. Pack a snack.' },
+    { id: 'movie-06', title: 'Midnight Cartographers', year: 2016, genre: 'Mystery / Drama', tagline: 'Some maps are drawn in the dark' },
+    { id: 'movie-07', title: 'The Clockwork Hearts', year: 2011, genre: 'Romance / Science Fiction', tagline: 'Love, wound tight' },
+    { id: 'movie-08', title: 'Iron Harvest Blues', year: 1992, genre: 'Drama / Western', tagline: 'The land takes what it is owed' },
+    { id: 'movie-09', title: 'Static & Fury', year: 2023, genre: 'Action / Thriller', tagline: 'The storm has picked a side' },
+    { id: 'movie-10', title: 'The Quiet Algorithm', year: 2020, genre: 'Science Fiction / Drama', tagline: 'It learned to wait' },
+    { id: 'movie-11', title: "Grandma's Rocket", year: 2001, genre: 'Comedy / Family', tagline: 'She always said she would leave' },
+    { id: 'movie-12', title: 'Dust and Starlight', year: 2018, genre: 'Adventure / Drama', tagline: 'The long way is the only way' },
+    { id: 'movie-13', title: 'Bone Orchard Nights', year: 2007, genre: 'Horror', tagline: 'Nothing buried stays buried' },
+    { id: 'movie-14', title: 'The Umbrella Conspiracy', year: 1996, genre: 'Thriller / Mystery', tagline: 'Everyone gets wet eventually' },
+    { id: 'movie-15', title: 'Sunday Static', year: 2022, genre: 'Comedy / Drama', tagline: 'Nothing on. Everything on.' },
 ]
 
 const WIDTH = 400
@@ -135,6 +135,24 @@ function pineTree(x, yBase, h, fill, tiers = 3) {
         tiersSVG += `<polygon points="${x.toFixed(1)},${topY.toFixed(1)} ${(x - w / 2).toFixed(1)},${botY.toFixed(1)} ${(x + w / 2).toFixed(1)},${botY.toFixed(1)}" fill="${fill}"/>`
     }
     return `<g>${tiersSVG}<rect x="${(x - trunkW / 2).toFixed(1)}" y="${(yBase - trunkH).toFixed(1)}" width="${trunkW.toFixed(1)}" height="${trunkH.toFixed(1)}" fill="${fill}"/></g>`
+}
+
+// A near-black foreground plane: an irregular ground edge with a few tall
+// stalks breaking upward. Drawn last and darker than anything behind it, this
+// is what gives a scene a third depth plane instead of subject-on-gradient.
+function foregroundScrub(rng, baseY, color, stalks = 7) {
+    const pts = []
+    for (let i = 0; i <= 8; i++) {
+        pts.push(`${((WIDTH / 8) * i).toFixed(1)},${(baseY + rand(rng, -14, 14)).toFixed(1)}`)
+    }
+    let spikes = ''
+    for (let i = 0; i < stalks; i++) {
+        const x = rand(rng, 0, WIDTH)
+        const h = rand(rng, 26, 78)
+        const lean = rand(rng, -9, 9)
+        spikes += `<path d="M ${x.toFixed(1)} ${(baseY + 10).toFixed(1)} Q ${(x + lean * 0.5).toFixed(1)} ${(baseY - h * 0.5).toFixed(1)} ${(x + lean).toFixed(1)} ${(baseY - h).toFixed(1)}" fill="none" stroke="${color}" stroke-width="${rand(rng, 1.4, 3).toFixed(1)}" stroke-linecap="round"/>`
+    }
+    return `<g>${spikes}<polygon points="0,${HEIGHT} ${pts.join(' ')} ${WIDTH},${HEIGHT}" fill="${color}"/></g>`
 }
 
 // A toothed cog; centered at (cx, cy).
@@ -369,8 +387,8 @@ function misregisterFilter(id, dx = 1.6, dy = 1.1, mix = 0.18) {
     </filter>`
 }
 
-function halftonePattern(id, color, size = 6, dot = 1.1) {
-    return `<pattern id="${id}" width="${size}" height="${size}" patternUnits="userSpaceOnUse" patternTransform="rotate(18)"><circle cx="${size / 2}" cy="${size / 2}" r="${dot}" fill="${color}"/></pattern>`
+function halftonePattern(id, color, size = 6, dot = 1.1, angle = 18) {
+    return `<pattern id="${id}" width="${size}" height="${size}" patternUnits="userSpaceOnUse" patternTransform="rotate(${angle})"><circle cx="${size / 2}" cy="${size / 2}" r="${dot}" fill="${color}"/></pattern>`
 }
 
 // --- style -> subject matrix -----------------------------------------------
@@ -463,7 +481,8 @@ const SCENES_BY_ID = {
         <line x1="${towerX}" y1="${towerTopY.toFixed(1)}" x2="${towerX}" y2="${horizon.toFixed(1)}" stroke="#0a0418" stroke-width="3"/>
         ${lattice}
         <circle cx="${towerX}" cy="${towerTopY.toFixed(1)}" r="4.5" fill="#ff5ce0"/>
-        ${arcs}`,
+        ${arcs}
+        ${foregroundScrub(rng, 566, '#05010f', 6)}`,
         }
     },
 
@@ -513,7 +532,8 @@ const SCENES_BY_ID = {
         ${synthGrid(470, '#2de2ff', 6)}
         <circle cx="${moonCx}" cy="${moonCy}" r="${(moonR * 1.7).toFixed(1)}" fill="url(#mglow)"/>
         <circle cx="${moonCx}" cy="${moonCy}" r="${moonR}" fill="url(#moon)"/>
-        ${circuit}`,
+        ${circuit}
+        ${foregroundScrub(rng, 574, '#02000a', 5)}`,
         }
     },
 
@@ -616,12 +636,12 @@ const SCENES_BY_ID = {
         // cropped arc of teeth reads, with the heart low and off the centre.
         const g = top ? '<g transform="translate(-70,35) scale(1.35)">' : '<g>'
         return {
-            defs: `${halftonePattern('halo7', '#6e2a3a', 5, 1)}`,
-            layers: `<rect width="${WIDTH}" height="${HEIGHT}" fill="#eee0c4"/>
+            defs: `${halftonePattern('halo7', '#2f5d5a', 5, 1, 45)}`,
+            layers: `<rect width="${WIDTH}" height="${HEIGHT}" fill="#dfe4de"/>
         ${g}
-        ${gear(200, 300, 150, 118, 12, '#8a3040')}
-        ${gear(200, 300, 96, 76, 10, '#eee0c4')}
-        <path d="M 200 262 C 172 232 128 246 128 286 C 128 320 200 366 200 366 C 200 366 272 320 272 286 C 272 246 228 232 200 262 Z" fill="#8a3040"/>
+        ${gear(200, 300, 150, 118, 12, '#1f4a48')}
+        ${gear(200, 300, 96, 76, 10, '#dfe4de')}
+        <path d="M 200 262 C 172 232 128 246 128 286 C 128 320 200 366 200 366 C 200 366 272 320 272 286 C 272 246 228 232 200 262 Z" fill="#a83248"/>
         </g>
         <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#halo7)" opacity="0.4"/>`,
         }
@@ -639,7 +659,7 @@ const SCENES_BY_ID = {
             cacti += saguaro(rand(rng, 40, 360), rand(rng, 510, 530), rand(rng, 90, 130), '#3a2010')
         }
         return {
-            defs: `${halftonePattern('halo8', '#7a3a12', 5, 1)}`,
+            defs: `${halftonePattern('halo8', '#7a3a12', 5, 1, 75)}`,
             layers: `<rect width="${WIDTH}" height="${HEIGHT}" fill="#f2d9a0"/>
         ${sunburstRays(sunX, sunY, 60, 280, 16, '#c9743a', 0.16)}
         <circle cx="${sunX}" cy="${sunY}" r="${sunR}" fill="#d9772f"/>
@@ -734,7 +754,9 @@ const SCENES_BY_ID = {
         <circle cx="200" cy="${moonCy}" r="${(moonR * 2.6).toFixed(1)}" fill="url(#mglow)"/>
         <circle cx="200" cy="${moonCy}" r="${moonR}" fill="url(#moon)"/>
         ${pines}
-        ${fog}`,
+        ${fog}
+        ${pineTree(rand(rng, 20, 70), 620, 250, '#010c0b')}
+        ${pineTree(rand(rng, 330, 385), 640, 290, '#010c0b')}`,
         }
     },
 
@@ -757,7 +779,8 @@ const SCENES_BY_ID = {
         <circle cx="${boltX}" cy="200" r="180" fill="url(#flash)"/>
         ${lightningBolt(boltX, 60, 260, '#eaf4ff')}
         ${rain}
-        ${figure(rand(rng, 150, 250), 560, 140, '#04070a')}`,
+        ${figure(rand(rng, 150, 250), 560, 140, '#04070a')}
+        ${foregroundScrub(rng, 578, '#010305', 9)}`,
         }
     },
 
@@ -785,7 +808,9 @@ const SCENES_BY_ID = {
         <circle cx="200" cy="160" r="150" fill="url(#mglow)"/>
         <circle cx="200" cy="160" r="66" fill="url(#moon)"/>
         ${trees}
-        ${fog}`,
+        ${fog}
+        ${deadTree(rng, rand(rng, 20, 60), 620, 240, '#0a0201')}
+        ${deadTree(rng, rand(rng, 340, 380), 610, 210, '#0a0201')}`,
         }
     },
 }
@@ -817,7 +842,7 @@ function posterSVG(movie, index) {
     // rather than a texture-flavoured tint.
     if (cfg.screen) {
         const sc = cfg.screen
-        overlayDefs += halftonePattern('screen', sc.color, sc.size, sc.dot)
+        overlayDefs += halftonePattern('screen', sc.color, sc.size, sc.dot, sc.angle ?? 18)
         overlay += `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#screen)" opacity="${sc.opacity}"/>`
     }
     if (cfg.mottle > 0) {
@@ -900,18 +925,18 @@ const TITLE_STYLE = {
 const LAYOUT = {
     bottomCenter: {
         scrim: 'linear-gradient(to bottom, transparent 42%, rgba(0,0,0,0.42) 68%, rgba(0,0,0,0.82) 100%)',
-        content: 'left: 0; right: 0; bottom: 0; padding: 0 28px 40px; text-align: center;',
+        content: 'left: 0; right: 0; bottom: 0; padding: 0 28px 64px; text-align: center;',
         rule: 'margin: 16px auto 12px;',
     },
     bottomLeft: {
         scrim: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.46) 66%, rgba(0,0,0,0.85) 100%)',
-        content: 'left: 0; right: 0; bottom: 0; padding: 0 34px 46px; text-align: left;',
+        content: 'left: 0; right: 0; bottom: 0; padding: 0 34px 68px; text-align: left;',
         rule: 'margin: 16px 0 12px;',
         titleMaxWidth: '86%',
     },
     bottomRight: {
         scrim: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.46) 66%, rgba(0,0,0,0.85) 100%)',
-        content: 'left: 0; right: 0; bottom: 0; padding: 0 34px 46px; text-align: right;',
+        content: 'left: 0; right: 0; bottom: 0; padding: 0 34px 68px; text-align: right;',
         rule: 'margin: 16px 0 12px auto;',
         titleMaxWidth: '86%',
         titleAlign: 'margin-left: auto;',
@@ -941,6 +966,10 @@ const TEXTURE_BY_ID = {
     'movie-13': { mottle: 0.14, grain: 0.1, vignetteOpacity: 0.6 },
     // Loudest misregistration of the cartoon set.
     'movie-15': { misregister: 2.2, fiber: 0.16 },
+    // The three vintage posters each get their own stock, ink and screen angle.
+    'movie-02': { screen: { color: '#3a1e0a', size: 8, dot: 2.1, opacity: 0.22, angle: 18 }, vignetteColor: '#2a1608' },
+    'movie-07': { screen: { color: '#1f4a48', size: 6, dot: 1.7, opacity: 0.26, angle: 45 }, vignetteColor: '#16302e', fiber: 0.16 },
+    'movie-08': { screen: { color: '#7a3a12', size: 10, dot: 2.6, opacity: 0.2, angle: 75 }, vignetteColor: '#4a2408' },
 }
 
 // Only bottom-anchored layouts are used: every scene composes its subject
@@ -955,7 +984,7 @@ const LAYOUT_BY_ID = {
     'movie-04': 'topRight',
     'movie-05': 'bottomCenter', // sailboat sits mid-frame under a high sun
     'movie-06': 'topLeft',
-    'movie-07': 'topLeft',
+    'movie-07': 'topRight',
     'movie-08': 'topRight',
     'movie-09': 'bottomCenter', // bolt runs from the top edge down
     'movie-10': 'bottomRight',  // moon already occupies the upper right
@@ -966,13 +995,39 @@ const LAYOUT_BY_ID = {
     'movie-15': 'topRight',
 }
 
+// --- billing block ---------------------------------------------------------
+// Real one-sheets carry a tagline above the title and a squashed credit slab
+// along the bottom edge; that furniture reads as "movie poster" more than any
+// amount of texture. Every name below is invented, as are the studios — the
+// block is deterministic per movie, drawn from these pools by index.
+const STUDIOS = ['Northgate Pictures', 'Halberd Films', 'Cormorant Studios', 'Vellum & Roe', 'Ninth Harbour']
+const FIRST = ['Marla', 'Idris', 'Corin', 'Sabine', 'Teodor', 'Wren', 'Halloran', 'Nessa', 'Ovid', 'Bex', 'Casimir', 'Lune']
+const LAST = ['Vance', 'Okonkwo', 'Reyes-Hart', 'Blackwood', 'Ferrow', 'Adeyemi', 'Strand', 'Quill', 'Marchetti', 'Osgood', 'Danforth', 'Ives']
+
+// Posters whose lower edge is a light stock need the credit slab printed in
+// dark ink; white at 50% is illegible on them.
+const BILLING_DARK = new Set(['movie-07', 'movie-14', 'movie-15'])
+
+function billingBlock(index, title) {
+    const pick = mulberry32((index + 1) * 2246822519)
+    const name = () => `${FIRST[Math.floor(pick() * FIRST.length)]} ${LAST[Math.floor(pick() * LAST.length)]}`
+    const studio = STUDIOS[index % STUDIOS.length]
+    const cast = [name(), name(), name()].join('  ')
+    return [
+        `${studio} presents  a ${name()} film  &ldquo;${escapeHTML(title.toUpperCase())}&rdquo;`,
+        cast,
+        `music by ${name()}  director of photography ${name()}  edited by ${name()}`,
+        `written by ${name()}  produced by ${name()}  directed by ${name()}`,
+    ].join('<br>')
+}
+
 function titleFontSize(style, title) {
     const [big, med, small] = TITLE_STYLE[style].sizes
     return `${title.length > 28 ? small : title.length > 18 ? med : big}px`
 }
 
 function cardHTML(movie, index) {
-    const { title, year, genre, id } = movie
+    const { title, year, genre, id, tagline } = movie
     const style = STYLE_BY_ID[id]
     const t = TITLE_STYLE[style]
     const fontSize = titleFontSize(style, title)
@@ -980,6 +1035,8 @@ function cardHTML(movie, index) {
     const l = LAYOUT[LAYOUT_BY_ID[id] ?? 'bottomCenter']
     const titleWidth = l.titleMaxWidth ? ` max-width: ${l.titleMaxWidth};` : ''
     const titleAlign = l.titleAlign ? ` ${l.titleAlign}` : ''
+    const tagAlign = l.titleAlign ? ' margin-left: auto;' : ''
+    const billingInk = BILLING_DARK.has(id) ? 'rgba(30,28,34,0.55)' : 'rgba(255,255,255,0.5)'
     return `<!doctype html>
 <html><head><meta charset="utf-8"><style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -991,16 +1048,24 @@ function cardHTML(movie, index) {
   .title { color: #fff; font-size: ${fontSize}; font-weight: ${t.fontWeight}; line-height: 1.08; letter-spacing: ${t.letterSpacing}; text-shadow: ${t.textShadow}; font-family: ${t.fontFamily}; ${transform}${titleWidth}${titleAlign} }
   .rule { width: 46px; height: 2px; background: rgba(255,255,255,0.55); ${l.rule} }
   .meta { color: rgba(255,255,255,0.82); font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 13px; letter-spacing: ${t.metaLetterSpacing}; text-transform: uppercase; }
+  .tagline { color: rgba(255,255,255,0.78); font-family: ${t.fontFamily}; font-style: italic; font-size: 14px; letter-spacing: 0.04em; margin-bottom: 12px; max-width: 84%;${tagAlign} }
+  /* Squashed condensed caps, the way a real credit slab is set. */
+  .billing { position: absolute; left: 0; right: 0; bottom: 12px; padding: 0 30px; text-align: center;
+    color: ${billingInk}; font-family: 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 5.4px; line-height: 1.5; letter-spacing: 0.06em; text-transform: uppercase;
+    transform: scaleX(0.92); transform-origin: center bottom; }
   .frame { position: absolute; inset: 13px; border: 1px solid rgba(255,255,255,0.16); border-radius: 5px; pointer-events: none; }
 </style></head>
 <body>
   <div class="art">${posterSVG(movie, index)}</div>
   <div class="scrim"></div>
   <div class="content">
+    <div class="tagline">${escapeHTML(tagline)}</div>
     <div class="title">${escapeHTML(title)}</div>
     <div class="rule"></div>
     <div class="meta">${year} &middot; ${escapeHTML(genre)}</div>
   </div>
+  <div class="billing">${billingBlock(index, title)}</div>
   <div class="frame"></div>
 </body></html>`
 }
