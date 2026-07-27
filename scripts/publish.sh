@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
 # publish.sh
-# Builds the movie-night-showdown docker image (amd64), tags it with the
-# next semver, pushes both tags to the registry, and (only on a successful
-# push) creates and pushes the matching git tag.
+# Computes the next semver and pushes a git tag.
+# The GitHub Actions workflow will automatically trigger on this tag
+# to build and publish the multi-architecture Docker image.
 #
 # Version model: git tags are the source of truth. The version is baked
 # into the binary at build time via -ldflags (see Dockerfile) and reported
@@ -35,9 +35,7 @@ PROJECT_ROOT="$(dirname "${SCRIPT_DIR}")"
 
 cd "${PROJECT_ROOT}"
 
-REGISTRY="registry.eiladin.xyz"
-IMAGE="movie-night-showdown"
-IMAGE_BASE="${REGISTRY}/${IMAGE}"
+
 
 usage() {
     echo -e "${BLUE}Movie Night Showdown Publisher${NC}"
@@ -50,8 +48,7 @@ usage() {
     echo "  --allow-dirty Publish even if the working tree has tracked changes"
     echo "  --dry-run     Print the plan and exact commands without running them"
     echo ""
-    echo "Note: Make sure you are logged in to the registry first:"
-    echo "  docker login ${REGISTRY}"
+
     exit 1
 }
 
@@ -160,59 +157,34 @@ echo -e "${BLUE}=== Publish plan ===${NC}"
 echo -e "  Current version: ${CURRENT_VERSION}$([[ ${BOOTSTRAP} -eq 1 ]] && echo ' (no tags yet)')"
 echo -e "  Target version:  ${TARGET} (mode: ${MODE})"
 echo -e "  Commit:          ${COMMIT}"
-echo -e "  Image tags:      ${IMAGE_BASE}:${TARGET}"
-echo -e "                    ${IMAGE_BASE}:latest"
+
 echo -e "  Git tag:         ${GIT_TAG}"
 echo ""
 
-BUILD_CMD=(docker build --build-arg "VERSION=${TARGET}" --build-arg "COMMIT=${COMMIT}" -t "${IMAGE_BASE}:${TARGET}" -t "${IMAGE_BASE}:latest" -f Dockerfile .)
-PUSH_VERSION_CMD=(docker push "${IMAGE_BASE}:${TARGET}")
-PUSH_LATEST_CMD=(docker push "${IMAGE_BASE}:latest")
+
 TAG_CMD=(git tag -a "${GIT_TAG}" -m "release ${GIT_TAG}")
 PUSH_TAG_CMD=(git push origin "${GIT_TAG}")
 
 if [[ "${DRY_RUN}" -eq 1 ]]; then
     echo -e "${YELLOW}=== Dry run: no commands will be executed ===${NC}"
     echo "Would run:"
-    echo "  ${BUILD_CMD[*]}"
-    echo "  ${PUSH_VERSION_CMD[*]}"
-    echo "  ${PUSH_LATEST_CMD[*]}"
+
     echo "  ${TAG_CMD[*]}"
     echo "  ${PUSH_TAG_CMD[*]}"
     echo ""
-    echo -e "${GREEN}Dry run complete. Nothing was built, pushed, or tagged.${NC}"
+    echo -e "${GREEN}Dry run complete. Nothing was tagged.${NC}"
     exit 0
 fi
 
-# 5. Build (amd64).
-echo -e "${BLUE}=== Building ${IMAGE} image (amd64) ===${NC}"
-"${BUILD_CMD[@]}"
-
-# 6. Push both tags.
-echo -e "${BLUE}=== Pushing to registry ${REGISTRY} ===${NC}"
-if ! "${PUSH_VERSION_CMD[@]}"; then
-    echo -e "${RED}Error: Failed to push ${IMAGE_BASE}:${TARGET}. Are you logged in?${NC}"
-    echo -e "${YELLOW}Run: docker login ${REGISTRY}${NC}"
-    exit 1
-fi
-if ! "${PUSH_LATEST_CMD[@]}"; then
-    echo -e "${RED}Error: Failed to push ${IMAGE_BASE}:latest. Are you logged in?${NC}"
-    echo -e "${YELLOW}Run: docker login ${REGISTRY}${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}Image successfully pushed!${NC}"
-
-# 7. Only after a successful push: create and push the git tag.
+# 5. Create and push the git tag.
 echo -e "${BLUE}=== Tagging release ${GIT_TAG} ===${NC}"
 "${TAG_CMD[@]}"
 
 if ! "${PUSH_TAG_CMD[@]}"; then
     echo -e "${YELLOW}Warning: failed to push git tag ${GIT_TAG} to origin.${NC}"
-    echo -e "${YELLOW}The image is already published; push the tag manually: git push origin ${GIT_TAG}${NC}"
+    echo -e "${YELLOW}Push the tag manually: git push origin ${GIT_TAG}${NC}"
 fi
 
 echo ""
-echo -e "${GREEN}=== Build and publish complete! ===${NC}"
-echo "image: ${IMAGE_BASE}:${TARGET}"
-echo -e "${YELLOW}Remember to bump this tag in your deploy stack.${NC}"
+echo -e "${GREEN}=== Tag pushed! GitHub Actions will now build and publish the image. ===${NC}"
+echo -e "${YELLOW}Remember to bump ${GIT_TAG} in your deploy stack once the CI finishes.${NC}"
