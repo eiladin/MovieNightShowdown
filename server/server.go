@@ -12,6 +12,8 @@ type Server struct {
 	jellyfin *JellyfinClient
 	store    *Store
 	cache    *posterCache
+	fetchers map[SourceID]PosterFetcher
+	sources  map[SourceID]MovieSource
 	version  string
 	commit   string
 }
@@ -30,6 +32,16 @@ func New(cfg Config) *Server {
 		store:    NewStore(ttl),
 		cache:    newPosterCache(cfg.CacheDir),
 	}
+	s.fetchers = map[SourceID]PosterFetcher{
+		SourceJellyfin: s.jellyfin,
+	}
+	s.sources = map[SourceID]MovieSource{SourceJellyfin: s.jellyfin}
+	for _, id := range []SourceID{SourceNetflix, SourcePrime, SourceDisney} {
+		if src := NewTMDBSource(cfg, id); src != nil {
+			s.sources[id] = src
+			s.fetchers[id] = src
+		}
+	}
 	s.routes()
 	return s
 }
@@ -47,7 +59,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/library/preview", s.handleLibraryPreview)
 	s.mux.HandleFunc("GET /api/library/filters", s.handleLibraryFilters)
 	s.mux.HandleFunc("POST /api/library/warm", s.handleLibraryWarm)
-	s.mux.HandleFunc("GET /api/images/{id}", s.handleImage)
+	s.mux.HandleFunc("GET /api/images/{source}/{id}", s.handleImage)
 	s.mux.HandleFunc("POST /api/sessions", s.handleCreateSession)
 	s.mux.HandleFunc("GET /ws", s.handleWS)
 	// static handler is registered in main.go via SetStatic (needs the embed.FS)

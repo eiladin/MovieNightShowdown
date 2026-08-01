@@ -94,3 +94,11 @@
 .begin-form input {
   width: 6em;
 }
+
+/* Offered next to a refused start so the host can re-filter without losing the
+   room. HostSetup resumes from the same session code. */
+.lobby-refilter {
+  display: inline-block;
+  margin-bottom: 12px;
+  color: #e0a030;
+}

@@ -54,31 +54,32 @@ func sanitize(s string) string {
 	}, s)
 }
 
-func (c *posterCache) path(id, tag string) string {
-	return filepath.Join(c.dir, sanitize(id)+"_"+sanitize(tag))
+func (c *posterCache) path(source SourceID, id, tag string) string {
+	return filepath.Join(c.dir, sanitize(string(source))+"_"+sanitize(id)+"_"+sanitize(tag))
 }
 
-// get returns cached bytes for id+tag, or ok=false on a miss.
-func (c *posterCache) get(id, tag string) ([]byte, bool) {
+// get returns cached bytes for source+id+tag, or ok=false on a miss.
+func (c *posterCache) get(source SourceID, id, tag string) ([]byte, bool) {
 	if !c.enabled() {
 		return nil, false
 	}
-	data, err := os.ReadFile(c.path(id, tag))
+	data, err := os.ReadFile(c.path(source, id, tag))
 	if err != nil {
 		return nil, false
 	}
 	return data, true
 }
 
-// ensure guarantees id+tag is cached, fetching from Jellyfin on a miss.
-// Concurrent callers for the same id+tag share one fetch. It returns the image
-// bytes; a cache-write failure is logged but not fatal.
-func (c *posterCache) ensure(ctx context.Context, jf *JellyfinClient, id, tag string) ([]byte, error) {
-	if data, ok := c.get(id, tag); ok {
+// ensure guarantees source+id+tag is cached, fetching from the source's
+// upstream on a miss. Concurrent callers for the same key share one fetch. It
+// returns the image bytes; a cache-write failure is logged but not fatal.
+func (c *posterCache) ensure(ctx context.Context, f PosterFetcher, source SourceID, id, tag string) ([]byte, error) {
+	if data, ok := c.get(source, id, tag); ok {
 		return data, nil
 	}
-	v, err, _ := c.group.Do(id+"_"+tag, func() (interface{}, error) {
-		if data, ok := c.get(id, tag); ok {
+	key := string(source) + "_" + id + "_" + tag
+	v, err, _ := c.group.Do(key, func() (interface{}, error) {
+		if data, ok := c.get(source, id, tag); ok {
 			return data, nil // populated while we waited
 		}
 		// Detach from the caller's request context: this fetch is shared by all
@@ -86,12 +87,12 @@ func (c *posterCache) ensure(ctx context.Context, jf *JellyfinClient, id, tag st
 		// cancel the fetch for the others.
 		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 		defer cancel()
-		data, err := jf.fetchPoster(fetchCtx, id, tag)
+		data, err := f.fetchPoster(fetchCtx, id, tag)
 		if err != nil {
 			return nil, err
 		}
 		if c.enabled() {
-			c.store(id, tag, data)
+			c.store(source, id, tag, data)
 		}
 		return data, nil
 	})
@@ -103,7 +104,7 @@ func (c *posterCache) ensure(ctx context.Context, jf *JellyfinClient, id, tag st
 
 // store writes data atomically (temp file + rename) and prunes older files for
 // the same id.
-func (c *posterCache) store(id, tag string, data []byte) {
+func (c *posterCache) store(source SourceID, id, tag string, data []byte) {
 	tmp, err := os.CreateTemp(c.dir, "tmp-*")
 	if err != nil {
 		log.Printf("poster cache: temp create failed: %v", err)
@@ -121,18 +122,19 @@ func (c *posterCache) store(id, tag string, data []byte) {
 		log.Printf("poster cache: close failed: %v", err)
 		return
 	}
-	if err := os.Rename(tmpName, c.path(id, tag)); err != nil {
+	if err := os.Rename(tmpName, c.path(source, id, tag)); err != nil {
 		os.Remove(tmpName)
 		log.Printf("poster cache: rename failed: %v", err)
 		return
 	}
-	c.pruneOld(id, tag)
+	c.pruneOld(source, id, tag)
 }
 
-// pruneOld removes every cached file for id whose tag differs from keepTag.
-func (c *posterCache) pruneOld(id, keepTag string) {
-	matches, _ := filepath.Glob(filepath.Join(c.dir, sanitize(id)+"_*"))
-	keep := c.path(id, keepTag)
+// pruneOld removes every cached file for source+id whose tag differs from
+// keepTag.
+func (c *posterCache) pruneOld(source SourceID, id, keepTag string) {
+	matches, _ := filepath.Glob(filepath.Join(c.dir, sanitize(string(source))+"_"+sanitize(id)+"_*"))
+	keep := c.path(source, id, keepTag)
 	for _, m := range matches {
 		if m != keep {
 			os.Remove(m)
@@ -141,8 +143,9 @@ func (c *posterCache) pruneOld(id, keepTag string) {
 }
 
 // warm pre-fetches every movie's poster into the cache, bounded to a few
-// concurrent Jellyfin requests. Intended to run in a background goroutine.
-func (c *posterCache) warm(movies []Movie, jf *JellyfinClient) {
+// concurrent upstream requests. Movies whose source has no registered fetcher
+// are skipped. Intended to run in a background goroutine.
+func (c *posterCache) warm(movies []Movie, fetchers map[SourceID]PosterFetcher) {
 	const workers = 6
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -150,32 +153,45 @@ func (c *posterCache) warm(movies []Movie, jf *JellyfinClient) {
 	sem := make(chan struct{}, workers)
 	var wg sync.WaitGroup
 	for _, m := range movies {
-		id, tag := parsePosterRef(m.PosterURL)
+		source, id, tag := parsePosterRef(m.PosterURL)
 		if id == "" {
 			continue
 		}
-		if _, ok := c.get(id, tag); ok {
+		f, ok := fetchers[source]
+		if !ok {
+			continue
+		}
+		if _, ok := c.get(source, id, tag); ok {
 			continue // already warm
 		}
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(id, tag string) {
+		go func(f PosterFetcher, source SourceID, id, tag string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if _, err := c.ensure(ctx, jf, id, tag); err != nil {
-				log.Printf("poster cache warm: %s: %v", id, err)
+			if _, err := c.ensure(ctx, f, source, id, tag); err != nil {
+				log.Printf("poster cache warm: %s/%s: %v", source, id, err)
 			}
-		}(id, tag)
+		}(f, source, id, tag)
 	}
 	wg.Wait()
 }
 
-// parsePosterRef extracts the item id and image tag from a proxied poster URL
-// of the form "/api/images/{id}?tag={tag}".
-func parsePosterRef(posterURL string) (id, tag string) {
+// parsePosterRef extracts the source, item id, and image tag from a proxied
+// poster URL of the form "/api/images/{source}/{id}?tag={tag}". It returns an
+// empty id if the URL does not have that shape.
+func parsePosterRef(posterURL string) (source SourceID, id, tag string) {
 	u, err := url.Parse(posterURL)
 	if err != nil {
-		return "", ""
+		return "", "", ""
 	}
-	return strings.TrimPrefix(u.Path, "/api/images/"), u.Query().Get("tag")
+	rest := strings.TrimPrefix(u.Path, "/api/images/")
+	if rest == u.Path {
+		return "", "", "" // prefix was absent
+	}
+	src, itemID, found := strings.Cut(rest, "/")
+	if !found || src == "" || itemID == "" {
+		return "", "", ""
+	}
+	return SourceID(src), itemID, u.Query().Get("tag")
 }

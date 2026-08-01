@@ -118,3 +118,42 @@
     margin-top: 24px;
     width: 100%;
 }
+
+/* Source picker: reuses .chip, adding a per-service accent when selected so
+   the four options are distinguishable at a glance. */
+.source-picker legend {
+    font-size: 0.9rem;
+    opacity: 0.8;
+    padding-bottom: 0.25rem;
+}
+
+.source-chip-jellyfin.checked { border-color: #00a4dc; }
+.source-chip-netflix.checked { border-color: #e50914; }
+.source-chip-prime.checked { border-color: #00a8e1; }
+.source-chip-disney.checked { border-color: #113ccf; }
+
+.unwatched-toggle.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.unwatched-toggle .hint {
+    font-size: 0.85rem;
+    opacity: 0.7;
+}
+
+/* A source with no credentials on the server cannot be selected. */
+.chip.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.chip-hint {
+    font-size: 0.8em;
+    opacity: 0.75;
+}
+
+/* A source that is configured but did not respond to the preview query. */
+.preview-unavailable {
+    color: #e0a030;
+}

@@ -1,3 +1,11 @@
+// SourceID mirrors server.SourceID (see server/source.go).
+export type SourceID = 'jellyfin' | 'netflix' | 'prime' | 'disney'
+
+// Availability mirrors server.Availability's JSON shape.
+export interface Availability {
+    source: SourceID
+}
+
 // Movie mirrors server.Movie's JSON shape (see server/jellyfin.go).
 export interface Movie {
     id: string
@@ -9,6 +17,7 @@ export interface Movie {
     communityRating: number
     officialRating: string
     posterURL: string
+    availability: Availability[]
 }
 
 // PreviewFilters mirrors the query params server.ParseFilters understands
@@ -21,11 +30,13 @@ export interface PreviewFilters {
     officialRatings?: string[]
     unwatched?: boolean
     libraryId?: string
+    sources?: SourceID[]
 }
 
 export interface PreviewResponse {
     count: number
     movies: Movie[]
+    unavailable: SourceID[]
 }
 
 function buildPreviewParams(filters: PreviewFilters): URLSearchParams {
@@ -41,6 +52,9 @@ function buildPreviewParams(filters: PreviewFilters): URLSearchParams {
     }
     if (filters.unwatched) params.set('unwatched', 'true')
     if (filters.libraryId) params.set('libraryId', filters.libraryId)
+    for (const source of filters.sources ?? []) {
+        params.append('sources', source)
+    }
     return params
 }
 
@@ -71,6 +85,9 @@ export async function warmLibrary(filters: PreviewFilters): Promise<number> {
 export interface AvailableFilters {
     genres: string[]
     officialRatings: string[]
+    // sources lists the movie sources this deployment has credentials for. A
+    // source absent here cannot be selected — it would be dropped silently.
+    sources: SourceID[]
 }
 
 export async function getAvailableFilters(): Promise<AvailableFilters> {

@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useSessionStore } from '../store'
 import type { SessionSocket } from '../ws'
 import Confetti from '../components/Confetti'
+import SourceBadges from '../components/SourceBadges'
 import '../styles/result.css'
 
 interface ResultProps {
@@ -34,6 +35,7 @@ export default function Result({ socket }: ResultProps) {
                     <div className="winner-meta">
                         <h2>{winner.title}</h2>
                         <p>{winner.year} · {winner.genres?.join(', ')}</p>
+                        <SourceBadges availability={winner.availability} />
                     </div>
                 </div>
                 <button type="button" className="result-home-btn" onClick={() => navigate('/')}>Back to home</button>
@@ -58,6 +60,7 @@ export default function Result({ socket }: ResultProps) {
                             <img src={entry.movie.posterURL} alt={entry.movie.title} />
                             <div className="leaderboard-meta">
                                 <h3>{entry.movie.title}</h3>
+                                <SourceBadges availability={entry.movie.availability} />
                                 <p>
                                     {entry.yesCount} yes · ★ {entry.movie.communityRating}
                                 </p>

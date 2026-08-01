@@ -99,5 +99,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
     setWinner: (winner) => set({ winner, status: 'matched' }),
     setLeaderboard: (leaderboard) => set({ leaderboard, status: 'ended' }),
 
-    reset: () => set(initialState),
+    // Everything in initialState is server-derived and must not survive a move
+    // to a different session — except filters, which are the host's local
+    // picks. Those have to outlive the lobby unmount so "Change filters" can
+    // return to HostSetup with the previous selection still in place.
+    reset: () => set((s) => ({ ...initialState, filters: s.filters })),
 }))

@@ -127,3 +127,10 @@
 .result-home-btn:hover {
   background: rgba(255, 255, 255, 0.12);
 }
+
+/* The badge rules themselves live in index.css; these only adjust spacing for
+   the winner card and leaderboard rows. */
+.winner-meta .source-badges,
+.leaderboard-meta .source-badges {
+    margin-top: 0.5rem;
+}
