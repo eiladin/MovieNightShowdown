@@ -61,21 +61,40 @@ export default function HostSetup() {
     const [sources, setSources] = useState<SourceID[]>(['jellyfin'])
     const [preview, setPreview] = useState<PreviewResponse | null>(null)
     const [available, setAvailable] = useState<AvailableFilters | null>(null)
+    // Distinguishes "no answer yet" from "answered, and the answer was an
+    // error". Keying availability off `available === null` alone conflates the
+    // two and leaves every source selectable forever when the fetch fails.
+    const [sourcesLoaded, setSourcesLoaded] = useState(false)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         getAvailableFilters()
             .then((f) => {
+                const configured = f.sources ?? []
                 setAvailable({
                     genres: sortGenres(f.genres),
                     officialRatings: sortRatings(f.officialRatings),
-                    sources: f.sources ?? [],
+                    sources: configured,
                 })
+                // Reconcile any selection made while the answer was in flight.
+                // A source the server cannot query must not survive in state:
+                // it would ship in host:start and be dropped silently, and its
+                // chip would render checked-and-disabled, which cannot be
+                // cleared because a disabled input fires no onChange.
+                setSources((current) => {
+                    const allowed = current.filter((id) => configured.includes(id))
+                    return allowed.length > 0 ? allowed : ['jellyfin']
+                })
+                setSourcesLoaded(true)
             })
             .catch((err) => {
                 console.error('Failed to load available filters:', err)
                 setError('Could not load filter options from Jellyfin.')
+                // The question has been answered, badly. Fall back to Jellyfin
+                // rather than leaving every source selectable on no information.
+                setSources(['jellyfin'])
+                setSourcesLoaded(true)
             })
     }, [])
 
@@ -87,11 +106,13 @@ export default function HostSetup() {
         setOfficialRatings((prev) => (prev.includes(rating) ? prev.filter((r) => r !== rating) : [...prev, rating]))
     }
 
-    // A source with no credentials on the server is dropped silently at query
-    // time, so it must not be selectable. Before the filters call returns,
-    // treat every source as available rather than flashing them all disabled.
+    // Three states, three answers:
+    //   loading           -> everything enabled; nothing has been claimed yet
+    //   loaded, succeeded -> only what the server reported
+    //   loaded, failed    -> Jellyfin only, which the server always configures
     function sourceConfigured(id: SourceID): boolean {
-        if (!available) return true
+        if (!sourcesLoaded) return true
+        if (!available) return id === 'jellyfin'
         return available.sources.includes(id)
     }
 
