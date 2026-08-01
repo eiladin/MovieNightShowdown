@@ -15,6 +15,7 @@ type Config struct {
 	Port           string
 	SessionTTL     string
 	CacheDir       string
+	TMDBReadToken  string
 }
 
 // LoadConfig reads configuration from environment variables, applying
@@ -28,6 +29,7 @@ func LoadConfig() Config {
 		Port:           os.Getenv("PORT"),
 		SessionTTL:     os.Getenv("SESSION_TTL"),
 		CacheDir:       os.Getenv("CACHE_DIR"),
+		TMDBReadToken:  os.Getenv("TMDB_READ_TOKEN"),
 	}
 	if cfg.Port == "" {
 		cfg.Port = "8080"
@@ -50,8 +52,12 @@ func (c Config) String() string {
 	if c.JellyfinAPIKey != "" {
 		masked = "***"
 	}
+	maskedTMDB := "(unset)"
+	if c.TMDBReadToken != "" {
+		maskedTMDB = "***"
+	}
 	return fmt.Sprintf(
-		"JellyfinURL=%s JellyfinAPIKey=%s JellyfinUserID=%s PublicURL=%s Port=%s SessionTTL=%s CacheDir=%s",
-		c.JellyfinURL, masked, c.JellyfinUserID, c.PublicURL, c.Port, c.SessionTTL, c.CacheDir,
+		"JellyfinURL=%s JellyfinAPIKey=%s JellyfinUserID=%s PublicURL=%s Port=%s SessionTTL=%s CacheDir=%s TMDBReadToken=%s",
+		c.JellyfinURL, masked, c.JellyfinUserID, c.PublicURL, c.Port, c.SessionTTL, c.CacheDir, maskedTMDB,
 	)
 }

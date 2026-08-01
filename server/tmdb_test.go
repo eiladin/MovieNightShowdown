@@ -1,0 +1,191 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"math/rand"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"testing"
+)
+
+func newTestTMDBSource(t *testing.T, handler http.HandlerFunc) (*TMDBSource, *httptest.Server) {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+	s := NewTMDBSource(Config{TMDBReadToken: "test-token"}, SourceNetflix)
+	if s == nil {
+		t.Fatalf("NewTMDBSource returned nil for a supported provider with a token")
+	}
+	s.baseURL = srv.URL
+	s.imageURL = srv.URL + "/img"
+	s.rand = rand.New(rand.NewSource(1)) // deterministic sampling
+	return s, srv
+}
+
+func TestNewTMDBSourceRequiresTokenAndProvider(t *testing.T) {
+	if got := NewTMDBSource(Config{}, SourceNetflix); got != nil {
+		t.Fatalf("expected nil with no token, got %+v", got)
+	}
+	if got := NewTMDBSource(Config{TMDBReadToken: "x"}, SourceJellyfin); got != nil {
+		t.Fatalf("expected nil for an unsupported provider, got %+v", got)
+	}
+}
+
+func TestDiscoverParamsMapsFilters(t *testing.T) {
+	s := NewTMDBSource(Config{TMDBReadToken: "x"}, SourceNetflix)
+	f := Filters{
+		Genres:    []string{"Western", "Comedy", "Neo-Noir"},
+		YearMin:   1980,
+		YearMax:   2020,
+		RatingMin: 7.5,
+	}
+	q := s.discoverParams(f, "PG-13", 3)
+
+	checks := map[string]string{
+		"with_watch_providers":          "8",
+		"watch_region":                  "US",
+		"with_watch_monetization_types": "flatrate",
+		"vote_count.gte":                "200",
+		"page":                          "3",
+		"primary_release_date.gte":      "1980-01-01",
+		"primary_release_date.lte":      "2020-12-31",
+		"vote_average.gte":              "7.5",
+		"certification_country":         "US",
+		"certification":                 "PG-13",
+	}
+	for k, want := range checks {
+		if got := q.Get(k); got != want {
+			t.Fatalf("param %q = %q, want %q", k, got, want)
+		}
+	}
+	// Western=37, Comedy=35, Neo-Noir has no equivalent and is dropped.
+	if got := q.Get("with_genres"); got != "37|35" {
+		t.Fatalf("with_genres = %q, want %q", got, "37|35")
+	}
+	if q.Has("certification.lte") {
+		t.Fatalf("certification.lte must never be sent; it would admit unselected ratings")
+	}
+}
+
+func TestDiscoverParamsOmitsUnsetFilters(t *testing.T) {
+	s := NewTMDBSource(Config{TMDBReadToken: "x"}, SourceDisney)
+	q := s.discoverParams(Filters{}, "", 1)
+	for _, k := range []string{"with_genres", "primary_release_date.gte", "primary_release_date.lte", "vote_average.gte", "certification", "certification_country"} {
+		if q.Has(k) {
+			t.Fatalf("param %q should be absent for empty filters, got %q", k, q.Get(k))
+		}
+	}
+	if got := q.Get("with_watch_providers"); got != "337" {
+		t.Fatalf("with_watch_providers = %q, want 337", got)
+	}
+}
+
+func TestSamplePagesClampsToTotal(t *testing.T) {
+	s := NewTMDBSource(Config{TMDBReadToken: "x"}, SourceNetflix)
+	s.rand = rand.New(rand.NewSource(1))
+
+	if got := s.samplePages(0); got != nil {
+		t.Fatalf("samplePages(0) = %v, want nil", got)
+	}
+	if got := s.samplePages(1); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("samplePages(1) = %v, want [1]", got)
+	}
+	if got := s.samplePages(3); len(got) != 3 {
+		t.Fatalf("samplePages(3) = %v, want 3 pages", got)
+	}
+	for _, total := range []int{4, 25, 74, 1169} {
+		got := s.samplePages(total)
+		if len(got) != tmdbPagesPerProvider {
+			t.Fatalf("samplePages(%d) returned %d pages, want %d", total, len(got), tmdbPagesPerProvider)
+		}
+		seen := map[int]bool{}
+		for _, p := range got {
+			if p < 1 || p > total || p > tmdbMaxSampledPages {
+				t.Fatalf("samplePages(%d) returned out-of-range page %d", total, p)
+			}
+			if seen[p] {
+				t.Fatalf("samplePages(%d) returned duplicate page %d", total, p)
+			}
+			seen[p] = true
+		}
+	}
+}
+
+func TestSearchBuildsProxiedMovies(t *testing.T) {
+	var gotAuth string
+	s, _ := newTestTMDBSource(t, func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"page":        1,
+			"total_pages": 1,
+			"results": []map[string]any{
+				{"id": 603, "title": "The Matrix", "release_date": "1999-03-30",
+					"overview": "o", "genre_ids": []int{28, 878}, "vote_average": 8.2,
+					"poster_path": "/abc.jpg"},
+				{"id": 999, "title": "No Poster", "release_date": "2001-01-01",
+					"poster_path": ""},
+			},
+		})
+	})
+
+	movies, err := s.Search(context.Background(), Filters{})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if gotAuth != "Bearer test-token" {
+		t.Fatalf("Authorization = %q, want %q", gotAuth, "Bearer test-token")
+	}
+	if len(movies) != 1 {
+		t.Fatalf("expected 1 movie (the poster-less one is dropped), got %d", len(movies))
+	}
+	m := movies[0]
+	if m.ID != "tmdb:603" {
+		t.Fatalf("ID = %q, want tmdb:603", m.ID)
+	}
+	if m.Year != 1999 {
+		t.Fatalf("Year = %d, want 1999", m.Year)
+	}
+	if m.PosterURL != "/api/images/netflix/abc.jpg" {
+		t.Fatalf("PosterURL = %q, want /api/images/netflix/abc.jpg", m.PosterURL)
+	}
+	if len(m.Availability) != 1 || m.Availability[0].Source != SourceNetflix {
+		t.Fatalf("Availability = %+v, want one netflix entry", m.Availability)
+	}
+	if m.Runtime != 0 || m.OfficialRating != "" {
+		t.Fatalf("Discover returns neither runtime nor certification; got runtime=%d rating=%q", m.Runtime, m.OfficialRating)
+	}
+	source, id, _ := parsePosterRef(m.PosterURL)
+	if source != SourceNetflix || id != "abc.jpg" {
+		t.Fatalf("poster ref round-trip failed: source=%q id=%q", source, id)
+	}
+}
+
+func TestSearchIssuesOneQueryPerCertification(t *testing.T) {
+	var certs []string
+	s, _ := newTestTMDBSource(t, func(w http.ResponseWriter, r *http.Request) {
+		q, _ := url.ParseQuery(r.URL.RawQuery)
+		certs = append(certs, q.Get("certification"))
+		_ = json.NewEncoder(w).Encode(map[string]any{"page": 1, "total_pages": 1, "results": []any{}})
+	})
+
+	if _, err := s.Search(context.Background(), Filters{OfficialRatings: []string{"G", "PG", "Unrated-Nonsense"}}); err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(certs) != 2 {
+		t.Fatalf("expected 2 requests (one per recognized certification), got %d: %v", len(certs), certs)
+	}
+	if certs[0] != "G" || certs[1] != "PG" {
+		t.Fatalf("certifications = %v, want [G PG]", certs)
+	}
+}
+
+func TestSearchPropagatesUpstreamFailure(t *testing.T) {
+	s, _ := newTestTMDBSource(t, func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	})
+	if _, err := s.Search(context.Background(), Filters{}); err == nil {
+		t.Fatalf("expected an error from a 401 response, got nil")
+	}
+}
