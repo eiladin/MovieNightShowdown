@@ -3,10 +3,10 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"testing"
 )
 
@@ -20,7 +20,6 @@ func newTestTMDBSource(t *testing.T, handler http.HandlerFunc) (*TMDBSource, *ht
 	}
 	s.baseURL = srv.URL
 	s.imageURL = srv.URL + "/img"
-	s.rand = rand.New(rand.NewSource(1)) // deterministic sampling
 	return s, srv
 }
 
@@ -84,7 +83,6 @@ func TestDiscoverParamsOmitsUnsetFilters(t *testing.T) {
 
 func TestSamplePagesClampsToTotal(t *testing.T) {
 	s := NewTMDBSource(Config{TMDBReadToken: "x"}, SourceNetflix)
-	s.rand = rand.New(rand.NewSource(1))
 
 	if got := s.samplePages(0); got != nil {
 		t.Fatalf("samplePages(0) = %v, want nil", got)
@@ -178,6 +176,102 @@ func TestSearchIssuesOneQueryPerCertification(t *testing.T) {
 	}
 	if certs[0] != "G" || certs[1] != "PG" {
 		t.Fatalf("certifications = %v, want [G PG]", certs)
+	}
+}
+
+func TestSearchSamplesMultiplePages(t *testing.T) {
+	var pagesRequested []string
+	s, _ := newTestTMDBSource(t, func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		pagesRequested = append(pagesRequested, page)
+		pageNum, _ := strconv.Atoi(page)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"page":        pageNum,
+			"total_pages": 10,
+			"results": []map[string]any{
+				{"id": 1000 + len(pagesRequested), "title": "T" + page,
+					"release_date": "2001-01-01", "poster_path": "/p" + page + ".jpg"},
+			},
+		})
+	})
+
+	movies, err := s.Search(context.Background(), Filters{})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(pagesRequested) != tmdbPagesPerProvider {
+		t.Fatalf("requested %d pages (%v), want %d", len(pagesRequested), pagesRequested, tmdbPagesPerProvider)
+	}
+	seen := map[string]bool{}
+	for _, p := range pagesRequested {
+		if seen[p] {
+			t.Fatalf("page %s requested twice: %v", p, pagesRequested)
+		}
+		seen[p] = true
+	}
+	if len(movies) != tmdbPagesPerProvider {
+		t.Fatalf("got %d movies, want one per sampled page (%d)", len(movies), tmdbPagesPerProvider)
+	}
+}
+
+func TestSearchReturnsNothingWhenNoGenreMaps(t *testing.T) {
+	called := false
+	s, _ := newTestTMDBSource(t, func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		_ = json.NewEncoder(w).Encode(map[string]any{"page": 1, "total_pages": 1, "results": []any{}})
+	})
+
+	movies, err := s.Search(context.Background(), Filters{Genres: []string{"Anime", "Sports"}})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if called {
+		t.Fatalf("no selected genre maps to TMDB; the provider must not be queried unfiltered")
+	}
+	if len(movies) != 0 {
+		t.Fatalf("got %d movies, want 0", len(movies))
+	}
+}
+
+func TestSearchReturnsNothingWhenNoCertificationMaps(t *testing.T) {
+	called := false
+	s, _ := newTestTMDBSource(t, func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		_ = json.NewEncoder(w).Encode(map[string]any{"page": 1, "total_pages": 1, "results": []any{}})
+	})
+
+	movies, err := s.Search(context.Background(), Filters{OfficialRatings: []string{"TV-14", "Approved"}})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if called {
+		t.Fatalf("no selected certification maps to TMDB; the provider must not be queried unfiltered")
+	}
+	if len(movies) != 0 {
+		t.Fatalf("got %d movies, want 0", len(movies))
+	}
+}
+
+func TestSearchCapsResultsAtLimit(t *testing.T) {
+	s, _ := newTestTMDBSource(t, func(w http.ResponseWriter, r *http.Request) {
+		results := make([]map[string]any, 0, 20)
+		page := r.URL.Query().Get("page")
+		for i := 0; i < 20; i++ {
+			results = append(results, map[string]any{
+				"id": len(page)*1000 + i, "title": "T", "release_date": "2001-01-01",
+				"poster_path": "/p.jpg",
+			})
+		}
+		pageNum, _ := strconv.Atoi(page)
+		_ = json.NewEncoder(w).Encode(map[string]any{"page": pageNum, "total_pages": 10, "results": results})
+	})
+
+	movies, err := s.Search(context.Background(), Filters{Limit: 7})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(movies) != 7 {
+		t.Fatalf("got %d movies, want the Limit of 7", len(movies))
 	}
 }
 

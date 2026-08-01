@@ -1,6 +1,9 @@
 package server
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 // handleImage serves a movie's primary poster from the on-disk cache, fetching
 // from the owning source on a miss. Images are keyed by source + item id +
@@ -13,6 +16,12 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 	source := SourceID(r.PathValue("source"))
 	id := r.PathValue("id")
 	if source == "" || id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	// A decoded %2F would otherwise let a caller reach an arbitrary upstream
+	// path. Poster ids are a single path segment by construction.
+	if strings.Contains(id, "/") || strings.Contains(id, "..") {
 		http.NotFound(w, r)
 		return
 	}

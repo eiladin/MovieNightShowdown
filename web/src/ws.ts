@@ -53,6 +53,13 @@ export interface ErrorPayload {
     message: string
 }
 
+// WarningPayload is a non-fatal notice: the operation proceeded, but with
+// fewer sources than the host selected.
+export interface WarningPayload {
+    message: string
+    sources?: string[]
+}
+
 type Listener = (payload: unknown) => void
 
 const MAX_BACKOFF_MS = 10_000

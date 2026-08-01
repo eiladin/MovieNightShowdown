@@ -60,10 +60,10 @@ export default function Result({ socket }: ResultProps) {
                             <img src={entry.movie.posterURL} alt={entry.movie.title} />
                             <div className="leaderboard-meta">
                                 <h3>{entry.movie.title}</h3>
+                                <SourceBadges availability={entry.movie.availability} />
                                 <p>
                                     {entry.yesCount} yes · ★ {entry.movie.communityRating}
                                 </p>
-                                <SourceBadges availability={entry.movie.availability} />
                             </div>
                         </li>
                     ))}
