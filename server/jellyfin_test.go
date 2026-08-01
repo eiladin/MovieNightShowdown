@@ -29,6 +29,15 @@ func TestJellyfinClient_Movies(t *testing.T) {
 		if m.PosterURL == "" || m.PosterURL[:12] != "/api/images/" {
 			t.Fatalf("movie %q has non-proxied PosterURL %q", m.Title, m.PosterURL)
 		}
+		if m.ID == "" {
+			t.Fatalf("movie %q has an empty ID", m.Title)
+		}
+		if m.ID[:3] != "jf:" && m.ID[:5] != "tmdb:" {
+			t.Fatalf("movie %q has a non-namespaced ID %q", m.Title, m.ID)
+		}
+		if len(m.Availability) != 1 || m.Availability[0].Source != SourceJellyfin {
+			t.Fatalf("movie %q has unexpected availability %+v", m.Title, m.Availability)
+		}
 	}
 
 	filtered, filteredCount, err := client.Movies(ctx, Filters{Genres: []string{"Action"}, Limit: defaultMaxMovies})

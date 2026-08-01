@@ -1,3 +1,11 @@
+// SourceID mirrors server.SourceID (see server/source.go).
+export type SourceID = 'jellyfin' | 'netflix' | 'prime' | 'disney'
+
+// Availability mirrors server.Availability's JSON shape.
+export interface Availability {
+    source: SourceID
+}
+
 // Movie mirrors server.Movie's JSON shape (see server/jellyfin.go).
 export interface Movie {
     id: string
@@ -9,6 +17,7 @@ export interface Movie {
     communityRating: number
     officialRating: string
     posterURL: string
+    availability: Availability[]
 }
 
 // PreviewFilters mirrors the query params server.ParseFilters understands

@@ -68,7 +68,6 @@ func (s *Session) progressLocked(movieID string) ProgressPayload {
 	}
 }
 
-
 // checkSessionEndedLocked checks if all connected participants have finished the deck.
 // Returns a leaderboard if they have.
 func (s *Session) checkSessionEndedLocked() []LeaderboardEntry {
