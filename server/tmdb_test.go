@@ -180,17 +180,16 @@ func TestSearchIssuesOneQueryPerCertification(t *testing.T) {
 }
 
 func TestSearchSamplesMultiplePages(t *testing.T) {
-	var pagesRequested []string
+	var pagesRequested []int
 	s, _ := newTestTMDBSource(t, func(w http.ResponseWriter, r *http.Request) {
-		page := r.URL.Query().Get("page")
-		pagesRequested = append(pagesRequested, page)
-		pageNum, _ := strconv.Atoi(page)
+		pageNum, _ := strconv.Atoi(r.URL.Query().Get("page"))
+		pagesRequested = append(pagesRequested, pageNum)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"page":        pageNum,
 			"total_pages": 10,
 			"results": []map[string]any{
-				{"id": 1000 + len(pagesRequested), "title": "T" + page,
-					"release_date": "2001-01-01", "poster_path": "/p" + page + ".jpg"},
+				{"id": pageNum, "title": "T", "release_date": "2001-01-01",
+					"poster_path": "/p.jpg"},
 			},
 		})
 	})
@@ -199,18 +198,28 @@ func TestSearchSamplesMultiplePages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
-	if len(pagesRequested) != tmdbPagesPerProvider {
-		t.Fatalf("requested %d pages (%v), want %d", len(pagesRequested), pagesRequested, tmdbPagesPerProvider)
+
+	// Each stub page returns exactly one movie whose id is its page number, so
+	// the result size is the number of pages represented. That is exactly the
+	// sample size; the request count is not asserted because page 1 is always
+	// probed to learn total_pages and is wasted when unsampled.
+	if len(movies) != tmdbPagesPerProvider {
+		t.Fatalf("got %d movies, want one per sampled page (%d); requests were %v",
+			len(movies), tmdbPagesPerProvider, pagesRequested)
 	}
-	seen := map[string]bool{}
+
+	seen := map[int]bool{}
 	for _, p := range pagesRequested {
+		if p < 1 || p > 10 {
+			t.Fatalf("page %d out of range, requests were %v", p, pagesRequested)
+		}
 		if seen[p] {
-			t.Fatalf("page %s requested twice: %v", p, pagesRequested)
+			t.Fatalf("page %d requested twice: %v", p, pagesRequested)
 		}
 		seen[p] = true
 	}
-	if len(movies) != tmdbPagesPerProvider {
-		t.Fatalf("got %d movies, want one per sampled page (%d)", len(movies), tmdbPagesPerProvider)
+	if !seen[1] {
+		t.Fatalf("page 1 must always be requested to learn total_pages; requests were %v", pagesRequested)
 	}
 }
 
