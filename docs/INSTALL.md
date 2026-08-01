@@ -33,6 +33,7 @@ Create a folder for the deployment with two files in it.
 JELLYFIN_URL=http://jellyfin.local:8096
 JELLYFIN_API_KEY=your-jellyfin-api-key
 JELLYFIN_USER_ID=your-jellyfin-user-id   # optional; needed for "unwatched only"
+TMDB_READ_TOKEN=your-tmdb-v4-read-token  # optional; needed for streaming sources
 PUBLIC_URL=http://your-server-ip:8080
 SESSION_TTL=4h
 ```
