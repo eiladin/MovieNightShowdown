@@ -118,7 +118,7 @@ func (c *JellyfinClient) Movies(ctx context.Context, filters Filters) ([]Movie, 
 
 	movies := make([]Movie, 0, len(parsed.Items))
 	for _, it := range parsed.Items {
-		posterURL := "/api/images/" + it.ID
+		posterURL := "/api/images/" + string(SourceJellyfin) + "/" + it.ID
 		if tag := it.ImageTags["Primary"]; tag != "" {
 			posterURL += "?tag=" + url.QueryEscape(tag)
 		}

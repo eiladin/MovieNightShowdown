@@ -57,7 +57,7 @@ func (s *Server) handleLibraryWarm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.cache.enabled() {
-		go s.cache.warm(movies, s.jellyfin)
+		go s.cache.warm(movies, s.fetchers)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
