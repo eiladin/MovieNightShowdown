@@ -48,6 +48,20 @@ func selectSources(available map[SourceID]MovieSource, requested []SourceID) []M
 	return out
 }
 
+// configuredSources returns the ids of every source this deployment has
+// credentials for, in the canonical picker order. A source absent from this
+// list cannot be selected: it would be dropped silently at query time.
+func configuredSources(available map[SourceID]MovieSource) []SourceID {
+	order := []SourceID{SourceJellyfin, SourceNetflix, SourcePrime, SourceDisney}
+	out := make([]SourceID, 0, len(order))
+	for _, id := range order {
+		if _, ok := available[id]; ok {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // fetchDepth is how many candidates a source contributes to the shoe.
 func fetchDepth(id SourceID) int {
 	if id == SourceJellyfin {
