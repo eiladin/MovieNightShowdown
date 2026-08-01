@@ -66,6 +66,14 @@ type DeckPayload struct {
 	Movies []Movie `json:"movies"`
 }
 
+// WarningPayload carries a non-fatal notice to one client. Unlike an error it
+// does not abort the operation in progress; it is sent alongside a deck that
+// was dealt from fewer sources than the host selected.
+type WarningPayload struct {
+	Message string     `json:"message"`
+	Sources []SourceID `json:"sources,omitempty"`
+}
+
 // ParticipantUpdatePayload carries the current roster after a join, leave,
 // or connection-state change.
 type ParticipantUpdatePayload struct {

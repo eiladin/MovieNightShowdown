@@ -6,22 +6,35 @@ import (
 	"strings"
 )
 
-// defaultMaxMovies is the deck cap applied when the host does not set one.
-const defaultMaxMovies = 50
+const (
+	// defaultDeckSize is the number of cards actually dealt into play when the
+	// host does not choose a size. Applied after every source's results are
+	// merged and shuffled.
+	defaultDeckSize = 50
+
+	// jellyfinFetchDepth and streamingFetchDepth are how many candidates each
+	// source contributes to the shoe before the deck is cut from it. They are
+	// deliberately larger than the deck: the shoe is the sample, the deck is
+	// the hand. Jellyfin gets more because a home library is a single finite
+	// catalog rather than one of several.
+	jellyfinFetchDepth  = 150
+	streamingFetchDepth = tmdbPagesPerProvider * tmdbPageSize // 60
+)
 
 // Filters holds the host's library filter selections, parsed from the query
 // params of GET /api/library/preview, and also sent as JSON inside the
 // host:start WS payload — hence the json tags, matching the
 // frontend's PreviewFilters shape (web/src/api.ts).
 type Filters struct {
-	Genres          []string `json:"genres"`
-	YearMin         int      `json:"yearMin"`
-	YearMax         int      `json:"yearMax"`
-	RatingMin       float64  `json:"ratingMin"`       // minimum CommunityRating
-	OfficialRatings []string `json:"officialRatings"` // MPAA rating, e.g. ["PG", "PG-13"]
-	Unwatched       bool     `json:"unwatched"`
-	LibraryID       string   `json:"libraryId"`
-	Limit           int      `json:"limit"` // fetch cap for the preview/library query, default 50
+	Genres          []string   `json:"genres"`
+	YearMin         int        `json:"yearMin"`
+	YearMax         int        `json:"yearMax"`
+	RatingMin       float64    `json:"ratingMin"`       // minimum CommunityRating
+	OfficialRatings []string   `json:"officialRatings"` // MPAA rating, e.g. ["PG", "PG-13"]
+	Unwatched       bool       `json:"unwatched"`
+	LibraryID       string     `json:"libraryId"`
+	Sources         []SourceID `json:"sources"` // empty means Jellyfin only
+	Limit           int        `json:"limit"`   // fetch cap for the preview/library query, default 50
 }
 
 // ParseFilters parses Filters from request query params.
@@ -31,7 +44,7 @@ func ParseFilters(q url.Values) Filters {
 		OfficialRatings: q["officialRatings"],
 		Unwatched:       q.Get("unwatched") == "true",
 		LibraryID:       q.Get("libraryId"),
-		Limit:           defaultMaxMovies,
+		Limit:           jellyfinFetchDepth,
 	}
 	if v, err := strconv.Atoi(q.Get("yearMin")); err == nil {
 		f.YearMin = v
@@ -44,6 +57,9 @@ func ParseFilters(q url.Values) Filters {
 	}
 	if v, err := strconv.Atoi(q.Get("limit")); err == nil && v > 0 {
 		f.Limit = v
+	}
+	for _, s := range q["sources"] {
+		f.Sources = append(f.Sources, SourceID(s))
 	}
 	return f
 }
