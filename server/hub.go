@@ -328,6 +328,10 @@ func (c *Client) handleHostStart(raw json.RawMessage) {
 			Sources: failed,
 		})
 	}
+	if len(movies) == 0 {
+		c.sendError("no movies matched those filters on the selected sources")
+		return
+	}
 	rand.Shuffle(len(movies), func(i, j int) { movies[i], movies[j] = movies[j], movies[i] })
 
 	maxMovies := p.MaxMovies
