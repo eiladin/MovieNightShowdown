@@ -42,6 +42,9 @@ type PosterFetcher interface {
 
 var _ PosterFetcher = (*JellyfinClient)(nil)
 
+var _ MovieSource = (*TMDBSource)(nil)
+var _ PosterFetcher = (*TMDBSource)(nil)
+
 // MergeMovies unions several per-source result sets into one, merging rather
 // than discarding duplicates: a movie returned by more than one source appears
 // once, carrying every source's Availability entry.

@@ -95,6 +95,7 @@ Everything is configured through environment variables.
 | `JELLYFIN_URL` | yes | Base URL of your Jellyfin server. |
 | `JELLYFIN_API_KEY` | yes | Jellyfin API key. Stays server-side; never sent to clients. |
 | `JELLYFIN_USER_ID` | no | Needed for the "unwatched only" filter. |
+| `TMDB_READ_TOKEN` | optional | TMDB v4 API Read Access Token. Required to offer Netflix, Prime Video, or Disney+ as sources; without it only Jellyfin is available. Stays server-side, never sent to clients. |
 | `PUBLIC_URL` | yes | The URL people use to reach the app. Used to build the join links and QR codes, so it must be reachable from their devices. |
 | `PORT` | no | Port the app listens on. Defaults to `8080`. |
 | `SESSION_TTL` | no | How long an idle session survives. Defaults to a few hours (`4h`). |
