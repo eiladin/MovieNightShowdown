@@ -13,15 +13,16 @@ import (
 
 // Movie is the shape of a Jellyfin movie exposed to clients.
 type Movie struct {
-	ID              string   `json:"id"`
-	Title           string   `json:"title"`
-	Year            int      `json:"year"`
-	Genres          []string `json:"genres"`
-	Overview        string   `json:"overview"`
-	Runtime         int      `json:"runtime"` // minutes
-	CommunityRating float64  `json:"communityRating"`
-	OfficialRating  string   `json:"officialRating"`
-	PosterURL       string   `json:"posterURL"` // always proxied, never the raw Jellyfin URL
+	ID              string         `json:"id"`
+	Title           string         `json:"title"`
+	Year            int            `json:"year"`
+	Genres          []string       `json:"genres"`
+	Overview        string         `json:"overview"`
+	Runtime         int            `json:"runtime"` // minutes
+	CommunityRating float64        `json:"communityRating"`
+	OfficialRating  string         `json:"officialRating"`
+	PosterURL       string         `json:"posterURL"` // always proxied, never the raw Jellyfin URL
+	Availability    []Availability `json:"availability"`
 }
 
 // JellyfinClient talks to a Jellyfin server's REST API.
@@ -30,6 +31,16 @@ type JellyfinClient struct {
 	apiKey  string
 	userID  string
 	http    *http.Client
+}
+
+// ID identifies this source. JellyfinClient implements MovieSource.
+func (c *JellyfinClient) ID() SourceID { return SourceJellyfin }
+
+// Search implements MovieSource by delegating to Movies and discarding the
+// total count, which only the library preview endpoint needs.
+func (c *JellyfinClient) Search(ctx context.Context, f Filters) ([]Movie, error) {
+	movies, _, err := c.Movies(ctx, f)
+	return movies, err
 }
 
 // NewJellyfinClient builds a client from the server Config.
@@ -58,6 +69,9 @@ type jellyfinItem struct {
 	CommunityRating float64           `json:"CommunityRating"`
 	OfficialRating  string            `json:"OfficialRating"`
 	ImageTags       map[string]string `json:"ImageTags"`
+	ProviderIds     struct {
+		Tmdb string `json:"Tmdb"`
+	} `json:"ProviderIds"`
 }
 
 // Movies fetches movies from Jellyfin, applying filters, and maps them onto
@@ -72,7 +86,9 @@ func (c *JellyfinClient) Movies(ctx context.Context, filters Filters) ([]Movie, 
 	q := url.Values{}
 	q.Set("IncludeItemTypes", "Movie")
 	q.Set("Recursive", "true")
-	q.Set("Fields", "Genres,Overview,ProductionYear,OfficialRating,CommunityRating,RunTimeTicks")
+	// ProviderIds carries the TMDB id, which is the join key used to merge a
+	// library item with the same film returned by a streaming source.
+	q.Set("Fields", "Genres,Overview,ProductionYear,OfficialRating,CommunityRating,RunTimeTicks,ProviderIds")
 	if c.userID != "" {
 		q.Set("userId", c.userID)
 	}
@@ -102,12 +118,20 @@ func (c *JellyfinClient) Movies(ctx context.Context, filters Filters) ([]Movie, 
 
 	movies := make([]Movie, 0, len(parsed.Items))
 	for _, it := range parsed.Items {
-		posterURL := "/api/images/" + it.ID
+		posterURL := "/api/images/" + string(SourceJellyfin) + "/" + it.ID
 		if tag := it.ImageTags["Primary"]; tag != "" {
 			posterURL += "?tag=" + url.QueryEscape(tag)
 		}
+		// Prefer the TMDB id so a library item and the same film from a
+		// streaming source collapse into one deck entry. Items without one
+		// (direct rips, home video) fall back to a Jellyfin-namespaced id and
+		// simply never merge.
+		id := "jf:" + it.ID
+		if it.ProviderIds.Tmdb != "" {
+			id = "tmdb:" + it.ProviderIds.Tmdb
+		}
 		m := Movie{
-			ID:              it.ID,
+			ID:              id,
 			Title:           it.Name,
 			Year:            it.ProductionYear,
 			Genres:          it.Genres,
@@ -116,6 +140,7 @@ func (c *JellyfinClient) Movies(ctx context.Context, filters Filters) ([]Movie, 
 			CommunityRating: it.CommunityRating,
 			OfficialRating:  it.OfficialRating,
 			PosterURL:       posterURL,
+			Availability:    []Availability{{Source: SourceJellyfin}},
 		}
 		movies = append(movies, m)
 	}

@@ -53,6 +53,15 @@ export interface ErrorPayload {
     message: string
 }
 
+// WarningPayload is a non-fatal notice sent by the server on partial source
+// failure at host:start. No client renders it: both failure modes it covers are
+// surfaced on the host setup page before a room exists. Kept because it is part
+// of the wire protocol.
+export interface WarningPayload {
+    message: string
+    sources?: string[]
+}
+
 type Listener = (payload: unknown) => void
 
 const MAX_BACKOFF_MS = 10_000

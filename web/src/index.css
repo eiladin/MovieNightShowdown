@@ -181,3 +181,28 @@ select:focus {
   white-space: nowrap;
   border: 0;
 }
+
+/* Availability badges: which services carry this film. Shown on the card
+   because it is decision-relevant - a local copy starts instantly. */
+.source-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    list-style: none;
+    margin: 0.4rem 0 0;
+    padding: 0;
+}
+
+.source-badge {
+    font-size: 0.72rem;
+    line-height: 1;
+    padding: 0.25rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+}
+
+.source-badge-jellyfin { color: #00a4dc; }
+.source-badge-netflix { color: #e50914; }
+.source-badge-prime { color: #00a8e1; }
+.source-badge-disney { color: #4f7cff; }

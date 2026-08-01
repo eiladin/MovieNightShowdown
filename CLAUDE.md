@@ -78,3 +78,4 @@ hand-curated and is not touched by this pipeline.
 | `PORT` | optional | Listen port (default 8080) |
 | `SESSION_TTL` | optional | Session expiry (default a few hours) |
 | `CACHE_DIR` | optional | Directory for the on-disk poster cache (default a temp dir); mount a volume in Docker to persist it across restarts |
+| `TMDB_READ_TOKEN` | optional | TMDB v4 API Read Access Token. Required to offer Netflix, Prime Video, or Disney+ as sources; without it only Jellyfin is available. Stays server-side, never sent to clients. |

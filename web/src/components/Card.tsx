@@ -1,6 +1,7 @@
 import { forwardRef } from 'react'
 import TinderCard from 'react-tinder-card'
 import type { Movie } from '../api'
+import SourceBadges from './SourceBadges'
 
 export type SwipeDirection = 'left' | 'right' | 'up' | 'down'
 
@@ -41,6 +42,7 @@ const Card = forwardRef<TinderCardApi, CardProps>(function Card({ movie, active,
             </h2>
             <p className="swipe-card-genres">{movie.genres.join(', ')}</p>
             <p className="swipe-card-runtime">{movie.runtime} min</p>
+            <SourceBadges availability={movie.availability} />
           </div>
         </div>
       )}
