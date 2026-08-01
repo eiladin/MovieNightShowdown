@@ -41,7 +41,7 @@ func TestJellyfinClient_Movies(t *testing.T) {
 		}
 	}
 
-	filtered, filteredCount, err := client.Movies(ctx, Filters{Genres: []string{"Action"}, Limit: defaultMaxMovies})
+	filtered, filteredCount, err := client.Movies(ctx, Filters{Genres: []string{"Action"}, Limit: jellyfinFetchDepth})
 	if err != nil {
 		t.Fatalf("Movies(genres=Action): %v", err)
 	}

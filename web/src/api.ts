@@ -30,6 +30,7 @@ export interface PreviewFilters {
     officialRatings?: string[]
     unwatched?: boolean
     libraryId?: string
+    sources?: SourceID[]
 }
 
 export interface PreviewResponse {
@@ -50,6 +51,9 @@ function buildPreviewParams(filters: PreviewFilters): URLSearchParams {
     }
     if (filters.unwatched) params.set('unwatched', 'true')
     if (filters.libraryId) params.set('libraryId', filters.libraryId)
+    for (const source of filters.sources ?? []) {
+        params.append('sources', source)
+    }
     return params
 }
 

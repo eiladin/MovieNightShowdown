@@ -38,9 +38,9 @@ type Client struct {
 	send          chan []byte
 	done          chan struct{} // closed by readPump on exit; signals writePump to stop
 	session       *Session
-	jellyfin      *JellyfinClient // used by handleHostStart to deal the deck
-	participantID string          // set once join() attaches this client to a participant
-	token         string          // from ?token=; used to match/resume a participant
+	sources       map[SourceID]MovieSource // used by handleHostStart to deal the deck
+	participantID string                   // set once join() attaches this client to a participant
+	token         string                   // from ?token=; used to match/resume a participant
 }
 
 // handleWS upgrades GET /ws?code=&token= to a WebSocket connection and
@@ -62,12 +62,12 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := &Client{
-		conn:     conn,
-		send:     make(chan []byte, sendBufferSize),
-		done:     make(chan struct{}),
-		session:  session,
-		jellyfin: s.jellyfin,
-		token:    token,
+		conn:    conn,
+		send:    make(chan []byte, sendBufferSize),
+		done:    make(chan struct{}),
+		session: session,
+		sources: s.sources,
+		token:   token,
 	}
 
 	go client.writePump()
@@ -307,19 +307,32 @@ func (c *Client) handleHostStart(raw json.RawMessage) {
 	}
 	session.mu.Unlock()
 
-	// The Jellyfin fetch is a blocking network call; it must run without
-	// holding session.mu so it can never stall other participants.
-	movies, _, err := c.jellyfin.Movies(context.Background(), p.Filters)
+	// The source fetches are blocking network calls; they must run without
+	// holding session.mu so they can never stall other participants. Sources are
+	// queried concurrently, so this costs one round trip rather than one per
+	// source.
+	sources := selectSources(c.sources, p.Filters.Sources)
+	movies, failed, err := gatherShoe(context.Background(), sources, p.Filters)
 	if err != nil {
-		log.Printf("host:start: jellyfin fetch failed: %v", err)
-		c.sendError("failed to load the movie library")
+		log.Printf("host:start: every selected source failed")
+		c.sendError("failed to load movies from any selected source")
 		return
+	}
+	if len(failed) > 0 {
+		names := make([]string, len(failed))
+		for i, f := range failed {
+			names[i] = string(f)
+		}
+		c.sendJSON("warning", WarningPayload{
+			Message: "Could not reach: " + strings.Join(names, ", ") + ". Dealt from the rest.",
+			Sources: failed,
+		})
 	}
 	rand.Shuffle(len(movies), func(i, j int) { movies[i], movies[j] = movies[j], movies[i] })
 
 	maxMovies := p.MaxMovies
 	if maxMovies <= 0 {
-		maxMovies = defaultMaxMovies
+		maxMovies = defaultDeckSize
 	}
 	if len(movies) > maxMovies {
 		movies = movies[:maxMovies]

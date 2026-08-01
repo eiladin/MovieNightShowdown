@@ -13,6 +13,7 @@ type Server struct {
 	store    *Store
 	cache    *posterCache
 	fetchers map[SourceID]PosterFetcher
+	sources  map[SourceID]MovieSource
 	version  string
 	commit   string
 }
@@ -33,6 +34,13 @@ func New(cfg Config) *Server {
 	}
 	s.fetchers = map[SourceID]PosterFetcher{
 		SourceJellyfin: s.jellyfin,
+	}
+	s.sources = map[SourceID]MovieSource{SourceJellyfin: s.jellyfin}
+	for _, id := range []SourceID{SourceNetflix, SourcePrime, SourceDisney} {
+		if src := NewTMDBSource(cfg, id); src != nil {
+			s.sources[id] = src
+			s.fetchers[id] = src
+		}
 	}
 	s.routes()
 	return s

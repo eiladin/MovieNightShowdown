@@ -18,15 +18,19 @@ type libraryPreviewResponse struct {
 func (s *Server) handleLibraryPreview(w http.ResponseWriter, r *http.Request) {
 	filters := ParseFilters(r.URL.Query())
 
-	movies, count, err := s.jellyfin.Movies(r.Context(), filters)
+	sources := selectSources(s.sources, filters.Sources)
+	movies, failed, err := gatherShoe(r.Context(), sources, filters)
 	if err != nil {
 		log.Printf("library preview: %v", err)
-		http.Error(w, "failed to query Jellyfin library", http.StatusBadGateway)
+		http.Error(w, "failed to query any selected source", http.StatusBadGateway)
 		return
+	}
+	for _, f := range failed {
+		log.Printf("library preview: source %s unavailable", f)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(libraryPreviewResponse{Count: count, Movies: movies})
+	_ = json.NewEncoder(w).Encode(libraryPreviewResponse{Count: len(movies), Movies: movies})
 }
 
 // handleLibraryFilters fetches the available filter options (genres, ratings)
@@ -49,10 +53,11 @@ func (s *Server) handleLibraryFilters(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLibraryWarm(w http.ResponseWriter, r *http.Request) {
 	filters := ParseFilters(r.URL.Query())
 
-	movies, count, err := s.jellyfin.Movies(r.Context(), filters)
+	sources := selectSources(s.sources, filters.Sources)
+	movies, _, err := gatherShoe(r.Context(), sources, filters)
 	if err != nil {
 		log.Printf("library warm: %v", err)
-		http.Error(w, "failed to query Jellyfin library", http.StatusBadGateway)
+		http.Error(w, "failed to query any selected source", http.StatusBadGateway)
 		return
 	}
 
@@ -61,5 +66,5 @@ func (s *Server) handleLibraryWarm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]int{"count": count})
+	_ = json.NewEncoder(w).Encode(map[string]int{"count": len(movies)})
 }
