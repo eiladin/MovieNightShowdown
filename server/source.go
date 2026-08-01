@@ -33,6 +33,15 @@ type MovieSource interface {
 
 var _ MovieSource = (*JellyfinClient)(nil)
 
+// PosterFetcher fetches one poster's bytes from a source's upstream. It is
+// separate from MovieSource because the image proxy resolves a fetcher by
+// SourceID without needing to run a search.
+type PosterFetcher interface {
+	fetchPoster(ctx context.Context, id, tag string) ([]byte, error)
+}
+
+var _ PosterFetcher = (*JellyfinClient)(nil)
+
 // MergeMovies unions several per-source result sets into one, merging rather
 // than discarding duplicates: a movie returned by more than one source appears
 // once, carrying every source's Availability entry.

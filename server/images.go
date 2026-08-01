@@ -3,18 +3,27 @@ package server
 import "net/http"
 
 // handleImage serves a movie's primary poster from the on-disk cache, fetching
-// from Jellyfin on a miss. Images are keyed by item id + Primary image tag
-// (the ?tag= query param). With a tag the response is immutable for a year,
-// because changed artwork gets a new tag and therefore a new URL.
+// from the owning source on a miss. Images are keyed by source + item id +
+// image tag (the ?tag= query param). With a tag the response is immutable for a
+// year, because changed artwork gets a new tag and therefore a new URL.
+//
+// Every poster is proxied through here; upstream URLs and credentials are never
+// exposed to a client.
 func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
+	source := SourceID(r.PathValue("source"))
 	id := r.PathValue("id")
-	if id == "" {
+	if source == "" || id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	fetcher, ok := s.fetchers[source]
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
 	tag := r.URL.Query().Get("tag")
 
-	data, err := s.cache.ensure(r.Context(), s.jellyfin, id, tag)
+	data, err := s.cache.ensure(r.Context(), fetcher, source, id, tag)
 	if err != nil {
 		http.Error(w, "image not found", http.StatusNotFound)
 		return

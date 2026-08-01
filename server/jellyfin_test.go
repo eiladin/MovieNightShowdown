@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -26,7 +27,7 @@ func TestJellyfinClient_Movies(t *testing.T) {
 		t.Fatal("expected a non-zero movie count from the real Jellyfin library")
 	}
 	for _, m := range all {
-		if m.PosterURL == "" || m.PosterURL[:12] != "/api/images/" {
+		if !strings.HasPrefix(m.PosterURL, "/api/images/jellyfin/") {
 			t.Fatalf("movie %q has non-proxied PosterURL %q", m.Title, m.PosterURL)
 		}
 		if m.ID == "" {
