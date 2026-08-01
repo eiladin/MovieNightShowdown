@@ -101,3 +101,18 @@ func TestGatherShoeFailsWhenAllSourcesFail(t *testing.T) {
 		t.Fatalf("expected both sources reported failed, got %v", failed)
 	}
 }
+
+func TestGatherShoeEmptyIsNotAFailure(t *testing.T) {
+	empty := &fakeSource{id: SourceNetflix, movies: nil}
+
+	movies, failed, err := gatherShoe(context.Background(), []MovieSource{empty}, Filters{})
+	if err != nil {
+		t.Fatalf("a source returning no movies is not a failure, got %v", err)
+	}
+	if len(failed) != 0 {
+		t.Fatalf("failed = %v, want empty", failed)
+	}
+	if len(movies) != 0 {
+		t.Fatalf("got %d movies, want 0", len(movies))
+	}
+}
