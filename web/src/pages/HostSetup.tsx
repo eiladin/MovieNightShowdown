@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { getAvailableFilters, getPreview, warmLibrary, type AvailableFilters, type PreviewFilters, type PreviewResponse } from '../api'
+import { getAvailableFilters, getPreview, warmLibrary, type AvailableFilters, type PreviewFilters, type PreviewResponse, type SourceID } from '../api'
 import { useSessionStore } from '../store'
 import '../styles/admin.css'
 
@@ -34,6 +34,16 @@ function sortGenres(genres: string[]): string[] {
     return [...genres].sort((a, b) => a.localeCompare(b))
 }
 
+// SELECTABLE_SOURCES is the fixed set a host can draw from. Streaming sources
+// are offered unconditionally; the server skips any that are not configured on
+// this deployment and reports them as unavailable at start.
+const SELECTABLE_SOURCES: { id: SourceID; label: string }[] = [
+    { id: 'jellyfin', label: 'Jellyfin' },
+    { id: 'netflix', label: 'Netflix' },
+    { id: 'prime', label: 'Prime Video' },
+    { id: 'disney', label: 'Disney+' },
+]
+
 // HostSetup is the host's filter + library-preview page. The host arrives
 // here with a session already created (the code comes from the ?code= query
 // param), picks filters, previews the matching library, and proceeds to the
@@ -48,6 +58,7 @@ export default function HostSetup() {
     const [yearMax, setYearMax] = useState('')
     const [officialRatings, setOfficialRatings] = useState<string[]>([])
     const [unwatched, setUnwatched] = useState(false)
+    const [sources, setSources] = useState<SourceID[]>(['jellyfin'])
     const [preview, setPreview] = useState<PreviewResponse | null>(null)
     const [available, setAvailable] = useState<AvailableFilters | null>(null)
     const [loading, setLoading] = useState(false)
@@ -72,13 +83,24 @@ export default function HostSetup() {
         setOfficialRatings((prev) => (prev.includes(rating) ? prev.filter((r) => r !== rating) : [...prev, rating]))
     }
 
+    // At least one source must stay selected: a session with no source has no
+    // deck to deal.
+    function toggleSource(id: SourceID) {
+        setSources((current) => {
+            if (!current.includes(id)) return [...current, id]
+            if (current.length === 1) return current
+            return current.filter((s) => s !== id)
+        })
+    }
+
     function currentFilters(): PreviewFilters {
         return {
+            sources,
             genres,
             yearMin: yearMin ? Number(yearMin) : undefined,
             yearMax: yearMax ? Number(yearMax) : undefined,
             officialRatings: officialRatings.length > 0 ? officialRatings : undefined,
-            unwatched,
+            unwatched: sources.includes('jellyfin') ? unwatched : false,
         }
     }
 
@@ -117,6 +139,24 @@ export default function HostSetup() {
                     Session <strong>{sessionCode}</strong> created
                 </p>
             )}
+
+            <fieldset className="chip-group source-picker">
+                <legend>Sources</legend>
+                {SELECTABLE_SOURCES.map((s) => (
+                    <label
+                        key={s.id}
+                        className={`chip source-chip source-chip-${s.id} ${sources.includes(s.id) ? 'checked' : ''}`}
+                    >
+                        <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={sources.includes(s.id)}
+                            onChange={() => toggleSource(s.id)}
+                        />
+                        {s.label}
+                    </label>
+                ))}
+            </fieldset>
 
             {available && available.genres.length > 0 && (
                 <fieldset className="chip-group">
@@ -163,9 +203,15 @@ export default function HostSetup() {
                 </fieldset>
             )}
 
-            <label className="unwatched-toggle">
-                <input type="checkbox" checked={unwatched} onChange={(e) => setUnwatched(e.target.checked)} />
+            <label className={`unwatched-toggle${sources.includes('jellyfin') ? '' : ' disabled'}`}>
+                <input
+                    type="checkbox"
+                    checked={unwatched && sources.includes('jellyfin')}
+                    disabled={!sources.includes('jellyfin')}
+                    onChange={(e) => setUnwatched(e.target.checked)}
+                />
                 Unwatched only
+                {!sources.includes('jellyfin') && <span className="hint"> (Jellyfin only)</span>}
             </label>
 
             {sessionCode && (
