@@ -2,9 +2,31 @@ package server
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+// TestMoviesRequestsProviderIds guards the Fields query param that carries
+// TMDB ids across sources: without it, no Jellyfin movie ever merges with a
+// streaming-source entry, silently.
+func TestMoviesRequestsProviderIds(t *testing.T) {
+	var gotFields string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotFields = r.URL.Query().Get("Fields")
+		_, _ = w.Write([]byte(`{"Items":[],"TotalRecordCount":0}`))
+	}))
+	defer srv.Close()
+
+	c := NewJellyfinClient(Config{JellyfinURL: srv.URL, JellyfinAPIKey: "k"})
+	if _, _, err := c.Movies(context.Background(), Filters{}); err != nil {
+		t.Fatalf("Movies: %v", err)
+	}
+	if !strings.Contains(gotFields, "ProviderIds") {
+		t.Fatalf("Fields = %q, want it to contain ProviderIds", gotFields)
+	}
+}
 
 // TestJellyfinClient_Movies is an integration test against a real Jellyfin
 // server. It skips automatically unless JELLYFIN_URL/JELLYFIN_API_KEY are

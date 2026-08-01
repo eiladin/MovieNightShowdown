@@ -21,6 +21,12 @@
   color: #d33;
 }
 
+/* A warning is not an error: the session started, but with fewer sources than
+   the host selected. */
+.lobby-warning {
+  color: #e0a030;
+}
+
 .qr-join {
   display: flex;
   flex-direction: column;

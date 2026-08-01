@@ -34,7 +34,7 @@ type Filters struct {
 	Unwatched       bool       `json:"unwatched"`
 	LibraryID       string     `json:"libraryId"`
 	Sources         []SourceID `json:"sources"` // empty means Jellyfin only
-	Limit           int        `json:"limit"`   // fetch cap for the preview/library query, default 50
+	Limit           int        `json:"limit"`   // per-source fetch depth into the shoe; set by gatherShoe, not by the client
 }
 
 // ParseFilters parses Filters from request query params.
@@ -54,9 +54,6 @@ func ParseFilters(q url.Values) Filters {
 	}
 	if v, err := strconv.ParseFloat(q.Get("ratingMin"), 64); err == nil {
 		f.RatingMin = v
-	}
-	if v, err := strconv.Atoi(q.Get("limit")); err == nil && v > 0 {
-		f.Limit = v
 	}
 	for _, s := range q["sources"] {
 		f.Sources = append(f.Sources, SourceID(s))

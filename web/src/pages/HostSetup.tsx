@@ -72,7 +72,10 @@ export default function HostSetup() {
                     officialRatings: sortRatings(f.officialRatings),
                 })
             })
-            .catch((err) => console.error('Failed to load available filters:', err))
+            .catch((err) => {
+                console.error('Failed to load available filters:', err)
+                setError('Could not load filter options from Jellyfin.')
+            })
     }, [])
 
     function toggleGenre(genre: string) {
@@ -228,7 +231,9 @@ export default function HostSetup() {
 
             {preview && (
                 <div className="preview-results">
-                    <p className="preview-count">{preview.count} movies match</p>
+                    <p className="preview-count">
+                        {preview.count >= 150 ? `showing ${preview.count} of many` : `${preview.count} movies match`}
+                    </p>
                     <div className="poster-grid">
                         {preview.movies.map((movie) => (
                             <img

@@ -37,6 +37,11 @@ const (
 	// reaches films with so little presence that the vote floor is the only
 	// thing keeping them viable.
 	tmdbMaxSampledPages = 25
+
+	// tmdbMaxPosterBytes bounds a single poster fetch. The image proxy is
+	// unauthenticated, so an unbounded read is a memory and disk amplification
+	// vector.
+	tmdbMaxPosterBytes = 8 << 20 // 8 MiB
 )
 
 // tmdbProviderIDs maps each supported source to its TMDB watch provider id.
@@ -92,7 +97,6 @@ type TMDBSource struct {
 	baseURL  string
 	imageURL string
 	http     *http.Client
-	rand     *rand.Rand
 }
 
 // NewTMDBSource returns a source for one provider. It returns nil if the
@@ -110,7 +114,6 @@ func NewTMDBSource(cfg Config, source SourceID) *TMDBSource {
 		baseURL:  tmdbAPIBase,
 		imageURL: tmdbImageBase,
 		http:     &http.Client{Timeout: 15 * time.Second},
-		rand:     rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -250,7 +253,7 @@ func (t *TMDBSource) samplePages(totalPages int) []int {
 	chosen := make(map[int]bool, tmdbPagesPerProvider)
 	pages := make([]int, 0, tmdbPagesPerProvider)
 	for len(pages) < tmdbPagesPerProvider {
-		p := t.rand.Intn(window) + 1
+		p := rand.Intn(window) + 1
 		if chosen[p] {
 			continue
 		}
@@ -264,7 +267,17 @@ func (t *TMDBSource) samplePages(totalPages int) []int {
 // (or one unfiltered query when none is selected), samples pages within each,
 // and merges the results.
 func (t *TMDBSource) Search(ctx context.Context, f Filters) ([]Movie, error) {
+	// A filter the host set must never widen the result set. When every
+	// selected genre or certification maps to nothing TMDB recognizes, the
+	// correct contribution from this provider is none - omitting the parameter
+	// would return the provider's entire catalog instead.
+	if len(f.Genres) > 0 && len(mapGenres(f.Genres)) == 0 {
+		return nil, nil
+	}
 	certs := mapCertifications(f.OfficialRatings)
+	if len(f.OfficialRatings) > 0 && len(certs) == 0 {
+		return nil, nil
+	}
 	if len(certs) == 0 {
 		certs = []string{""}
 	}
@@ -288,7 +301,15 @@ func (t *TMDBSource) Search(ctx context.Context, f Filters) ([]Movie, error) {
 		}
 		sets = append(sets, set)
 	}
-	return MergeMovies(sets...), nil
+	merged := MergeMovies(sets...)
+	// Cap the provider's contribution to the shoe. Shuffle first: sets are
+	// built in certification order then page order, so a bare truncation would
+	// keep only the first certification's results.
+	rand.Shuffle(len(merged), func(i, j int) { merged[i], merged[j] = merged[j], merged[i] })
+	if f.Limit > 0 && len(merged) > f.Limit {
+		merged = merged[:f.Limit]
+	}
+	return merged, nil
 }
 
 // toMovies converts a Discover response into the app's Movie shape. Runtime and
@@ -329,7 +350,7 @@ func (t *TMDBSource) toMovies(resp tmdbDiscoverResponse) []Movie {
 // leading slash trimmed; tag is unused (TMDB poster paths are already
 // content-addressed, so artwork changes produce a new path).
 func (t *TMDBSource) fetchPoster(ctx context.Context, id, tag string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.imageURL+"/"+id, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.imageURL+"/"+url.PathEscape(id), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +362,7 @@ func (t *TMDBSource) fetchPoster(ctx context.Context, id, tag string) ([]byte, e
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("tmdb: poster %s returned %s", id, resp.Status)
 	}
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, tmdbMaxPosterBytes))
 }
 
 // tmdbGenreNames is the reverse of tmdbGenreIDs, used to render TMDB numeric

@@ -10,6 +10,7 @@ import {
     type ParticipantUpdatePayload,
     type SessionStatePayload,
     type SessionEndedPayload,
+    type WarningPayload,
 } from '../ws'
 import Swipe from './Swipe'
 import Result from './Result'
@@ -37,6 +38,7 @@ export default function Lobby() {
     const [name, setName] = useState('')
     const [joined, setJoined] = useState(() => SessionSocket.getToken(upperCode) !== '')
     const [socketError, setSocketError] = useState<string | null>(null)
+    const [socketWarning, setSocketWarning] = useState<string | null>(null)
     const socketRef = useRef<SessionSocket | null>(null)
 
     const [maxMovies, setMaxMovies] = useState(50)
@@ -73,6 +75,7 @@ export default function Lobby() {
         )
         const offDeck = socket.on('deck', (payload) => setDeck((payload as DeckPayload).movies))
         const offError = socket.on('error', (payload) => setSocketError((payload as ErrorPayload).message))
+        const offWarning = socket.on('warning', (payload) => setSocketWarning((payload as WarningPayload).message))
         const offMatch = socket.on('match', (payload) => {
             const { movie } = payload as MatchPayload
             setWinner(movie)
@@ -89,6 +92,7 @@ export default function Lobby() {
             offParticipants()
             offDeck()
             offError()
+            offWarning()
             offMatch()
             offEnded()
             socket.close()
@@ -149,6 +153,7 @@ export default function Lobby() {
             {isHost && <QRJoin joinURL={joinURL} />}
 
             {socketError && <p className="lobby-error">{socketError}</p>}
+            {socketWarning && <p className="lobby-warning">{socketWarning}</p>}
             {participants.length === 0 && !socketError && <p>Connecting…</p>}
 
             <ul className="participant-list">
