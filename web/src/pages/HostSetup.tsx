@@ -52,13 +52,17 @@ export default function HostSetup() {
     const [searchParams] = useSearchParams()
     const sessionCode = searchParams.get('code')
     const setFilters = useSessionStore((s) => s.setFilters)
+    // Seed from whatever was last carried to the lobby, so arriving here via
+    // "Change filters" shows the previous selection rather than a blank form.
+    // Only read on the first render; these are uncontrolled from here on.
+    const saved = useSessionStore((s) => s.filters)
 
-    const [genres, setGenres] = useState<string[]>([])
-    const [yearMin, setYearMin] = useState('')
-    const [yearMax, setYearMax] = useState('')
-    const [officialRatings, setOfficialRatings] = useState<string[]>([])
-    const [unwatched, setUnwatched] = useState(false)
-    const [sources, setSources] = useState<SourceID[]>(['jellyfin'])
+    const [genres, setGenres] = useState<string[]>(saved.genres ?? [])
+    const [yearMin, setYearMin] = useState(saved.yearMin ? String(saved.yearMin) : '')
+    const [yearMax, setYearMax] = useState(saved.yearMax ? String(saved.yearMax) : '')
+    const [officialRatings, setOfficialRatings] = useState<string[]>(saved.officialRatings ?? [])
+    const [unwatched, setUnwatched] = useState(saved.unwatched ?? false)
+    const [sources, setSources] = useState<SourceID[]>(saved.sources ?? ['jellyfin'])
     const [preview, setPreview] = useState<PreviewResponse | null>(null)
     const [available, setAvailable] = useState<AvailableFilters | null>(null)
     // Distinguishes "no answer yet" from "answered, and the answer was an

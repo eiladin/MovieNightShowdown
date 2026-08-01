@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import QRJoin from '../components/QRJoin'
 import { useSessionStore } from '../store'
 import {
@@ -149,6 +149,16 @@ export default function Lobby() {
             {isHost && <QRJoin joinURL={joinURL} />}
 
             {socketError && <p className="lobby-error">{socketError}</p>}
+            {/* Filters stay editable for as long as the lobby is on screen.
+                HostSetup resumes from the same session code, so the round trip
+                costs neither the room nor the roster. Once Begin succeeds the
+                status leaves 'lobby' and this whole branch is replaced by the
+                deck, so no gate is needed to hide it after the start. */}
+            {isHost && (
+                <Link to={`/host?code=${upperCode}`} className="lobby-refilter">
+                    Change filters
+                </Link>
+            )}
             {participants.length === 0 && !socketError && <p>Connecting…</p>}
 
             <ul className="participant-list">
