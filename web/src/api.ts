@@ -36,6 +36,7 @@ export interface PreviewFilters {
 export interface PreviewResponse {
     count: number
     movies: Movie[]
+    unavailable: SourceID[]
 }
 
 function buildPreviewParams(filters: PreviewFilters): URLSearchParams {
@@ -84,6 +85,9 @@ export async function warmLibrary(filters: PreviewFilters): Promise<number> {
 export interface AvailableFilters {
     genres: string[]
     officialRatings: string[]
+    // sources lists the movie sources this deployment has credentials for. A
+    // source absent here cannot be selected — it would be dropped silently.
+    sources: SourceID[]
 }
 
 export async function getAvailableFilters(): Promise<AvailableFilters> {

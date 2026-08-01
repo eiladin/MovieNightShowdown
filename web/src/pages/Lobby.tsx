@@ -10,7 +10,6 @@ import {
     type ParticipantUpdatePayload,
     type SessionStatePayload,
     type SessionEndedPayload,
-    type WarningPayload,
 } from '../ws'
 import Swipe from './Swipe'
 import Result from './Result'
@@ -38,7 +37,6 @@ export default function Lobby() {
     const [name, setName] = useState('')
     const [joined, setJoined] = useState(() => SessionSocket.getToken(upperCode) !== '')
     const [socketError, setSocketError] = useState<string | null>(null)
-    const [socketWarning, setSocketWarning] = useState<string | null>(null)
     const socketRef = useRef<SessionSocket | null>(null)
 
     const [maxMovies, setMaxMovies] = useState(50)
@@ -75,7 +73,6 @@ export default function Lobby() {
         )
         const offDeck = socket.on('deck', (payload) => setDeck((payload as DeckPayload).movies))
         const offError = socket.on('error', (payload) => setSocketError((payload as ErrorPayload).message))
-        const offWarning = socket.on('warning', (payload) => setSocketWarning((payload as WarningPayload).message))
         const offMatch = socket.on('match', (payload) => {
             const { movie } = payload as MatchPayload
             setWinner(movie)
@@ -92,7 +89,6 @@ export default function Lobby() {
             offParticipants()
             offDeck()
             offError()
-            offWarning()
             offMatch()
             offEnded()
             socket.close()
@@ -134,36 +130,15 @@ export default function Lobby() {
         )
     }
 
-    // The server sends `warning` immediately before flipping the status to
-    // active, so by the time React re-renders, the lobby branch below (which
-    // is where the warning paragraph normally lives) has already been
-    // replaced by Swipe/Result. Float it above whichever screen is current so
-    // the host actually sees it, and let them dismiss it once read.
-    const warningBanner = socketWarning && (
-        <p className="lobby-warning lobby-warning-floating" onClick={() => setSocketWarning(null)}>
-            {socketWarning}
-        </p>
-    )
-
     // Once the host starts the session, the deck takes over the same screen
     // (same socket, same mounted component) rather than a route change — the
     // WS connection must survive the transition.
     if (socketRef.current && (status === 'matched' || status === 'ended')) {
-        return (
-            <>
-                {warningBanner}
-                <Result socket={socketRef.current} />
-            </>
-        )
+        return <Result socket={socketRef.current} />
     }
 
     if (socketRef.current && status !== 'lobby') {
-        return (
-            <>
-                {warningBanner}
-                <Swipe socket={socketRef.current} />
-            </>
-        )
+        return <Swipe socket={socketRef.current} />
     }
 
     return (
@@ -174,7 +149,6 @@ export default function Lobby() {
             {isHost && <QRJoin joinURL={joinURL} />}
 
             {socketError && <p className="lobby-error">{socketError}</p>}
-            {socketWarning && <p className="lobby-warning">{socketWarning}</p>}
             {participants.length === 0 && !socketError && <p>Connecting…</p>}
 
             <ul className="participant-list">

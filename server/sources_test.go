@@ -116,3 +116,36 @@ func TestGatherShoeEmptyIsNotAFailure(t *testing.T) {
 		t.Fatalf("got %d movies, want 0", len(movies))
 	}
 }
+
+func TestConfiguredSourcesUsesCanonicalOrder(t *testing.T) {
+	available := map[SourceID]MovieSource{
+		SourceDisney:   &fakeSource{id: SourceDisney},
+		SourceJellyfin: &fakeSource{id: SourceJellyfin},
+		SourceNetflix:  &fakeSource{id: SourceNetflix},
+	}
+
+	// Run repeatedly: Go randomises map iteration, so a single run could pass
+	// against an implementation that ranges over the map.
+	want := []SourceID{SourceJellyfin, SourceNetflix, SourceDisney}
+	for i := 0; i < 20; i++ {
+		got := configuredSources(available)
+		if len(got) != len(want) {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+		for j := range want {
+			if got[j] != want[j] {
+				t.Fatalf("got %v, want %v", got, want)
+			}
+		}
+	}
+}
+
+func TestConfiguredSourcesOmitsUnregistered(t *testing.T) {
+	available := map[SourceID]MovieSource{SourceJellyfin: &fakeSource{id: SourceJellyfin}}
+
+	got := configuredSources(available)
+
+	if len(got) != 1 || got[0] != SourceJellyfin {
+		t.Fatalf("got %v, want [jellyfin]", got)
+	}
+}

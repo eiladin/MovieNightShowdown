@@ -7,9 +7,12 @@ import (
 )
 
 // libraryPreviewResponse is the JSON body of GET /api/library/preview.
+// Unavailable names the selected sources that failed this query, so the host
+// can correct the problem before creating a room.
 type libraryPreviewResponse struct {
-	Count  int     `json:"count"`
-	Movies []Movie `json:"movies"`
+	Count       int        `json:"count"`
+	Movies      []Movie    `json:"movies"`
+	Unavailable []SourceID `json:"unavailable"`
 }
 
 // handleLibraryPreview lets the host preview the filtered Jellyfin library
@@ -28,9 +31,25 @@ func (s *Server) handleLibraryPreview(w http.ResponseWriter, r *http.Request) {
 	for _, f := range failed {
 		log.Printf("library preview: source %s unavailable", f)
 	}
+	if failed == nil {
+		failed = []SourceID{}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(libraryPreviewResponse{Count: len(movies), Movies: movies})
+	_ = json.NewEncoder(w).Encode(libraryPreviewResponse{
+		Count:       len(movies),
+		Movies:      movies,
+		Unavailable: failed,
+	})
+}
+
+// libraryFiltersResponse is the JSON body of GET /api/library/filters: the
+// filter values present in the Jellyfin library, plus which movie sources this
+// deployment has credentials for. AvailableFilters is embedded, so the JSON
+// keeps its existing shape and only gains "sources".
+type libraryFiltersResponse struct {
+	AvailableFilters
+	Sources []SourceID `json:"sources"`
 }
 
 // handleLibraryFilters fetches the available filter options (genres, ratings)
@@ -44,7 +63,10 @@ func (s *Server) handleLibraryFilters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(filters)
+	_ = json.NewEncoder(w).Encode(libraryFiltersResponse{
+		AvailableFilters: filters,
+		Sources:          configuredSources(s.sources),
+	})
 }
 
 // handleLibraryWarm pre-fetches every poster for the filtered library into the

@@ -70,6 +70,7 @@ export default function HostSetup() {
                 setAvailable({
                     genres: sortGenres(f.genres),
                     officialRatings: sortRatings(f.officialRatings),
+                    sources: f.sources ?? [],
                 })
             })
             .catch((err) => {
@@ -86,9 +87,18 @@ export default function HostSetup() {
         setOfficialRatings((prev) => (prev.includes(rating) ? prev.filter((r) => r !== rating) : [...prev, rating]))
     }
 
+    // A source with no credentials on the server is dropped silently at query
+    // time, so it must not be selectable. Before the filters call returns,
+    // treat every source as available rather than flashing them all disabled.
+    function sourceConfigured(id: SourceID): boolean {
+        if (!available) return true
+        return available.sources.includes(id)
+    }
+
     // At least one source must stay selected: a session with no source has no
     // deck to deal.
     function toggleSource(id: SourceID) {
+        if (!sourceConfigured(id)) return
         setSources((current) => {
             if (!current.includes(id)) return [...current, id]
             if (current.length === 1) return current
@@ -145,20 +155,26 @@ export default function HostSetup() {
 
             <fieldset className="chip-group source-picker">
                 <legend>Sources</legend>
-                {SELECTABLE_SOURCES.map((s) => (
-                    <label
-                        key={s.id}
-                        className={`chip source-chip source-chip-${s.id} ${sources.includes(s.id) ? 'checked' : ''}`}
-                    >
-                        <input
-                            type="checkbox"
-                            className="sr-only"
-                            checked={sources.includes(s.id)}
-                            onChange={() => toggleSource(s.id)}
-                        />
-                        {s.label}
-                    </label>
-                ))}
+                {SELECTABLE_SOURCES.map((s) => {
+                    const configured = sourceConfigured(s.id)
+                    return (
+                        <label
+                            key={s.id}
+                            className={`chip source-chip source-chip-${s.id} ${sources.includes(s.id) ? 'checked' : ''}${configured ? '' : ' disabled'}`}
+                            title={configured ? undefined : 'Not configured on this server'}
+                        >
+                            <input
+                                type="checkbox"
+                                className="sr-only"
+                                checked={sources.includes(s.id)}
+                                disabled={!configured}
+                                onChange={() => toggleSource(s.id)}
+                            />
+                            {s.label}
+                            {!configured && <span className="chip-hint"> (not configured)</span>}
+                        </label>
+                    )
+                })}
             </fieldset>
 
             {available && available.genres.length > 0 && (
@@ -231,6 +247,11 @@ export default function HostSetup() {
 
             {preview && (
                 <div className="preview-results">
+                    {(preview.unavailable?.length ?? 0) > 0 && (
+                        <p className="preview-unavailable">
+                            Could not reach: {preview.unavailable.join(', ')}. Those results are missing.
+                        </p>
+                    )}
                     <p className="preview-count">
                         {preview.count >= 150 ? `showing ${preview.count} of many` : `${preview.count} movies match`}
                     </p>
