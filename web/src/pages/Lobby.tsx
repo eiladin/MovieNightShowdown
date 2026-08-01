@@ -134,15 +134,36 @@ export default function Lobby() {
         )
     }
 
+    // The server sends `warning` immediately before flipping the status to
+    // active, so by the time React re-renders, the lobby branch below (which
+    // is where the warning paragraph normally lives) has already been
+    // replaced by Swipe/Result. Float it above whichever screen is current so
+    // the host actually sees it, and let them dismiss it once read.
+    const warningBanner = socketWarning && (
+        <p className="lobby-warning lobby-warning-floating" onClick={() => setSocketWarning(null)}>
+            {socketWarning}
+        </p>
+    )
+
     // Once the host starts the session, the deck takes over the same screen
     // (same socket, same mounted component) rather than a route change — the
     // WS connection must survive the transition.
     if (socketRef.current && (status === 'matched' || status === 'ended')) {
-        return <Result socket={socketRef.current} />
+        return (
+            <>
+                {warningBanner}
+                <Result socket={socketRef.current} />
+            </>
+        )
     }
 
     if (socketRef.current && status !== 'lobby') {
-        return <Swipe socket={socketRef.current} />
+        return (
+            <>
+                {warningBanner}
+                <Swipe socket={socketRef.current} />
+            </>
+        )
     }
 
     return (

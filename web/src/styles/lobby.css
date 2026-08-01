@@ -27,6 +27,23 @@
   color: #e0a030;
 }
 
+/* Swipe and Result are full-screen views outside .lobby's centered column, so
+   the warning is floated above them instead of laid out in flow. Dismissible
+   on click since it would otherwise sit there for the rest of the session. */
+.lobby-warning-floating {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  margin: 0;
+  padding: 10px 16px;
+  text-align: center;
+  background: #fff8ea;
+  border-bottom: 1px solid #e0a030;
+  cursor: pointer;
+}
+
 .qr-join {
   display: flex;
   flex-direction: column;
