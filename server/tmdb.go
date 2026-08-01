@@ -288,10 +288,15 @@ func (t *TMDBSource) Search(ctx context.Context, f Filters) ([]Movie, error) {
 		if err != nil {
 			return nil, err
 		}
-		set := t.toMovies(first)
+		// Page 1 is fetched to learn TotalPages. Keep its results only if it is
+		// among the sampled pages - otherwise every deck would always contain
+		// the provider's 20 most popular titles and the sampling would be
+		// decorative.
+		var set []Movie
 		for _, page := range t.samplePages(first.TotalPages) {
 			if page == 1 {
-				continue // already have it
+				set = append(set, t.toMovies(first)...)
+				continue
 			}
 			resp, err := t.fetchPage(ctx, f, cert, page)
 			if err != nil {
