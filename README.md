@@ -6,6 +6,11 @@
 
 **Stop arguing about what to watch. Swipe until everyone agrees.**
 
+[![Tests](https://github.com/eiladin/movie-night-showdown/actions/workflows/test.yml/badge.svg)](https://github.com/eiladin/movie-night-showdown/actions/workflows/test.yml)
+[![CodeQL](https://github.com/eiladin/movie-night-showdown/actions/workflows/codeql.yml/badge.svg)](https://github.com/eiladin/movie-night-showdown/actions/workflows/codeql.yml)
+[![Release](https://img.shields.io/github/v/release/eiladin/movie-night-showdown?logo=github)](https://github.com/eiladin/movie-night-showdown/releases/latest)
+[![License](https://img.shields.io/github/license/eiladin/movie-night-showdown)](LICENSE)
+
 </div>
 
 ---
