@@ -1,5 +1,5 @@
 import { createRef, useEffect, useMemo, useRef, useState } from 'react'
-import Card, { type SwipeDirection, type TinderCardApi } from '../components/Card'
+import Card, { type SwipeDirection, type SwipeCardApi } from '../components/Card'
 import { useSessionStore, type Vote } from '../store'
 import type { ProgressPayload, SessionSocket } from '../ws'
 import '../styles/swipe.css'
@@ -25,7 +25,7 @@ export default function Swipe({ socket }: SwipeProps) {
   const [progress, setProgress] = useState<ProgressPayload | null>(null)
   const [confirmingEnd, setConfirmingEnd] = useState(false)
 
-  const childRefs = useMemo(() => deck.map(() => createRef<TinderCardApi>()), [deck])
+  const childRefs = useMemo(() => deck.map(() => createRef<SwipeCardApi>()), [deck])
 
   const [initialIndex, setInitialIndex] = useState(() => {
     let nextIndex = deck.length - 1
