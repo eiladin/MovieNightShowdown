@@ -1,0 +1,55 @@
+name: Test
+
+# Push is limited to main so a pull request is tested once, not twice: a push
+# to a branch that has an open PR would otherwise fire both triggers for the
+# same commit. Tags are excluded because a tag is a release, handled by
+# docker-publish.yml, and the commit it points at was already tested here.
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+
+permissions:
+  contents: read
+
+# The two suites are independent jobs rather than steps in one, so a failure
+# names the language that broke and neither waits on the other.
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # main.go embeds web/dist, which is a build artifact and is not committed,
+      # so a bare checkout cannot compile. The frontend is built and tested by
+      # the web job; this placeholder only satisfies the embed directive.
+      - name: Stub the embedded frontend
+        run: mkdir -p web/dist && touch web/dist/index.html
+
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./...
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc -b
+      - run: npm test
