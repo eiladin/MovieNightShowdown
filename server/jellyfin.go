@@ -158,9 +158,16 @@ type AvailableFilters struct {
 	OfficialRatings []string `json:"officialRatings"`
 }
 
-// GetAvailableFilters queries Jellyfin for all unique genres and official ratings
-// present in the Movie library.
-func (c *JellyfinClient) GetAvailableFilters(ctx context.Context) (AvailableFilters, error) {
+// SupportsUnwatched reports whether this deployment can filter on play state.
+// It needs a user id: "unwatched" is a question about a particular person's
+// history, and without JELLYFIN_USER_ID there is nobody to ask about, so the
+// filter would silently do nothing.
+func (c *JellyfinClient) SupportsUnwatched() bool { return c.userID != "" }
+
+// Vocabulary queries Jellyfin for all unique genres and official ratings
+// present in the Movie library, so the picker offers exactly what is on the
+// shelf.
+func (c *JellyfinClient) Vocabulary(ctx context.Context) (AvailableFilters, error) {
 	reqURL := fmt.Sprintf("%s/Items/Filters?IncludeItemTypes=Movie", c.baseURL)
 	if c.userID != "" {
 		reqURL += "&userId=" + url.QueryEscape(c.userID)

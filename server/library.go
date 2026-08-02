@@ -44,37 +44,55 @@ func (s *Server) handleLibraryPreview(w http.ResponseWriter, r *http.Request) {
 }
 
 // libraryFiltersResponse is the JSON body of GET /api/library/filters: the
-// filter values present in the Jellyfin library, plus which movie sources this
+// filter values the selected sources recognize, plus which movie sources this
 // deployment has credentials for. AvailableFilters is embedded, so the JSON
-// keeps its existing shape and only gains "sources".
+// keeps its existing shape and only gains "sources" and "unavailable".
 type libraryFiltersResponse struct {
 	AvailableFilters
 	Sources []SourceDescriptor `json:"sources"`
+	// Unavailable names the selected sources whose vocabulary could not be
+	// fetched, so the host can be told the picker is incomplete instead of
+	// reading a short list as the truth.
+	Unavailable []SourceID `json:"unavailable"`
+	// Streaming reports whether this deployment has a TMDB token at all, so the
+	// picker can offer the "add a token to unlock streaming" hint. It is not
+	// derivable from the source list: an empty streaming set and an
+	// unconfigured one look identical from there.
+	Streaming bool `json:"streaming"`
 }
 
-// handleLibraryFilters returns the available filter options (genres, ratings).
-// With a Jellyfin library they are enumerated from it, so the picker offers
-// exactly what is on the shelf. Without one — a streaming-only deployment —
-// they fall back to the default vocabulary, since a TMDB catalog is far too
-// large to enumerate and the picker would otherwise be empty.
+// handleLibraryFilters returns the filter options (genres, ratings) offered for
+// the sources named in the ?sources= query, unioned across them.
+//
+// The selection matters: the vocabulary must follow what the host actually
+// picked, not what the deployment happens to have credentials for. Keying it on
+// configuration instead meant a host who deselected Jellyfin still saw a picker
+// enumerated from the library they had just excluded, and any library-specific
+// genre in it returned nothing.
+//
+// An absent or unrecognized selection falls back through selectSources exactly
+// as the deck does, so a client that sends no sources still gets a usable
+// picker.
 func (s *Server) handleLibraryFilters(w http.ResponseWriter, r *http.Request) {
-	var filters AvailableFilters
-	if s.cfg.JellyfinConfigured() {
-		var err error
-		filters, err = s.jellyfin.GetAvailableFilters(r.Context())
-		if err != nil {
-			log.Printf("library filters: %v", err)
-			http.Error(w, "failed to fetch available filters from Jellyfin", http.StatusBadGateway)
-			return
-		}
-	} else {
-		filters = defaultAvailableFilters()
+	requested := ParseFilters(r.URL.Query()).Sources
+	sources := selectSources(s.sources, requested, s.order)
+
+	filters, failed, err := gatherVocabulary(r.Context(), sources)
+	if err != nil {
+		log.Printf("library filters: %v", err)
+		http.Error(w, "failed to fetch filter options from any selected source", http.StatusBadGateway)
+		return
+	}
+	for _, f := range failed {
+		log.Printf("library filters: source %s unavailable", f)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(libraryFiltersResponse{
 		AvailableFilters: filters,
 		Sources:          configuredSources(s.sources, s.order),
+		Unavailable:      failed,
+		Streaming:        s.cfg.StreamingConfigured(),
 	})
 }
 

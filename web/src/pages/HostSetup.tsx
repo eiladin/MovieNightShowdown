@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { getAvailableFilters, getPreview, warmLibrary, type AvailableFilters, type PreviewFilters, type PreviewResponse, type SourceDescriptor, type SourceID } from '../api'
+import { getAvailableFilters, getPreview, warmLibrary, type PreviewFilters, type PreviewResponse, type SourceDescriptor, type SourceID } from '../api'
 import { useFiltersFor, useSessionStore } from '../store'
 import { accentStyle } from '../sourceColor'
 import '../styles/admin.css'
@@ -29,6 +29,14 @@ function sortRatings(ratings: string[]): string[] {
         if (valA !== valB) return valA - valB
         return a.localeCompare(b)
     })
+}
+
+// Vocabulary is the part of the filters response that depends on the current
+// source selection. The source list is deliberately not part of it: it is a
+// property of the deployment, not of the selection.
+interface Vocabulary {
+    genres: string[]
+    officialRatings: string[]
 }
 
 function sortGenres(genres: string[]): string[] {
@@ -67,7 +75,20 @@ function HostSetupForm({ sessionCode }: { sessionCode: string | null }) {
     // server's answer, and it reconciles this below once it arrives.
     const [sources, setSources] = useState<SourceID[]>(saved.sources ?? [])
     const [preview, setPreview] = useState<PreviewResponse | null>(null)
-    const [available, setAvailable] = useState<AvailableFilters | null>(null)
+    // The vocabulary (genres/ratings) tracks the current source selection and
+    // is replaced on every refetch. The source *list* does not: it is the set
+    // of sources this deployment can query at all, so it is captured once from
+    // the initial fetch and never reordered or reset by a later answer.
+    const [available, setAvailable] = useState<Vocabulary | null>(null)
+    const [sourceList, setSourceList] = useState<SourceDescriptor[]>([])
+    // Whether the deployment has a TMDB token. Like the source list this is a
+    // property of the deployment, not of the current selection, so it is
+    // captured once and never touched by a refetch.
+    const [streamingConfigured, setStreamingConfigured] = useState<boolean | null>(null)
+    // Sources that failed to answer the last vocabulary request. The rest of
+    // the answer is still usable, so this is surfaced inline.
+    const [unavailable, setUnavailable] = useState<SourceID[]>([])
+    const [filtersError, setFiltersError] = useState<string | null>(null)
     // Distinguishes "no answer yet" from "answered, and the answer was an
     // error". Keying availability off `available === null` alone conflates the
     // two and leaves every source selectable forever when the fetch fails.
@@ -75,15 +96,20 @@ function HostSetupForm({ sessionCode }: { sessionCode: string | null }) {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
+    // Initial load: learn which sources exist and seed the vocabulary. Asks
+    // for no sources in particular, so the server answers with its default —
+    // this is the only fetch allowed to establish the source list.
     useEffect(() => {
-        getAvailableFilters()
+        getAvailableFilters([])
             .then((f) => {
                 const configured = f.sources ?? []
+                setSourceList(configured)
+                setStreamingConfigured(f.streaming ?? null)
                 setAvailable({
                     genres: sortGenres(f.genres),
                     officialRatings: sortRatings(f.officialRatings),
-                    sources: configured,
                 })
+                setUnavailable(f.unavailable ?? [])
                 // Reconcile any selection made while the answer was in flight.
                 // A source the server cannot query must not survive in state:
                 // it would ship in host:start and be dropped silently, and it
@@ -103,7 +129,7 @@ function HostSetupForm({ sessionCode }: { sessionCode: string | null }) {
             })
             .catch((err) => {
                 console.error('Failed to load available filters:', err)
-                setError('Could not load filter options.')
+                setFiltersError('Could not load filter options. Genres and parental ratings are unavailable; the other filters still apply.')
                 // The question has been answered, badly. Leave the selection
                 // alone rather than asserting a source on no information; the
                 // server falls back to its first configured source.
@@ -111,6 +137,42 @@ function HostSetupForm({ sessionCode }: { sessionCode: string | null }) {
                 setSourcesLoaded(true)
             })
     }, [])
+
+    // Follow the selection: the vocabulary is the union of the selected
+    // sources', so it has to be refetched whenever they change. Deliberately
+    // does not touch the source list or the selection itself — re-running the
+    // initial reconciliation here would fight the host's picks.
+    useEffect(() => {
+        if (!sourcesLoaded || sources.length === 0) return
+        // Guards against an out-of-order reply: a slow answer for an earlier
+        // selection must not overwrite a newer one.
+        let ignore = false
+        const controller = new AbortController()
+        getAvailableFilters(sources, controller.signal)
+            .then((f) => {
+                if (ignore) return
+                const nextGenres = sortGenres(f.genres)
+                const nextRatings = sortRatings(f.officialRatings)
+                setAvailable({ genres: nextGenres, officialRatings: nextRatings })
+                setUnavailable(f.unavailable ?? [])
+                setFiltersError(null)
+                // Drop picks the new selection no longer offers, so the host
+                // cannot submit a filter no selected source understands.
+                setGenres((prev) => prev.filter((g) => nextGenres.includes(g)))
+                setOfficialRatings((prev) => prev.filter((r) => nextRatings.includes(r)))
+            })
+            .catch((err) => {
+                if (ignore || (err instanceof DOMException && err.name === 'AbortError')) return
+                console.error('Failed to load filter options for the selected sources:', err)
+                setAvailable(null)
+                setUnavailable([])
+                setFiltersError('Could not load filter options for the selected sources. Genres and parental ratings are unavailable; try again or change the source selection.')
+            })
+        return () => {
+            ignore = true
+            controller.abort()
+        }
+    }, [sources, sourcesLoaded])
 
     function toggleGenre(genre: string) {
         setGenres((prev) => (prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre]))
@@ -123,12 +185,24 @@ function HostSetupForm({ sessionCode }: { sessionCode: string | null }) {
     // Render exactly what the server reported, and nothing before it answers.
     // An unconfigured source never appears at all, rather than appearing greyed
     // out, and no chip flashes on the way to a deployment that lacks it.
-    const offeredSources: SourceDescriptor[] = sourcesLoaded && available ? available.sources : []
+    const offeredSources: SourceDescriptor[] = sourcesLoaded ? sourceList : []
 
-    // Nothing beyond the local library is on offer, so point the host at what
-    // would unlock the rest.
-    const streamingUnavailable =
-        sourcesLoaded && available !== null && offeredSources.every((s) => s.id === 'jellyfin')
+    // No TMDB token, so no streaming service can be offered whatever the host
+    // selects — point them at what would unlock the rest. The server reports
+    // this directly: it is not derivable from the source list, since a
+    // deployment with no streaming configured and one with no token both show
+    // a list without streaming services in it.
+    // Strict false, not falsy: null means an older server omitted the field,
+    // and guessing "no token" there would show a setup hint to a deployment
+    // that may already be streaming perfectly well.
+    const streamingUnavailable = sourcesLoaded && streamingConfigured === false
+
+    // "Unwatched only" needs a per-user watch state, which only some sources
+    // have. The capability is carried on the descriptor rather than inferred
+    // from the id; a source that does not declare it is treated as lacking it.
+    const unwatchedSupported = sources.some(
+        (id) => offeredSources.find((s) => s.id === id)?.supportsUnwatched === true,
+    )
 
     // sourceLabel names a source the server reported, falling back to its id.
     // Ids are not always readable — a provider configured by number resolves to
@@ -154,7 +228,7 @@ function HostSetupForm({ sessionCode }: { sessionCode: string | null }) {
             yearMin: yearMin ? Number(yearMin) : undefined,
             yearMax: yearMax ? Number(yearMax) : undefined,
             officialRatings: officialRatings.length > 0 ? officialRatings : undefined,
-            unwatched: sources.includes('jellyfin') ? unwatched : false,
+            unwatched: unwatchedSupported ? unwatched : false,
         }
     }
 
@@ -223,6 +297,15 @@ function HostSetupForm({ sessionCode }: { sessionCode: string | null }) {
                 )}
             </fieldset>
 
+            {unavailable.length > 0 && (
+                <p className="preview-unavailable">
+                    Could not reach: {unavailable.map(sourceLabel).join(', ')}. The genre and
+                    parental-rating lists may be incomplete.
+                </p>
+            )}
+
+            {filtersError && <p className="preview-error">{filtersError}</p>}
+
             {available && available.genres.length > 0 && (
                 <fieldset className="chip-group">
                     <legend>Genres</legend>
@@ -268,15 +351,17 @@ function HostSetupForm({ sessionCode }: { sessionCode: string | null }) {
                 </fieldset>
             )}
 
-            <label className={`unwatched-toggle${sources.includes('jellyfin') ? '' : ' disabled'}`}>
+            <label className={`unwatched-toggle${unwatchedSupported ? '' : ' disabled'}`}>
                 <input
                     type="checkbox"
-                    checked={unwatched && sources.includes('jellyfin')}
-                    disabled={!sources.includes('jellyfin')}
+                    checked={unwatched && unwatchedSupported}
+                    disabled={!unwatchedSupported}
                     onChange={(e) => setUnwatched(e.target.checked)}
                 />
                 Unwatched only
-                {!sources.includes('jellyfin') && <span className="hint"> (Jellyfin only)</span>}
+                {!unwatchedSupported && (
+                    <span className="hint"> (not supported by the selected sources)</span>
+                )}
             </label>
 
             {sessionCode && (

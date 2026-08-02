@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strconv"
 	"sync"
 )
 
@@ -64,7 +65,13 @@ func configuredSources(available map[SourceID]MovieSource, order []SourceID) []S
 	out := make([]SourceDescriptor, 0, len(order))
 	for _, id := range order {
 		if s, ok := available[id]; ok {
-			out = append(out, SourceDescriptor{ID: id, Label: sourceLabel(s)})
+			u, ok := s.(UnwatchedSource)
+			unwatched := ok && u.SupportsUnwatched()
+			out = append(out, SourceDescriptor{
+				ID:                id,
+				Label:             sourceLabel(s),
+				SupportsUnwatched: unwatched,
+			})
 		}
 	}
 	return out
@@ -76,6 +83,97 @@ func configuredSources(available map[SourceID]MovieSource, order []SourceID) []S
 type SourceDescriptor struct {
 	ID    SourceID `json:"id"`
 	Label string   `json:"label"`
+	// SupportsUnwatched reports whether this source can filter on play state.
+	// It is declared here rather than inferred from the id because the source
+	// set is open and the frontend must not hold a table of capabilities for
+	// providers it has never heard of.
+	SupportsUnwatched bool `json:"supportsUnwatched"`
+}
+
+// gatherVocabulary unions the filter values of every selected source, returning
+// the merged vocabulary and the ids of any source that failed.
+//
+// The union is deliberate: a value only one selected source recognizes is still
+// worth offering, because selecting it yields that source's matches rather than
+// nothing. An intersection would silently remove genres from a host's own
+// library the moment they added a streaming service.
+//
+// Sources are visited in the deployment's canonical order, and the first name
+// for a genre wins. Since that order puts Jellyfin first, the library's own
+// vocabulary is canonical — "Sci-Fi" from Jellyfin suppresses TMDB's "Science
+// Fiction" rather than both appearing, because they are the same genre.
+//
+// Partial failure degrades like gatherShoe: a picker missing one source's
+// values beats a picker that renders nothing. An error is returned only when
+// every source failed.
+func gatherVocabulary(ctx context.Context, sources []MovieSource) (AvailableFilters, []SourceID, error) {
+	type result struct {
+		id      SourceID
+		filters AvailableFilters
+		err     error
+	}
+	results := make([]result, len(sources))
+	var wg sync.WaitGroup
+	for i, src := range sources {
+		v, ok := src.(VocabularySource)
+		if !ok {
+			// Not a failure: a source with no vocabulary simply contributes
+			// no values, so it must not be reported as unavailable.
+			results[i] = result{id: src.ID()}
+			continue
+		}
+		wg.Add(1)
+		go func(i int, id SourceID, v VocabularySource) {
+			defer wg.Done()
+			f, err := v.Vocabulary(ctx)
+			results[i] = result{id: id, filters: f, err: err}
+		}(i, src.ID(), v)
+	}
+	wg.Wait()
+
+	merged := AvailableFilters{Genres: []string{}, OfficialRatings: []string{}}
+	failed := make([]SourceID, 0)
+	ok := false
+	seenGenre := make(map[string]bool)
+	seenRating := make(map[string]bool)
+	for _, r := range results {
+		if r.err != nil {
+			log.Printf("source %s vocabulary failed: %v", r.id, r.err)
+			failed = append(failed, r.id)
+			continue
+		}
+		ok = true
+		for _, g := range r.filters.Genres {
+			key := canonicalGenreKey(g)
+			if seenGenre[key] {
+				continue
+			}
+			seenGenre[key] = true
+			merged.Genres = append(merged.Genres, g)
+		}
+		for _, c := range r.filters.OfficialRatings {
+			if seenRating[c] {
+				continue
+			}
+			seenRating[c] = true
+			merged.OfficialRatings = append(merged.OfficialRatings, c)
+		}
+	}
+	if !ok {
+		return AvailableFilters{}, failed, errAllSourcesFailed
+	}
+	return merged, failed, nil
+}
+
+// canonicalGenreKey collapses genre names that mean the same thing. Names
+// sharing a TMDB genre id are one genre under different labels, so they key on
+// that id; anything TMDB does not recognize is library-specific and keys on its
+// own name.
+func canonicalGenreKey(name string) string {
+	if id, ok := tmdbGenreIDs[name]; ok {
+		return strconv.Itoa(id)
+	}
+	return name
 }
 
 // fetchDepth is how many candidates a source contributes to the shoe. A source
