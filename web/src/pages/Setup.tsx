@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { getSetupStatus, type SetupStatus } from '../api'
 import '../styles/setup.css'
 
