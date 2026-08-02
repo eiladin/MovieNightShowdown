@@ -31,6 +31,18 @@ jobs:
       - name: Stub the embedded frontend
         run: mkdir -p web/dist && touch web/dist/index.html
 
+      # First, because it is the cheapest check and the most irritating to
+      # discover after a long job. A bare `gofmt -l` exits 0 even when it lists
+      # files, so the result has to be tested rather than relied on.
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
       - run: go build ./...
       - run: go vet ./...
       - run: go test ./...
