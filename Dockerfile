@@ -3,7 +3,7 @@
 # target architecture. Without the pin, buildx runs this stage once per platform
 # and the non-native pass runs npm under QEMU emulation to produce byte-identical
 # output.
-FROM --platform=$BUILDPLATFORM node:24-alpine AS web
+FROM --platform=$BUILDPLATFORM node:25-alpine AS web
 WORKDIR /web
 COPY web/package*.json ./
 RUN npm ci
@@ -14,7 +14,7 @@ RUN npm run build
 # Also pinned to BUILDPLATFORM, and cross-compiled via GOARCH instead. Go needs
 # no cross-toolchain here because CGO is disabled, so a native compiler produces
 # the target binary in seconds where emulation took minutes.
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
