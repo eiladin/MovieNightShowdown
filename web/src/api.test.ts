@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildPreviewParams } from './api'
+import { buildFiltersParams, buildPreviewParams } from './api'
 
 describe('buildPreviewParams', () => {
     it('emits no params for an empty selection', () => {
@@ -48,5 +48,32 @@ describe('buildPreviewParams', () => {
     it('omits an empty libraryId', () => {
         expect(buildPreviewParams({ libraryId: 'abc' }).get('libraryId')).toBe('abc')
         expect(buildPreviewParams({ libraryId: '' }).has('libraryId')).toBe(false)
+    })
+})
+
+describe('buildFiltersParams', () => {
+    // No sources means "the server's default", which is expressed as an
+    // unparameterized request rather than an empty param.
+    it('emits no params for an empty selection', () => {
+        expect(buildFiltersParams([]).toString()).toBe('')
+    })
+
+    it('repeats the sources param once per source', () => {
+        const p = buildFiltersParams(['jellyfin', 'netflix', 'tmdb-1899'])
+        expect(p.getAll('sources')).toEqual(['jellyfin', 'netflix', 'tmdb-1899'])
+        expect(p.toString()).toBe('sources=jellyfin&sources=netflix&sources=tmdb-1899')
+    })
+
+    // Source ids are an open set, so they are not assumed to be URL-safe.
+    it('encodes ids that are not URL-safe', () => {
+        expect(buildFiltersParams(['a b&c']).toString()).toBe('sources=a+b%26c')
+    })
+
+    // Same encoding as the preview endpoint; the two must not drift.
+    it('matches the preview encoding of sources', () => {
+        const sources = ['jellyfin', 'netflix']
+        expect(buildFiltersParams(sources).getAll('sources')).toEqual(
+            buildPreviewParams({ sources }).getAll('sources'),
+        )
     })
 })
