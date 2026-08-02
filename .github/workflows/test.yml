@@ -53,3 +53,6 @@ jobs:
       - run: npm run lint
       - run: npx tsc -b
       - run: npm test
+
+# Measurement marker: this file is excluded by .dockerignore, so a change here
+# must not invalidate any Docker layer.
