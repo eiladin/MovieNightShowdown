@@ -68,6 +68,17 @@ hand-curated and is not touched by this pipeline.
   sources this deployment can query (`configuredSources` in `server/sources.go`),
   and the frontend renders exactly that list. Do not add a client-side list of
   streaming sources or duplicate the credential gating in the UI.
+- **Capabilities are declared, never inferred.** A source states what it can do
+  by implementing an optional interface in `server/source.go` — `NamedSource`,
+  `DepthedSource`, `VocabularySource`, `UnwatchedSource` — and the result
+  travels to the client on `SourceDescriptor`. Never branch on a `SourceID` to
+  decide what a source supports, on either side.
+- **Filter vocabulary follows the selection, not the configuration.**
+  `GET /api/library/filters` takes the same repeated `?sources=` encoding as
+  `/preview` and returns the union of those sources' vocabularies, with the
+  first name in canonical order winning for genres that mean the same thing
+  (see `canonicalGenreKey`). Do not key the picker on what the deployment has
+  credentials for; that is the bug this replaced.
 - **`SourceID` is an open set.** Streaming sources are whatever TMDB watch
   providers the deployment configured, so no fixed list of source ids or display
   names may exist on either side. Labels travel with the data: `SourceDescriptor`

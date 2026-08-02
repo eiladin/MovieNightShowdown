@@ -12,6 +12,12 @@ export type SourceID = string
 export interface SourceDescriptor {
     id: SourceID
     label: string
+    // supportsUnwatched reports whether this source can answer "unwatched
+    // only" — it needs a per-user watch state, which a local library has and a
+    // streaming catalogue does not. Optional because older servers omit it;
+    // absent is read as "not supported", so the capability has to be declared
+    // rather than inferred from the source id.
+    supportsUnwatched?: boolean
 }
 
 // Availability mirrors server.Availability's JSON shape. label is the display
@@ -107,10 +113,37 @@ export interface AvailableFilters {
     // with their display names, in the order they should be offered. A source
     // absent here cannot be selected — it would be dropped silently.
     sources: SourceDescriptor[]
+    // unavailable lists selected sources whose vocabulary could not be
+    // fetched. The response is still usable — it holds the union of whatever
+    // did answer — so this is a completeness warning, not an error.
+    unavailable: SourceID[]
+    // streaming reports whether the deployment has a TMDB token at all. It
+    // cannot be derived from `sources`: a deployment with no streaming
+    // services configured and one with no token look identical from there.
+    // Optional because older servers omit it.
+    streaming?: boolean
 }
 
-export async function getAvailableFilters(): Promise<AvailableFilters> {
-    const res = await fetch('/api/library/filters')
+// Exported for tests: the filters endpoint takes the same repeated `sources`
+// encoding as the preview endpoint, and that contract is worth pinning.
+export function buildFiltersParams(sources: SourceID[]): URLSearchParams {
+    const params = new URLSearchParams()
+    for (const source of sources) {
+        params.append('sources', source)
+    }
+    return params
+}
+
+// getAvailableFilters reports the filter vocabulary offered by the given
+// sources (their union). An empty list asks for the server's default, which is
+// its first configured source.
+export async function getAvailableFilters(
+    sources: SourceID[],
+    signal?: AbortSignal,
+): Promise<AvailableFilters> {
+    const params = buildFiltersParams(sources)
+    const query = params.toString()
+    const res = await fetch(`/api/library/filters${query ? `?${query}` : ''}`, { signal })
     if (!res.ok) {
         throw new Error(`filters request failed: ${res.status} ${res.statusText}`)
     }

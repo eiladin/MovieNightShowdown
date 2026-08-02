@@ -13,9 +13,11 @@ import (
 const providerResolveTimeout = 10 * time.Second
 
 type Server struct {
-	mux      *http.ServeMux
-	cfg      Config
-	jellyfin *JellyfinClient
+	mux *http.ServeMux
+	cfg Config
+	// Jellyfin is deliberately not a field: it is reachable only through the
+	// sources and fetchers maps, like every other source, so no handler can
+	// depend on it existing.
 	store    *Store
 	cache    *posterCache
 	fetchers map[SourceID]PosterFetcher
@@ -37,11 +39,10 @@ func New(cfg Config) *Server {
 	}
 
 	s := &Server{
-		mux:      http.NewServeMux(),
-		cfg:      cfg,
-		jellyfin: NewJellyfinClient(cfg),
-		store:    NewStore(ttl),
-		cache:    newPosterCache(cfg.CacheDir),
+		mux:   http.NewServeMux(),
+		cfg:   cfg,
+		store: NewStore(ttl),
+		cache: newPosterCache(cfg.CacheDir),
 	}
 	// Jellyfin is gated on its credentials exactly like the streaming sources.
 	// Registering it unconditionally would advertise a source every query fails
@@ -49,8 +50,9 @@ func New(cfg Config) *Server {
 	s.fetchers = map[SourceID]PosterFetcher{}
 	s.sources = map[SourceID]MovieSource{}
 	if cfg.JellyfinConfigured() {
-		s.fetchers[SourceJellyfin] = s.jellyfin
-		s.sources[SourceJellyfin] = s.jellyfin
+		jellyfin := NewJellyfinClient(cfg)
+		s.fetchers[SourceJellyfin] = jellyfin
+		s.sources[SourceJellyfin] = jellyfin
 		s.order = append(s.order, SourceJellyfin)
 	}
 	// Resolution needs the network for anything outside the built-in table, so

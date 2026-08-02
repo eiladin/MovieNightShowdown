@@ -147,6 +147,14 @@ func (t *TMDBSource) Name() string { return t.name }
 // ID identifies this source. TMDBSource implements MovieSource.
 func (t *TMDBSource) ID() SourceID { return t.source }
 
+// Vocabulary reports the filter values a TMDB Discover query can honor. It is
+// the same for every provider: the catalog behind them is TMDB's, so the
+// vocabulary is TMDB's genre and certification sets rather than anything
+// specific to one streaming service.
+func (t *TMDBSource) Vocabulary(context.Context) (AvailableFilters, error) {
+	return defaultAvailableFilters(), nil
+}
+
 // tmdbDiscoverResponse is the subset of the Discover response this app reads.
 // Discover returns neither runtime nor certification, so Movie.Runtime and
 // Movie.OfficialRating stay zero-valued for streaming titles.

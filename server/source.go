@@ -53,6 +53,26 @@ func sourceLabel(s MovieSource) string {
 	return string(s.ID())
 }
 
+// VocabularySource is a source that can report the filter values it recognizes.
+// Sources without one contribute nothing to the picker, which is correct rather
+// than empty: a source that cannot name its own vocabulary has no values to
+// offer that a query against it would honor.
+type VocabularySource interface {
+	Vocabulary(ctx context.Context) (AvailableFilters, error)
+}
+
+// UnwatchedSource is a source that may be able to filter on play state. The
+// method returns a bool rather than the interface being a bare marker because
+// the capability can depend on configuration: Jellyfin needs a user id to know
+// whose play state to read, so a deployment without JELLYFIN_USER_ID has the
+// source but not the capability.
+//
+// It is declared rather than inferred from the source id because the source set
+// is open and no fixed table of capabilities may exist on either side.
+type UnwatchedSource interface {
+	SupportsUnwatched() bool
+}
+
 // MovieSource is one queryable catalog of movies. Jellyfin and each supported
 // streaming provider are peers; none is special-cased by the deck builder.
 type MovieSource interface {
@@ -74,6 +94,8 @@ type PosterFetcher interface {
 }
 
 var _ PosterFetcher = (*JellyfinClient)(nil)
+var _ VocabularySource = (*JellyfinClient)(nil)
+var _ VocabularySource = (*TMDBSource)(nil)
 
 var _ MovieSource = (*TMDBSource)(nil)
 var _ PosterFetcher = (*TMDBSource)(nil)
