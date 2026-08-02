@@ -36,6 +36,10 @@ type JellyfinClient struct {
 // ID identifies this source. JellyfinClient implements MovieSource.
 func (c *JellyfinClient) ID() SourceID { return SourceJellyfin }
 
+// FetchDepth implements DepthedSource. A local library is cheap to page
+// through, so it contributes more candidates than a remote catalog.
+func (c *JellyfinClient) FetchDepth() int { return jellyfinFetchDepth }
+
 // Search implements MovieSource by delegating to Movies and discarding the
 // total count, which only the library preview endpoint needs.
 func (c *JellyfinClient) Search(ctx context.Context, f Filters) ([]Movie, error) {

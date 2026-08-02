@@ -80,6 +80,15 @@ func TestDiscoverParamsMapsFilters(t *testing.T) {
 	}
 }
 
+func TestDiscoverParamsIgnoresUnwatched(t *testing.T) {
+	s := NewTMDBSource(testTMDBConfig(), StreamingProvider{ID: SourceNetflix, Name: "Netflix", TMDBID: 8})
+	plain := s.discoverParams(Filters{}, "", 1)
+	unwatched := s.discoverParams(Filters{Unwatched: true}, "", 1)
+	if plain.Encode() != unwatched.Encode() {
+		t.Fatalf("unwatched must not change the query: %q vs %q", plain.Encode(), unwatched.Encode())
+	}
+}
+
 func TestDiscoverParamsOmitsUnsetFilters(t *testing.T) {
 	s := NewTMDBSource(testTMDBConfig(), StreamingProvider{ID: SourceDisney, Name: "Disney+", TMDBID: 337})
 	q := s.discoverParams(Filters{}, "", 1)

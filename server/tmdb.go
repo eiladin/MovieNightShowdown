@@ -293,6 +293,10 @@ func (t *TMDBSource) samplePages(totalPages int) []int {
 // Search implements MovieSource. It issues one query per selected certification
 // (or one unfiltered query when none is selected), samples pages within each,
 // and merges the results.
+//
+// Filters.Unwatched is intentionally ignored: it needs a Jellyfin user's play
+// state and has no meaning for a streaming catalog, so this source drops it
+// rather than having the caller strip it.
 func (t *TMDBSource) Search(ctx context.Context, f Filters) ([]Movie, error) {
 	// A filter the host set must never widen the result set. When every
 	// selected genre or certification maps to nothing TMDB recognizes, the

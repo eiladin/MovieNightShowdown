@@ -21,6 +21,15 @@ func (f *fakeSource) Search(ctx context.Context, flt Filters) ([]Movie, error) {
 	return f.movies, f.err
 }
 
+// deepFakeSource is a source that declares its own fetch depth, standing in
+// for Jellyfin where only the DepthedSource behaviour matters.
+type deepFakeSource struct {
+	fakeSource
+	depth int
+}
+
+func (f *deepFakeSource) FetchDepth() int { return f.depth }
+
 // testOrder is the canonical order used by tests that build a source map by
 // hand. Production builds this per deployment (see Server.order).
 var testOrder = []SourceID{SourceJellyfin, SourceNetflix, SourcePrime, SourceDisney}
@@ -54,9 +63,12 @@ func TestSelectSourcesSkipsUnconfigured(t *testing.T) {
 }
 
 func TestGatherShoeMergesAndSetsPerSourceDepth(t *testing.T) {
-	jf := &fakeSource{id: SourceJellyfin, movies: []Movie{
-		{ID: "tmdb:603", Availability: []Availability{{Source: SourceJellyfin}}},
-	}}
+	jf := &deepFakeSource{
+		fakeSource: fakeSource{id: SourceJellyfin, movies: []Movie{
+			{ID: "tmdb:603", Availability: []Availability{{Source: SourceJellyfin}}},
+		}},
+		depth: jellyfinFetchDepth,
+	}
 	nf := &fakeSource{id: SourceNetflix, movies: []Movie{
 		{ID: "tmdb:603", Availability: []Availability{{Source: SourceNetflix}}},
 		{ID: "tmdb:78", Availability: []Availability{{Source: SourceNetflix}}},
@@ -78,11 +90,19 @@ func TestGatherShoeMergesAndSetsPerSourceDepth(t *testing.T) {
 	if nf.gotLim != streamingFetchDepth {
 		t.Fatalf("streaming fetch depth = %d, want %d", nf.gotLim, streamingFetchDepth)
 	}
-	if !jf.gotUnw {
-		t.Fatalf("unwatched must be passed through to Jellyfin")
+	// Filters travel unmodified apart from the depth: honouring or ignoring a
+	// filter is each source's own decision.
+	if !jf.gotUnw || !nf.gotUnw {
+		t.Fatalf("filters must reach every source unmodified")
 	}
-	if nf.gotUnw {
-		t.Fatalf("unwatched must never be passed to a streaming source")
+}
+
+func TestFetchDepthUsesSourceDeclaration(t *testing.T) {
+	if got := fetchDepth(&JellyfinClient{}); got != jellyfinFetchDepth {
+		t.Fatalf("jellyfin fetch depth = %d, want %d", got, jellyfinFetchDepth)
+	}
+	if got := fetchDepth(&fakeSource{id: SourceNetflix}); got != streamingFetchDepth {
+		t.Fatalf("undeclared fetch depth = %d, want %d", got, streamingFetchDepth)
 	}
 }
 
