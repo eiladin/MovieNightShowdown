@@ -2,9 +2,8 @@
 
 **Why**
 
-**How you verified it**
+**How you verified it beyond CI** (manual runs, screenshots, edge cases)
 
 ---
 - [ ] Title follows Conventional Commits (it becomes the squashed commit message)
-- [ ] `go test ./...` and `npm test` pass
 - [ ] Docs updated if behaviour or configuration changed
