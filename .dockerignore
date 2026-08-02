@@ -1,0 +1,26 @@
+# The build context is the cache key for `COPY . .` in the backend stage, so
+# anything in it that the binary does not depend on causes a needless rebuild.
+# Editing a workflow file used to invalidate the Go compile for exactly this
+# reason.
+
+.git
+.github
+.gitignore
+
+# Rebuilt inside the image by the web stage. Copying a developer's local
+# artifacts in would both bust the cache and risk shipping a stale bundle.
+web/node_modules
+web/dist
+
+# Documentation and screenshot tooling: read by humans, not linked into the
+# binary.
+docs
+scripts/screenshots
+*.md
+LICENSE
+
+# Deployment and local tooling, not build inputs.
+docker-compose.yml
+Dockerfile
+.dockerignore
+Makefile
