@@ -1,0 +1,45 @@
+# Grouped and monthly on purpose: this is a hobby project, and a weekly drip of
+# single-dependency pull requests is the fastest way to stop reading them. Each
+# ecosystem opens at most one pull request per run.
+version: 2
+
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      go:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: monthly
+    groups:
+      # Split so a routine dev-tooling bump is not mixed in with a React or
+      # router upgrade that needs the app actually exercised.
+      dev:
+        dependency-type: development
+        patterns: ["*"]
+      prod:
+        dependency-type: production
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # The Dockerfile pins node and golang by major version and uses distroless
+  # for the runtime; this catches those base images moving.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      docker:
+        patterns: ["*"]
