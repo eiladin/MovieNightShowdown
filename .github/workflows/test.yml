@@ -47,6 +47,13 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
 
+      # Configured in .golangci.yml, tuned for bugs over style. Last because it
+      # is the slowest step and the least likely to fail.
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.10
+
   web:
     runs-on: ubuntu-latest
     defaults:

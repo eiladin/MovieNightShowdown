@@ -49,7 +49,10 @@ func TestHub_BroadcastDuringDisconnect_NoPanic(t *testing.T) {
 	}
 
 	for i := 0; i < nClients; i++ {
-		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+		conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
+		if resp != nil {
+			resp.Body.Close()
+		}
 		if err != nil {
 			t.Fatalf("dial client %d: %v", i, err)
 		}
