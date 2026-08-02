@@ -119,18 +119,20 @@
     width: 100%;
 }
 
-/* Source picker: reuses .chip, adding a per-service accent when selected so
-   the four options are distinguishable at a glance. */
+/* Source picker: reuses .chip, adding a per-service accent when selected so the
+   options are distinguishable at a glance. The accent arrives as the
+   --source-accent custom property (see sourceColor.ts) rather than a rule per
+   service: the source set is open, so every provider gets a color without any
+   of them needing an entry here. */
 .source-picker legend {
     font-size: 0.9rem;
     opacity: 0.8;
     padding-bottom: 0.25rem;
 }
 
-.source-chip-jellyfin.checked { border-color: #00a4dc; }
-.source-chip-netflix.checked { border-color: #e50914; }
-.source-chip-prime.checked { border-color: #00a8e1; }
-.source-chip-disney.checked { border-color: #113ccf; }
+.source-chip.checked {
+    border-color: var(--source-accent, var(--chip-fill));
+}
 
 .unwatched-toggle.disabled {
     opacity: 0.5;
@@ -142,15 +144,12 @@
     opacity: 0.7;
 }
 
-/* A source with no credentials on the server cannot be selected. */
-.chip.disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-}
-
-.chip-hint {
-    font-size: 0.8em;
-    opacity: 0.75;
+/* Shown in place of the streaming chips when the server offers none. */
+.source-hint {
+    flex-basis: 100%;
+    margin: 0.25rem 0 0;
+    font-size: 0.85rem;
+    opacity: 0.7;
 }
 
 /* A source that is configured but did not respond to the preview query. */

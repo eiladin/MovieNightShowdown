@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { getAvailableFilters, getPreview, warmLibrary, type AvailableFilters, type PreviewFilters, type PreviewResponse, type SourceID } from '../api'
-import { useSessionStore } from '../store'
+import { getAvailableFilters, getPreview, warmLibrary, type AvailableFilters, type PreviewFilters, type PreviewResponse, type SourceDescriptor, type SourceID } from '../api'
+import { useFiltersFor, useSessionStore } from '../store'
+import { accentStyle } from '../sourceColor'
 import '../styles/admin.css'
 
 const RATING_ORDER: Record<string, number> = {
@@ -34,35 +35,37 @@ function sortGenres(genres: string[]): string[] {
     return [...genres].sort((a, b) => a.localeCompare(b))
 }
 
-// SELECTABLE_SOURCES is the fixed set a host can draw from. Streaming sources
-// are offered unconditionally; the server skips any that are not configured on
-// this deployment and reports them as unavailable at start.
-const SELECTABLE_SOURCES: { id: SourceID; label: string }[] = [
-    { id: 'jellyfin', label: 'Jellyfin' },
-    { id: 'netflix', label: 'Netflix' },
-    { id: 'prime', label: 'Prime Video' },
-    { id: 'disney', label: 'Disney+' },
-]
-
 // HostSetup is the host's filter + library-preview page. The host arrives
 // here with a session already created (the code comes from the ?code= query
 // param), picks filters, previews the matching library, and proceeds to the
 // lobby.
+//
+// The form is keyed by session code. Navigating from one session's setup to
+// another's changes only the query param, so React Router keeps this component
+// mounted and the useState initializers below never re-run — the previous
+// session's picks would stay on screen. The key forces a remount instead.
 export default function HostSetup() {
     const [searchParams] = useSearchParams()
     const sessionCode = searchParams.get('code')
+    return <HostSetupForm key={sessionCode ?? ''} sessionCode={sessionCode} />
+}
+
+function HostSetupForm({ sessionCode }: { sessionCode: string | null }) {
     const setFilters = useSessionStore((s) => s.setFilters)
-    // Seed from whatever was last carried to the lobby, so arriving here via
-    // "Change filters" shows the previous selection rather than a blank form.
+    // Seed from what was last chosen *for this session*, so arriving here via
+    // "Change filters" shows the previous selection while a newly created
+    // session starts blank rather than inheriting the last one's picks.
     // Only read on the first render; these are uncontrolled from here on.
-    const saved = useSessionStore((s) => s.filters)
+    const saved = useFiltersFor(sessionCode)
 
     const [genres, setGenres] = useState<string[]>(saved.genres ?? [])
     const [yearMin, setYearMin] = useState(saved.yearMin ? String(saved.yearMin) : '')
     const [yearMax, setYearMax] = useState(saved.yearMax ? String(saved.yearMax) : '')
     const [officialRatings, setOfficialRatings] = useState<string[]>(saved.officialRatings ?? [])
     const [unwatched, setUnwatched] = useState(saved.unwatched ?? false)
-    const [sources, setSources] = useState<SourceID[]>(saved.sources ?? ['jellyfin'])
+    // Starts empty rather than assuming Jellyfin: which sources exist is the
+    // server's answer, and it reconciles this below once it arrives.
+    const [sources, setSources] = useState<SourceID[]>(saved.sources ?? [])
     const [preview, setPreview] = useState<PreviewResponse | null>(null)
     const [available, setAvailable] = useState<AvailableFilters | null>(null)
     // Distinguishes "no answer yet" from "answered, and the answer was an
@@ -83,21 +86,28 @@ export default function HostSetup() {
                 })
                 // Reconcile any selection made while the answer was in flight.
                 // A source the server cannot query must not survive in state:
-                // it would ship in host:start and be dropped silently, and its
-                // chip would render checked-and-disabled, which cannot be
-                // cleared because a disabled input fires no onChange.
+                // it would ship in host:start and be dropped silently, and it
+                // renders no chip, so the host could never clear it.
+                //
+                // Falling back to the first configured source rather than to
+                // Jellyfin: a streaming-only deployment has no Jellyfin to
+                // select, and a hardcoded fallback would leave the picker
+                // holding a source the server cannot query.
+                const configuredIds = configured.map((s) => s.id)
                 setSources((current) => {
-                    const allowed = current.filter((id) => configured.includes(id))
-                    return allowed.length > 0 ? allowed : ['jellyfin']
+                    const allowed = current.filter((id) => configuredIds.includes(id))
+                    if (allowed.length > 0) return allowed
+                    return configuredIds.length > 0 ? [configuredIds[0]] : []
                 })
                 setSourcesLoaded(true)
             })
             .catch((err) => {
                 console.error('Failed to load available filters:', err)
-                setError('Could not load filter options from Jellyfin.')
-                // The question has been answered, badly. Fall back to Jellyfin
-                // rather than leaving every source selectable on no information.
-                setSources(['jellyfin'])
+                setError('Could not load filter options.')
+                // The question has been answered, badly. Leave the selection
+                // alone rather than asserting a source on no information; the
+                // server falls back to its first configured source.
+                setSources([])
                 setSourcesLoaded(true)
             })
     }, [])
@@ -110,20 +120,26 @@ export default function HostSetup() {
         setOfficialRatings((prev) => (prev.includes(rating) ? prev.filter((r) => r !== rating) : [...prev, rating]))
     }
 
-    // Three states, three answers:
-    //   loading           -> everything enabled; nothing has been claimed yet
-    //   loaded, succeeded -> only what the server reported
-    //   loaded, failed    -> Jellyfin only, which the server always configures
-    function sourceConfigured(id: SourceID): boolean {
-        if (!sourcesLoaded) return true
-        if (!available) return id === 'jellyfin'
-        return available.sources.includes(id)
+    // Render exactly what the server reported, and nothing before it answers.
+    // An unconfigured source never appears at all, rather than appearing greyed
+    // out, and no chip flashes on the way to a deployment that lacks it.
+    const offeredSources: SourceDescriptor[] = sourcesLoaded && available ? available.sources : []
+
+    // Nothing beyond the local library is on offer, so point the host at what
+    // would unlock the rest.
+    const streamingUnavailable =
+        sourcesLoaded && available !== null && offeredSources.every((s) => s.id === 'jellyfin')
+
+    // sourceLabel names a source the server reported, falling back to its id.
+    // Ids are not always readable — a provider configured by number resolves to
+    // something like "tmdb-1899" — so prefer the label wherever one exists.
+    function sourceLabel(id: SourceID): string {
+        return offeredSources.find((s) => s.id === id)?.label ?? id
     }
 
     // At least one source must stay selected: a session with no source has no
     // deck to deal.
     function toggleSource(id: SourceID) {
-        if (!sourceConfigured(id)) return
         setSources((current) => {
             if (!current.includes(id)) return [...current, id]
             if (current.length === 1) return current
@@ -158,9 +174,10 @@ export default function HostSetup() {
 
     // Carry the chosen filters over to the Lobby, where "Begin" sends them in
     // host:start. Filters live in the shared session store rather than the
-    // URL since they can include an arbitrary list of genres.
+    // URL since they can include an arbitrary list of genres, and are stored
+    // under this session's code so they never reach a different session.
     function handleGoToLobby() {
-        setFilters(currentFilters())
+        if (sessionCode) setFilters(sessionCode, currentFilters())
         // Warm the poster cache during the lobby-fill window (fire-and-forget;
         // must never block entering the lobby).
         warmLibrary(currentFilters()).catch((err) =>
@@ -180,26 +197,30 @@ export default function HostSetup() {
 
             <fieldset className="chip-group source-picker">
                 <legend>Sources</legend>
-                {SELECTABLE_SOURCES.map((s) => {
-                    const configured = sourceConfigured(s.id)
-                    return (
-                        <label
-                            key={s.id}
-                            className={`chip source-chip source-chip-${s.id} ${sources.includes(s.id) ? 'checked' : ''}${configured ? '' : ' disabled'}`}
-                            title={configured ? undefined : 'Not configured on this server'}
-                        >
-                            <input
-                                type="checkbox"
-                                className="sr-only"
-                                checked={sources.includes(s.id)}
-                                disabled={!configured}
-                                onChange={() => toggleSource(s.id)}
-                            />
-                            {s.label}
-                            {!configured && <span className="chip-hint"> (not configured)</span>}
-                        </label>
-                    )
-                })}
+                {offeredSources.map((s) => (
+                    <label
+                        key={s.id}
+                        className={`chip source-chip ${sources.includes(s.id) ? 'checked' : ''}`}
+                        style={accentStyle(s.id)}
+                    >
+                        <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={sources.includes(s.id)}
+                            onChange={() => toggleSource(s.id)}
+                        />
+                        {s.label}
+                    </label>
+                ))}
+                {streamingUnavailable && (
+                    <p className="source-hint">
+                        Add a{' '}
+                        <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noreferrer">
+                            TMDB API read token
+                        </a>{' '}
+                        to offer streaming services as sources.
+                    </p>
+                )}
             </fieldset>
 
             {available && available.genres.length > 0 && (
@@ -274,7 +295,8 @@ export default function HostSetup() {
                 <div className="preview-results">
                     {(preview.unavailable?.length ?? 0) > 0 && (
                         <p className="preview-unavailable">
-                            Could not reach: {preview.unavailable.join(', ')}. Those results are missing.
+                            Could not reach: {preview.unavailable.map(sourceLabel).join(', ')}. Those
+                            results are missing.
                         </p>
                     )}
                     <p className="preview-count">
