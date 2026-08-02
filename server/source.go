@@ -39,6 +39,12 @@ type NamedSource interface {
 	Name() string
 }
 
+// DepthedSource is a source that declares how many candidates it contributes
+// to the shoe. Sources without one use streamingFetchDepth.
+type DepthedSource interface {
+	FetchDepth() int
+}
+
 // sourceLabel is the display name for a source, falling back to its id.
 func sourceLabel(s MovieSource) string {
 	if n, ok := s.(NamedSource); ok && n.Name() != "" {
@@ -58,6 +64,7 @@ type MovieSource interface {
 }
 
 var _ MovieSource = (*JellyfinClient)(nil)
+var _ DepthedSource = (*JellyfinClient)(nil)
 
 // PosterFetcher fetches one poster's bytes from a source's upstream. It is
 // separate from MovieSource because the image proxy resolves a fetcher by
