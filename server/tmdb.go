@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -17,8 +18,10 @@ const (
 	tmdbAPIBase   = "https://api.themoviedb.org/3"
 	tmdbImageBase = "https://image.tmdb.org/t/p/w500"
 
-	// tmdbWatchRegion is hardcoded: the deployment serves one household.
-	tmdbWatchRegion = "US"
+	// defaultWatchRegion is used when TMDB_WATCH_REGION is unset. Streaming
+	// availability is regional: which services exist and what they carry both
+	// depend on it.
+	defaultWatchRegion = "US"
 
 	// tmdbVoteCountFloor keeps unrated obscurities out of the deck. Measured
 	// against the live API on 2026-07-31: at 50 the sampled pages contain
@@ -43,13 +46,6 @@ const (
 	// vector.
 	tmdbMaxPosterBytes = 8 << 20 // 8 MiB
 )
-
-// tmdbProviderIDs maps each supported source to its TMDB watch provider id.
-var tmdbProviderIDs = map[SourceID]int{
-	SourceNetflix: 8,
-	SourcePrime:   9,
-	SourceDisney:  337,
-}
 
 // tmdbGenreIDs maps Jellyfin genre names to TMDB genre ids. Jellyfin is the
 // canonical vocabulary: the picker is built from the host's actual library
@@ -80,11 +76,35 @@ var tmdbGenreIDs = map[string]int{
 	"Western":          37,
 }
 
-// tmdbCertifications is the set of US certifications TMDB recognizes. A
-// Jellyfin OfficialRating outside this set is dropped from the streaming query
-// rather than being approximated.
-var tmdbCertifications = map[string]bool{
-	"G": true, "PG": true, "PG-13": true, "R": true, "NC-17": true, "NR": true,
+// tmdbCertificationOrder lists the US certifications TMDB recognizes, from
+// most to least permissive. The order is what the picker offers when there is
+// no Jellyfin library to enumerate.
+var tmdbCertificationOrder = []string{"G", "PG", "PG-13", "R", "NC-17", "NR"}
+
+// tmdbCertifications is the set form of tmdbCertificationOrder. A Jellyfin
+// OfficialRating outside this set is dropped from the streaming query rather
+// than being approximated.
+var tmdbCertifications = func() map[string]bool {
+	m := make(map[string]bool, len(tmdbCertificationOrder))
+	for _, c := range tmdbCertificationOrder {
+		m[c] = true
+	}
+	return m
+}()
+
+// defaultAvailableFilters is the filter vocabulary offered when there is no
+// Jellyfin library to enumerate — a streaming-only deployment. It is derived
+// from the TMDB maps rather than hand-written, so the picker can only offer
+// values a streaming query actually honors.
+func defaultAvailableFilters() AvailableFilters {
+	genres := make([]string, 0, len(tmdbGenreNames))
+	for _, name := range tmdbGenreNames {
+		genres = append(genres, name)
+	}
+	sort.Strings(genres)
+	ratings := make([]string, len(tmdbCertificationOrder))
+	copy(ratings, tmdbCertificationOrder)
+	return AvailableFilters{Genres: genres, OfficialRatings: ratings}
 }
 
 // TMDBSource queries one streaming provider's catalog through TMDB's Discover
@@ -92,30 +112,37 @@ var tmdbCertifications = map[string]bool{
 // share an HTTP client and a token.
 type TMDBSource struct {
 	source   SourceID
+	name     string
 	provider int
+	region   string
 	token    string
 	baseURL  string
 	imageURL string
 	http     *http.Client
 }
 
-// NewTMDBSource returns a source for one provider. It returns nil if the
-// provider is not supported or no token is configured, so callers can build the
-// available sources by filtering nils.
-func NewTMDBSource(cfg Config, source SourceID) *TMDBSource {
-	provider, ok := tmdbProviderIDs[source]
-	if !ok || cfg.TMDBReadToken == "" {
+// NewTMDBSource returns a source for one already-resolved provider. It returns
+// nil when no token is configured, so callers can build the available sources
+// by filtering nils.
+func NewTMDBSource(cfg Config, p StreamingProvider) *TMDBSource {
+	if cfg.TMDBReadToken == "" {
 		return nil
 	}
 	return &TMDBSource{
-		source:   source,
-		provider: provider,
+		source:   p.ID,
+		name:     p.Name,
+		provider: p.TMDBID,
+		region:   cfg.TMDBWatchRegion,
 		token:    cfg.TMDBReadToken,
-		baseURL:  tmdbAPIBase,
+		baseURL:  cfg.tmdbBaseURL,
 		imageURL: tmdbImageBase,
 		http:     &http.Client{Timeout: 15 * time.Second},
 	}
 }
+
+// Name is the provider's display name, shown on the badge of every card it
+// contributes. TMDBSource implements NamedSource.
+func (t *TMDBSource) Name() string { return t.name }
 
 // ID identifies this source. TMDBSource implements MovieSource.
 func (t *TMDBSource) ID() SourceID { return t.source }
@@ -142,7 +169,7 @@ type tmdbDiscoverResponse struct {
 func (t *TMDBSource) discoverParams(f Filters, certification string, page int) url.Values {
 	q := url.Values{}
 	q.Set("with_watch_providers", strconv.Itoa(t.provider))
-	q.Set("watch_region", tmdbWatchRegion)
+	q.Set("watch_region", t.region)
 	q.Set("with_watch_monetization_types", "flatrate")
 	q.Set("sort_by", "popularity.desc")
 	q.Set("vote_count.gte", strconv.Itoa(tmdbVoteCountFloor))
@@ -170,7 +197,7 @@ func (t *TMDBSource) discoverParams(f Filters, certification string, page int) u
 		// Exact match, never certification.lte: Jellyfin's OfficialRatings is a
 		// set OR, so an ordered comparison would admit ratings the host did not
 		// select. The caller issues one query per selected certification.
-		q.Set("certification_country", tmdbWatchRegion)
+		q.Set("certification_country", t.region)
 		q.Set("certification", certification)
 	}
 	return q
@@ -345,7 +372,7 @@ func (t *TMDBSource) toMovies(resp tmdbDiscoverResponse) []Movie {
 			// Poster paths arrive with a leading slash; trim it so the proxy
 			// path has exactly one segment after the source.
 			PosterURL:    "/api/images/" + string(t.source) + "/" + strings.TrimPrefix(r.PosterPath, "/"),
-			Availability: []Availability{{Source: t.source}},
+			Availability: []Availability{{Source: t.source, Label: t.name}},
 		})
 	}
 	return movies

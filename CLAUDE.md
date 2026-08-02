@@ -64,6 +64,25 @@ hand-curated and is not touched by this pipeline.
 
 - **Commits:** Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, …).
 - **Keep it green:** the build passes and tests succeed before you stop.
+- **Sources are enumerated server-side.** `GET /api/library/filters` reports the
+  sources this deployment can query (`configuredSources` in `server/sources.go`),
+  and the frontend renders exactly that list. Do not add a client-side list of
+  streaming sources or duplicate the credential gating in the UI.
+- **`SourceID` is an open set.** Streaming sources are whatever TMDB watch
+  providers the deployment configured, so no fixed list of source ids or display
+  names may exist on either side. Labels travel with the data: `SourceDescriptor`
+  on the source list, `Availability.Label` on each card. `knownProviders` in
+  `server/providers.go` is an offline shortcut and a pin for the ids this app
+  shipped with — never a limit on what can be configured.
+- **Only the host's filter picks are persisted client-side.** `web/src/store.ts`
+  persists `filtersByCode` (keyed by session code, capped at 5 entries) to
+  localStorage and nothing else. Every other field is server-derived and must be
+  re-fetched on reconnect; persisting a deck or roster would restore state the
+  session disagrees with.
+- **Jellyfin is optional.** It is one source among peers and is registered only
+  when its credentials are set. Code must not assume it exists: filter options
+  fall back to `defaultAvailableFilters()` without it, and `selectSources` falls
+  back to the first configured source rather than to Jellyfin.
 - The docs (`CLAUDE.md`, `README.md`, `docs/*`) are written in a neutral,
   professional voice, since they are read by other agents and humans.
 
@@ -71,11 +90,19 @@ hand-curated and is not touched by this pipeline.
 
 | Var | Required | Purpose |
 |---|---|---|
-| `JELLYFIN_URL` | yes | Base URL of the Jellyfin server |
-| `JELLYFIN_API_KEY` | yes | Jellyfin API key (stays server-side, never sent to clients) |
+| `JELLYFIN_URL` | one of¹ | Base URL of the Jellyfin server |
+| `JELLYFIN_API_KEY` | one of¹ | Jellyfin API key (stays server-side, never sent to clients) |
 | `JELLYFIN_USER_ID` | optional | Needed for "unwatched" filtering |
 | `PUBLIC_URL` | yes | Base URL used to build QR/join links |
 | `PORT` | optional | Listen port (default 8080) |
 | `SESSION_TTL` | optional | Session expiry (default a few hours) |
 | `CACHE_DIR` | optional | Directory for the on-disk poster cache (default a temp dir); mount a volume in Docker to persist it across restarts |
-| `TMDB_READ_TOKEN` | optional | TMDB v4 API Read Access Token. Required to offer Netflix, Prime Video, or Disney+ as sources; without it only Jellyfin is available. Stays server-side, never sent to clients. |
+| `TMDB_READ_TOKEN` | one of¹ | TMDB v4 API Read Access Token. Enables streaming services as sources. When unset, the server registers no streaming source, so the API does not advertise them and the UI does not render them. Stays server-side, never sent to clients. |
+| `STREAMING_PROVIDERS` | optional | Comma-separated streaming services to offer, by provider name **or numeric TMDB provider id**. Any TMDB watch provider is accepted, not a fixed set. Normalized in `LoadConfig` (trimmed, lowercased, de-duplicated) and resolved in `New` via `resolveStreamingProviders`. Defaults to `netflix,prime,disney`; inert without `TMDB_READ_TOKEN`. |
+| `TMDB_WATCH_REGION` | optional | ISO 3166-1 region for provider resolution and every Discover query. Defaults to `US`. |
+
+¹ At least one movie source is required: Jellyfin (`JELLYFIN_URL` **and**
+`JELLYFIN_API_KEY`), streaming (`TMDB_READ_TOKEN`), or both. `Config.JellyfinConfigured`
+and `Config.StreamingConfigured` are the predicates. With neither set, `New`
+registers no source, logs what is missing, and every client route redirects to
+the in-app `/setup` guide (`server/setup.go`, `web/src/pages/Setup.tsx`).

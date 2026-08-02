@@ -21,7 +21,7 @@ type libraryPreviewResponse struct {
 func (s *Server) handleLibraryPreview(w http.ResponseWriter, r *http.Request) {
 	filters := ParseFilters(r.URL.Query())
 
-	sources := selectSources(s.sources, filters.Sources)
+	sources := selectSources(s.sources, filters.Sources, s.order)
 	movies, failed, err := gatherShoe(r.Context(), sources, filters)
 	if err != nil {
 		log.Printf("library preview: %v", err)
@@ -49,23 +49,32 @@ func (s *Server) handleLibraryPreview(w http.ResponseWriter, r *http.Request) {
 // keeps its existing shape and only gains "sources".
 type libraryFiltersResponse struct {
 	AvailableFilters
-	Sources []SourceID `json:"sources"`
+	Sources []SourceDescriptor `json:"sources"`
 }
 
-// handleLibraryFilters fetches the available filter options (genres, ratings)
-// from the Jellyfin library.
+// handleLibraryFilters returns the available filter options (genres, ratings).
+// With a Jellyfin library they are enumerated from it, so the picker offers
+// exactly what is on the shelf. Without one — a streaming-only deployment —
+// they fall back to the default vocabulary, since a TMDB catalog is far too
+// large to enumerate and the picker would otherwise be empty.
 func (s *Server) handleLibraryFilters(w http.ResponseWriter, r *http.Request) {
-	filters, err := s.jellyfin.GetAvailableFilters(r.Context())
-	if err != nil {
-		log.Printf("library filters: %v", err)
-		http.Error(w, "failed to fetch available filters from Jellyfin", http.StatusBadGateway)
-		return
+	var filters AvailableFilters
+	if s.cfg.JellyfinConfigured() {
+		var err error
+		filters, err = s.jellyfin.GetAvailableFilters(r.Context())
+		if err != nil {
+			log.Printf("library filters: %v", err)
+			http.Error(w, "failed to fetch available filters from Jellyfin", http.StatusBadGateway)
+			return
+		}
+	} else {
+		filters = defaultAvailableFilters()
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(libraryFiltersResponse{
 		AvailableFilters: filters,
-		Sources:          configuredSources(s.sources),
+		Sources:          configuredSources(s.sources, s.order),
 	})
 }
 
@@ -75,7 +84,7 @@ func (s *Server) handleLibraryFilters(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLibraryWarm(w http.ResponseWriter, r *http.Request) {
 	filters := ParseFilters(r.URL.Query())
 
-	sources := selectSources(s.sources, filters.Sources)
+	sources := selectSources(s.sources, filters.Sources, s.order)
 	movies, _, err := gatherShoe(r.Context(), sources, filters)
 	if err != nil {
 		log.Printf("library warm: %v", err)

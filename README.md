@@ -84,6 +84,20 @@ job well.
 
 It's the kind of thing you set up once and quietly rely on every Friday night.
 
+Optionally, it can look beyond your own shelves. Add a TMDB API read token and
+the host can also draw from streaming services, so the deck covers what you can
+stream as well as what you own. Netflix, Prime Video, and Disney+ come
+configured; name any other service TMDB tracks — Hulu, Peacock, Max — and it is
+offered too. A movie available in both places shows up once, badged with
+everywhere it can be watched.
+Without a token the app is Jellyfin-only, and nothing about streaming appears in
+the UI. A token on its own works too, if you want a showdown with no local
+library at all. See [docs/INSTALL.md](docs/INSTALL.md#streaming-services).
+
+Start it with nothing configured and it won't leave you guessing: it points you
+at a built-in setup page that spells out the environment variables for each of
+those three ways to run it.
+
 ## Get it running
 
 If you already run Jellyfin with Docker, you're a compose file and two
