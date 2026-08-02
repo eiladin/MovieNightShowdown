@@ -77,7 +77,14 @@ func healthcheck() {
 	}
 	client := http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Get("http://127.0.0.1:" + port + "/healthz")
-	if err != nil || resp.StatusCode != http.StatusOK {
+	if err != nil {
+		os.Exit(1)
+	}
+	// Read the status before closing, and close explicitly rather than with
+	// defer: os.Exit does not run deferred calls.
+	status := resp.StatusCode
+	resp.Body.Close()
+	if status != http.StatusOK {
 		os.Exit(1)
 	}
 	os.Exit(0)

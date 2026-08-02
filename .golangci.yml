@@ -1,0 +1,37 @@
+# Tuned for bugs over style. The codebase was clean when this was added, so the
+# job here is to stop regressions rather than to work through a backlog — which
+# means a finding should be worth acting on, or it trains everyone to ignore the
+# next one.
+#
+# gofmt is enforced separately in .github/workflows/test.yml, and go vet runs as
+# its own step, so neither is duplicated here.
+version: "2"
+
+linters:
+  default: none
+  enable:
+    # Bug-finding: misuse of the standard library, impossible conditions,
+    # ineffective code.
+    - staticcheck
+    # Assignments whose value is never read — usually a typo'd variable or a
+    # dropped error.
+    - ineffassign
+    # Unused private functions, types and fields.
+    - unused
+    # HTTP response bodies that are never closed. This is the leak that
+    # actually matters; errcheck only notices the error value being discarded,
+    # which is deliberate everywhere in this repo.
+    - bodyclose
+
+  # errcheck is deliberately not enabled. Every unchecked error here is an
+  # intentional discard — `defer resp.Body.Close()`, `os.Remove` on a cleanup
+  # path, `conn.Close()` on websocket teardown — so it reported 11 findings and
+  # zero bugs. Revisit if that ratio ever changes.
+
+  settings:
+    staticcheck:
+      checks:
+        - all
+        # QF1003: "could use a tagged switch". A style preference, not a
+        # defect, and the if-chains it flags read fine.
+        - -QF1003
