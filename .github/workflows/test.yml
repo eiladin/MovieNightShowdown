@@ -1,11 +1,12 @@
 name: Test
 
-# Tags are excluded: a tag push is a release, handled by docker-publish.yml,
-# and the commit it points at was already tested on its branch and PR.
+# Push is limited to main so a pull request is tested once, not twice: a push
+# to a branch that has an open PR would otherwise fire both triggers for the
+# same commit. Tags are excluded because a tag is a release, handled by
+# docker-publish.yml, and the commit it points at was already tested here.
 on:
   push:
-    branches: [ "**" ]
-    tags-ignore: [ "**" ]
+    branches: [ "main" ]
   pull_request:
 
 permissions:
@@ -23,6 +24,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
+
+      # main.go embeds web/dist, which is a build artifact and is not committed,
+      # so a bare checkout cannot compile. The frontend is built and tested by
+      # the web job; this placeholder only satisfies the embed directive.
+      - name: Stub the embedded frontend
+        run: mkdir -p web/dist && touch web/dist/index.html
 
       - run: go build ./...
       - run: go vet ./...
