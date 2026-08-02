@@ -62,9 +62,10 @@ request rather than adding a blanket suppression.
 
 ## Architecture notes
 
-`CLAUDE.md` in the repository root is the fullest description of how the pieces
+`AGENTS.md` in the repository root is the fullest description of how the pieces
 fit together and which invariants matter. It is written for coding agents but
-is accurate and readable for humans; read it before a non-trivial change.
+is accurate and readable for humans; read it before a non-trivial change. The
+`CLAUDE.md` beside it is a one-line import of that file and nothing more.
 
 The two rules most easily broken by well-meaning patches:
 
