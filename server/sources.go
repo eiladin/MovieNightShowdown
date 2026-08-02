@@ -78,10 +78,12 @@ type SourceDescriptor struct {
 	Label string   `json:"label"`
 }
 
-// fetchDepth is how many candidates a source contributes to the shoe.
-func fetchDepth(id SourceID) int {
-	if id == SourceJellyfin {
-		return jellyfinFetchDepth
+// fetchDepth is how many candidates a source contributes to the shoe. A source
+// that declares its own depth decides for itself; the rest use the streaming
+// default.
+func fetchDepth(s MovieSource) int {
+	if d, ok := s.(DepthedSource); ok {
+		return d.FetchDepth()
 	}
 	return streamingFetchDepth
 }
@@ -101,13 +103,10 @@ func gatherShoe(ctx context.Context, sources []MovieSource, f Filters) ([]Movie,
 		wg.Add(1)
 		go func(i int, src MovieSource) {
 			defer wg.Done()
+			// Filters pass through unchanged apart from the depth: a source
+			// that cannot honour a filter ignores it itself.
 			sf := f
-			sf.Limit = fetchDepth(src.ID())
-			if src.ID() != SourceJellyfin {
-				// "Unwatched" is a Jellyfin concept: it needs a Jellyfin user's
-				// play state and has no meaning for a streaming catalog.
-				sf.Unwatched = false
-			}
+			sf.Limit = fetchDepth(src)
 			movies, err := src.Search(ctx, sf)
 			results[i] = sourceResult{source: src.ID(), movies: movies, err: err}
 		}(i, src)
