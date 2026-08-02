@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Route, Routes } from 'react-router'
 import RequireSetup from './components/RequireSetup'
 import HostSetup from './pages/HostSetup'
 import Landing from './pages/Landing'
