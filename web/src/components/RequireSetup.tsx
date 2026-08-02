@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate } from 'react-router'
 import { getSetupStatus } from '../api'
 
 // RequireSetup keeps the app out of reach until this deployment has at least

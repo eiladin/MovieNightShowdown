@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router'
 import QRJoin from '../components/QRJoin'
 import { useFiltersFor, useSessionStore } from '../store'
 import {

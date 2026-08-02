@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { useSessionStore } from '../store'
 import type { SessionSocket } from '../ws'
 import Confetti from '../components/Confetti'

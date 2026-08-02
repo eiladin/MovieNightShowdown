@@ -11,13 +11,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@react-spring/web": "^9.7.5",
     "canvas-confetti": "^1.9.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "motion": "^12.43.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "react-qr-code": "^2.2.0",
-    "react-router-dom": "^7.18.1",
-    "react-tinder-card": "^1.6.4",
+    "react-router": "^8.3.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
@@ -25,14 +24,14 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/canvas-confetti": "^1.9.0",
-    "@types/node": "^24.13.2",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^6.0.3",
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
     "jsdom": "^30.0.1",
-    "oxlint": "^1.71.0",
+    "oxlint": "^1.76.0",
     "typescript": "~6.0.2",
-    "vite": "^8.1.1",
+    "vite": "^8.2.0",
     "vitest": "^4.1.10"
   }
 }
