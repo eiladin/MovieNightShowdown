@@ -92,8 +92,11 @@ if [[ "${MODE_SET}" -eq 0 ]]; then
 fi
 
 # 1. Determine CURRENT version from git tags (source of truth).
+# Use the highest semver tag in the repository, not the nearest tag reachable
+# from HEAD: releases are often tagged on branches that this one does not
+# contain, and `git describe` would then compute a bump from a stale version.
 BOOTSTRAP=0
-if CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null); then
+if CURRENT_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1) && [[ -n "${CURRENT_TAG}" ]]; then
     CURRENT_VERSION="${CURRENT_TAG#v}"
 else
     BOOTSTRAP=1
