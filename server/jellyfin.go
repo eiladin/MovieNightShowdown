@@ -122,34 +122,38 @@ func (c *JellyfinClient) Movies(ctx context.Context, filters Filters) ([]Movie, 
 
 	movies := make([]Movie, 0, len(parsed.Items))
 	for _, it := range parsed.Items {
-		posterURL := "/api/images/" + string(SourceJellyfin) + "/" + it.ID
-		if tag := it.ImageTags["Primary"]; tag != "" {
-			posterURL += "?tag=" + url.QueryEscape(tag)
-		}
-		// Prefer the TMDB id so a library item and the same film from a
-		// streaming source collapse into one deck entry. Items without one
-		// (direct rips, home video) fall back to a Jellyfin-namespaced id and
-		// simply never merge.
-		id := "jf:" + it.ID
-		if it.ProviderIds.Tmdb != "" {
-			id = "tmdb:" + it.ProviderIds.Tmdb
-		}
-		m := Movie{
-			ID:              id,
-			Title:           it.Name,
-			Year:            it.ProductionYear,
-			Genres:          it.Genres,
-			Overview:        it.Overview,
-			Runtime:         int(it.RunTimeTicks / 10_000_000 / 60),
-			CommunityRating: it.CommunityRating,
-			OfficialRating:  it.OfficialRating,
-			PosterURL:       posterURL,
-			Availability:    []Availability{{Source: SourceJellyfin, Label: "Jellyfin"}},
-		}
-		movies = append(movies, m)
+		movies = append(movies, it.toMovie())
 	}
 
 	return movies, parsed.TotalRecordCount, nil
+}
+
+// toMovie maps one Jellyfin item onto the shared Movie type.
+func (it jellyfinItem) toMovie() Movie {
+	posterURL := "/api/images/" + string(SourceJellyfin) + "/" + it.ID
+	if tag := it.ImageTags["Primary"]; tag != "" {
+		posterURL += "?tag=" + url.QueryEscape(tag)
+	}
+	// Prefer the TMDB id so a library item and the same film from a
+	// streaming source collapse into one deck entry. Items without one
+	// (direct rips, home video) fall back to a Jellyfin-namespaced id and
+	// simply never merge.
+	id := "jf:" + it.ID
+	if it.ProviderIds.Tmdb != "" {
+		id = "tmdb:" + it.ProviderIds.Tmdb
+	}
+	return Movie{
+		ID:              id,
+		Title:           it.Name,
+		Year:            it.ProductionYear,
+		Genres:          it.Genres,
+		Overview:        it.Overview,
+		Runtime:         int(it.RunTimeTicks / 10_000_000 / 60),
+		CommunityRating: it.CommunityRating,
+		OfficialRating:  it.OfficialRating,
+		PosterURL:       posterURL,
+		Availability:    []Availability{{Source: SourceJellyfin, Label: "Jellyfin"}},
+	}
 }
 
 // AvailableFilters represents the possible values for filtering the library.

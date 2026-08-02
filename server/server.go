@@ -1,3 +1,6 @@
+// Package server implements the movie-night backend: session and roster
+// management, the WebSocket hub that keeps every device's deck in sync, the
+// movie sources it deals from, and the poster image proxy and cache.
 package server
 
 import (
