@@ -55,7 +55,9 @@ export interface PreviewResponse {
     unavailable: SourceID[]
 }
 
-function buildPreviewParams(filters: PreviewFilters): URLSearchParams {
+// Exported for tests: the query-param encoding is the contract with
+// server.ParseFilters and is worth pinning independently of the fetch calls.
+export function buildPreviewParams(filters: PreviewFilters): URLSearchParams {
     const params = new URLSearchParams()
     for (const genre of filters.genres ?? []) {
         params.append('genres', genre)
