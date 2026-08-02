@@ -91,10 +91,11 @@ It's the kind of thing you set up once and quietly rely on every Friday night.
 
 Optionally, it can look beyond your own shelves. Add a TMDB API read token and
 the host can also draw from streaming services, so the deck covers what you can
-stream as well as what you own. Netflix, Prime Video, and Disney+ come
-configured; name any other service TMDB tracks — Hulu, Peacock, Max — and it is
-offered too. A movie available in both places shows up once, badged with
-everywhere it can be watched.
+stream as well as what you own. Out of the box that's Netflix, Prime Video, and
+Disney+; name your own services instead — any TMDB tracks, so Hulu, Peacock, and
+Max are all fair game — and those are what the deck draws from. A movie
+available in both places shows up once, badged with everywhere it can be
+watched.
 Without a token the app is Jellyfin-only, and nothing about streaming appears in
 the UI. A token on its own works too, if you want a showdown with no local
 library at all. See [docs/INSTALL.md](docs/INSTALL.md#streaming-services).

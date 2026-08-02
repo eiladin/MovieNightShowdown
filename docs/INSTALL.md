@@ -166,13 +166,15 @@ not limited to a fixed set: **any watch provider TMDB tracks can be named**, so
 if your household uses Hulu and Peacock, ask for those.
 
 ```yaml
-STREAMING_PROVIDERS: hulu,peacock,max
+STREAMING_PROVIDERS: hulu,peacock
 ```
 
 Behavior:
 
 - **Unset** — Netflix, Prime Video, and Disney+ are offered, so existing
   deployments are unchanged.
+- **Set** — the list you give *replaces* the default entirely; it is not added
+  to it. To keep Netflix alongside Hulu, name both: `netflix,hulu`.
 - Whitespace around entries is trimmed, names are matched case-insensitively,
   empty entries are skipped, and duplicates collapse. `Netflix, DISNEY` is the
   same as `netflix,disney`.
