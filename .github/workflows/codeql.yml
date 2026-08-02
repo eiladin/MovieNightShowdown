@@ -1,0 +1,57 @@
+name: CodeQL
+
+# Scheduled as well as on pull requests, because new queries ship regularly and
+# find things in code that has not changed. Tags are excluded: a tag points at a
+# commit that was already analysed on its branch.
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+  schedule:
+    # Weekly, Monday morning UTC.
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Manual rather than autobuild: main.go embeds web/dist, which is a
+          # build artifact and is not committed, so autobuild's `go build`
+          # cannot compile a bare checkout.
+          - language: go
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Build Go
+        if: matrix.build-mode == 'manual'
+        run: |
+          mkdir -p web/dist && touch web/dist/index.html
+          go build ./...
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
