@@ -34,17 +34,35 @@ type configFile struct {
 }
 
 type jellyfinSection struct {
-	Enabled *bool   `yaml:"enabled"`
-	URL     *string `yaml:"url"`
-	APIKey  *string `yaml:"apiKey"`
-	UserID  *string `yaml:"userId"`
+	Enabled   *bool          `yaml:"enabled"`
+	URL       *string        `yaml:"url"`
+	APIKey    *string        `yaml:"apiKey"`
+	UserID    *string        `yaml:"userId"`
+	Libraries *[]fileLibrary `yaml:"libraries"`
 }
 
 type plexSection struct {
-	Enabled        *bool   `yaml:"enabled"`
-	URL            *string `yaml:"url"`
-	Token          *string `yaml:"token"`
-	LibrarySection *string `yaml:"librarySection"`
+	Enabled        *bool          `yaml:"enabled"`
+	URL            *string        `yaml:"url"`
+	Token          *string        `yaml:"token"`
+	LibrarySection *string        `yaml:"librarySection"`
+	Libraries      *[]fileLibrary `yaml:"libraries"`
+}
+
+// fileLibrary is one library as the config file stores it.
+//
+// Both fields are recorded because the settings screen knows both: it enumerated
+// the libraries to render its picker, so writing the name alongside the id means a
+// later start has nothing to resolve. The id is authoritative; the name is a label
+// that may go stale if the library is renamed on the media server.
+//
+// A pointer to the slice on the sections above, rather than a bare slice, for the
+// same reason every scalar is a pointer: "absent from the file" and "present and
+// empty" have to stay distinguishable, and only the first falls through to the
+// environment.
+type fileLibrary struct {
+	ID   *string `yaml:"id"`
+	Name *string `yaml:"name"`
 }
 
 type streamingSection struct {
@@ -225,6 +243,103 @@ func (r *resolver) providers(key, envVar string, fileVal *[]string, fileManaged 
 	return defaultStreamingProviders
 }
 
+// libraries resolves the list of media libraries for one source.
+//
+// envVars are tried in order, so a deprecated alias can be listed after the
+// current name and still be honoured. The variable that actually supplied the
+// value is the one recorded in provenance — reporting the first one checked would
+// name a variable the operator may not have set.
+//
+// The file's list wins when present, including an empty list. An empty list is not
+// "no libraries": see Config.JellyfinLibraries for why every reader treats it as
+// "every library".
+func (r *resolver) libraries(key string, fileVal *[]fileLibrary, envVars ...string) []libraryRef {
+	// Which variable, if any, is carrying a value. Needed for both branches: the
+	// file branch reports it as ignored, the environment branch reports it as the
+	// origin.
+	winner, winnerValue := "", ""
+	for _, name := range envVars {
+		if v, ok := envValue(name); ok {
+			winner, winnerValue = name, v
+			break
+		}
+	}
+
+	p := settingProvenance{EnvVar: winner}
+	if winner == "" && len(envVars) > 0 {
+		// Nothing is set. Name the current variable so the settings screen and the
+		// startup log can still say which one would apply.
+		p.EnvVar = envVars[0]
+	}
+
+	if fileVal != nil {
+		p.Source = sourceFile
+		p.EnvIgnored = winner != ""
+		r.prov[key] = p
+		return fileLibraries(*fileVal)
+	}
+	if winner != "" {
+		p.Source = sourceEnv
+		r.prov[key] = p
+		if winner != envVars[0] {
+			log.Printf("config: %s is deprecated; use %s (a comma-separated list)", winner, envVars[0])
+		}
+		return parseLibraryList(winnerValue)
+	}
+	p.Source = sourceDefault
+	r.prov[key] = p
+	return nil
+}
+
+// fileLibraries maps the config file's shape onto resolved references, dropping
+// any entry with no identifier — an entry that names nothing cannot be queried.
+func fileLibraries(in []fileLibrary) []libraryRef {
+	out := make([]libraryRef, 0, len(in))
+	seen := make(map[string]bool, len(in))
+	for _, l := range in {
+		if l.ID == nil {
+			continue
+		}
+		id := strings.TrimSpace(*l.ID)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		ref := libraryRef{ID: id}
+		if l.Name != nil {
+			ref.Name = strings.TrimSpace(*l.Name)
+		}
+		out = append(out, ref)
+	}
+	return out
+}
+
+// parseLibraryList reads a comma-separated list of library identifiers or names.
+//
+// Entries are trimmed and de-duplicated, and the case is left alone. That last
+// part is the difference from normalizeProviders, which lowercases: a provider
+// entry is a name, while this list holds opaque identifiers as well — Jellyfin's
+// are hexadecimal, Plex's are integers — and folding an identifier's case corrupts
+// it. Name matching folds case at the point of comparison instead, where it is
+// correct and where it cannot damage the stored value.
+//
+// Whether an entry is an identifier or a name is not decided here. Nothing before
+// resolution needs to know, and the test that tells them apart is per-service.
+func parseLibraryList(raw string) []libraryRef {
+	parts := strings.Split(raw, ",")
+	out := make([]libraryRef, 0, len(parts))
+	seen := make(map[string]bool, len(parts))
+	for _, part := range parts {
+		entry := strings.TrimSpace(part)
+		if entry == "" || seen[entry] {
+			continue
+		}
+		seen[entry] = true
+		out = append(out, libraryRef{ID: entry})
+	}
+	return out
+}
+
 // checkConfigFilePermissions warns when the config file is readable beyond its
 // owner. It holds credentials in plaintext, so group and world access is worth
 // naming — but the file belongs to the operator, so this warns and continues.
@@ -266,9 +381,27 @@ func logProvenance(prov map[string]settingProvenance, values map[string]string) 
 // startup log that reorders itself between restarts cannot be diffed.
 var provenanceOrder = []string{
 	"publicUrl", "sessionTtl",
-	"jellyfin.enabled", "jellyfin.url", "jellyfin.apiKey", "jellyfin.userId",
-	"plex.enabled", "plex.url", "plex.token", "plex.librarySection",
+	"jellyfin.enabled", "jellyfin.url", "jellyfin.apiKey", "jellyfin.userId", "jellyfin.libraries",
+	"plex.enabled", "plex.url", "plex.token", "plex.librarySection", "plex.libraries",
 	"streaming.enabled", "streaming.tmdbReadToken", "streaming.watchRegion", "streaming.providers",
+}
+
+// describeLibraries renders a library list for the startup log. Identifiers are
+// what a query uses, so they are what gets logged; a name is shown alongside when
+// one is known.
+func describeLibraries(refs []libraryRef) string {
+	if len(refs) == 0 {
+		return "(every library)"
+	}
+	parts := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		if ref.Name != "" {
+			parts = append(parts, fmt.Sprintf("%s (%s)", ref.Name, ref.ID))
+			continue
+		}
+		parts = append(parts, ref.ID)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // normalizeProviders applies the same trimming, lowercasing, and de-duplication

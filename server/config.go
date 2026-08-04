@@ -9,6 +9,23 @@ import (
 	"strings"
 )
 
+// libraryRef names one media library to draw movies from.
+//
+// Name is optional. An environment variable supplies bare strings, so a
+// deployment configured that way has identifiers and no display names until
+// something learns them. That is deliberate rather than a gap: the identifier is
+// all a query needs, and the name is only a label — so a library configured by id
+// works with no network call at all, and one configured by name is resolvable
+// later without blocking startup.
+type libraryRef struct {
+	// ID is the library's own identifier, opaque to this application. Jellyfin's
+	// is a hexadecimal string, Plex's is an integer, and neither is this
+	// application's to reformat or case-fold.
+	ID string
+	// Name is the library's display name, empty when only an identifier is known.
+	Name string
+}
+
 // Config holds resolved server configuration. Values come from the config
 // file, the environment, or a built-in default, resolved per key by
 // LoadConfig; Provenance records which applied to each.
@@ -18,17 +35,27 @@ type Config struct {
 	JellyfinUserID string
 	PlexURL        string
 	PlexToken      string
-	// PlexLibrarySection is the key of the Plex library section holding
-	// movies. It is optional: with it unset the client discovers the first
-	// section of type "movie" on first use. A server with more than one movie
-	// section needs it set, since discovery would otherwise pick whichever
-	// Plex listed first.
+	// PlexLibrarySection is the deprecated single-section setting. It is folded
+	// into PlexLibraries during resolution and must not be read directly:
+	// PLEX_LIBRARY_SECTION remains honoured so an existing deployment does not
+	// silently change which library it deals from, but PLEX_LIBRARY_SECTIONS is
+	// the setting that means anything.
 	PlexLibrarySection string
-	PublicURL          string
-	Port               string
-	SessionTTL         string
-	CacheDir           string
-	TMDBReadToken      string
+
+	// JellyfinLibraries and PlexLibraries are the libraries this deployment draws
+	// from, one movie source per entry.
+	//
+	// An empty list means every library, which is what an unconfigured deployment
+	// has always done: one unscoped source per service. It is not "no libraries" —
+	// that state would leave a configured service with nothing to query, which no
+	// operator asks for by leaving a setting blank.
+	JellyfinLibraries []libraryRef
+	PlexLibraries     []libraryRef
+	PublicURL         string
+	Port              string
+	SessionTTL        string
+	CacheDir          string
+	TMDBReadToken     string
 	// TMDBWatchRegion is the ISO 3166-1 region streaming availability is
 	// judged against. Which services exist, and what they carry, both depend
 	// on it.
@@ -230,6 +257,12 @@ func resolveFrom(file *configFile, path string) Config {
 		Port:        os.Getenv("PORT"),
 		tmdbBaseURL: tmdbAPIBase,
 	}
+	// PLEX_LIBRARY_SECTION is listed after the plural so the current name wins
+	// when both are set, and so the deprecation notice names the right one.
+	cfg.JellyfinLibraries = r.libraries("jellyfin.libraries", jf.Libraries, "JELLYFIN_LIBRARIES")
+	cfg.PlexLibraries = r.libraries("plex.libraries", px.Libraries,
+		"PLEX_LIBRARY_SECTIONS", "PLEX_LIBRARY_SECTION")
+
 	// A streaming section in the file means the deployment manages streaming
 	// through the settings screen, which changes what an absent provider list
 	// means; see resolver.providers.
@@ -252,8 +285,10 @@ func logResolvedConfig(cfg Config) {
 		"publicUrl": cfg.PublicURL, "sessionTtl": cfg.SessionTTL,
 		"jellyfin.enabled": strconv.FormatBool(!cfg.JellyfinDisabled), "jellyfin.url": cfg.JellyfinURL,
 		"jellyfin.apiKey": cfg.JellyfinAPIKey, "jellyfin.userId": cfg.JellyfinUserID,
-		"plex.enabled": strconv.FormatBool(!cfg.PlexDisabled), "plex.url": cfg.PlexURL,
+		"jellyfin.libraries": describeLibraries(cfg.JellyfinLibraries),
+		"plex.enabled":       strconv.FormatBool(!cfg.PlexDisabled), "plex.url": cfg.PlexURL,
 		"plex.token": cfg.PlexToken, "plex.librarySection": cfg.PlexLibrarySection,
+		"plex.libraries":    describeLibraries(cfg.PlexLibraries),
 		"streaming.enabled": strconv.FormatBool(!cfg.StreamingDisabled), "streaming.tmdbReadToken": cfg.TMDBReadToken,
 		"streaming.watchRegion": cfg.TMDBWatchRegion, "streaming.providers": strings.Join(cfg.StreamingProviders, ","),
 	})

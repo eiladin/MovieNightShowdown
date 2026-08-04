@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -196,6 +197,222 @@ streaming:
 	for _, key := range []string{"plex.url", "streaming.providers"} {
 		if p := cfg.Provenance[key]; !p.EnvIgnored {
 			t.Errorf("%s provenance = %+v, want %s reported as ignored", key, p, p.EnvVar)
+		}
+	}
+}
+
+// --- library lists ---
+
+func libraryIDs(refs []libraryRef) []string {
+	out := make([]string, 0, len(refs))
+	for _, r := range refs {
+		out = append(out, r.ID)
+	}
+	return out
+}
+
+func TestLibrariesFromEnvironment(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("JELLYFIN_LIBRARIES", "Movies,Anime")
+	t.Setenv("PLEX_LIBRARY_SECTIONS", "1,3")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	if got := libraryIDs(cfg.JellyfinLibraries); !slices.Equal(got, []string{"Movies", "Anime"}) {
+		t.Errorf("jellyfin libraries = %v", got)
+	}
+	if got := libraryIDs(cfg.PlexLibraries); !slices.Equal(got, []string{"1", "3"}) {
+		t.Errorf("plex libraries = %v", got)
+	}
+	// Nothing knows a name from an identifier yet, and nothing needs to.
+	for _, ref := range cfg.JellyfinLibraries {
+		if ref.Name != "" {
+			t.Errorf("ref %+v carries a name; the environment supplies bare strings", ref)
+		}
+	}
+}
+
+// The case of an entry is left exactly as written. normalizeProviders lowercases,
+// which is right for a provider name and wrong here: this same list holds opaque
+// identifiers, and folding one corrupts it. Name matching folds case at the point
+// of comparison instead.
+func TestLibraryEntriesKeepTheirCase(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("JELLYFIN_LIBRARIES", "  A1B2C3d4  , Kids Movies ,,A1B2C3d4")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	// Trimmed, de-duplicated, empty entries dropped — and not lowercased.
+	want := []string{"A1B2C3d4", "Kids Movies"}
+	if got := libraryIDs(cfg.JellyfinLibraries); !slices.Equal(got, want) {
+		t.Errorf("libraries = %v, want %v", got, want)
+	}
+}
+
+// The plural is the current name. The singular stays honoured so an existing
+// deployment does not silently change which library it deals from, and provenance
+// has to name whichever one actually supplied the value — naming the variable that
+// was merely checked first would send an operator to the wrong line of their
+// compose file.
+func TestPlexLibrarySectionsSupersedesTheSingular(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("PLEX_LIBRARY_SECTIONS", "5")
+	t.Setenv("PLEX_LIBRARY_SECTION", "9")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	if got := libraryIDs(cfg.PlexLibraries); !slices.Equal(got, []string{"5"}) {
+		t.Errorf("libraries = %v, want the plural variable to win", got)
+	}
+	if p := cfg.Provenance["plex.libraries"]; p.EnvVar != "PLEX_LIBRARY_SECTIONS" {
+		t.Errorf("provenance names %q, want the variable that supplied the value", p.EnvVar)
+	}
+}
+
+func TestDeprecatedPlexLibrarySectionStillResolves(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("PLEX_LIBRARY_SECTION", "9")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	if got := libraryIDs(cfg.PlexLibraries); !slices.Equal(got, []string{"9"}) {
+		t.Errorf("libraries = %v, want the deprecated variable to be honoured", got)
+	}
+	if p := cfg.Provenance["plex.libraries"]; p.EnvVar != "PLEX_LIBRARY_SECTION" {
+		t.Errorf("provenance names %q, want the deprecated variable that supplied it", p.EnvVar)
+	}
+}
+
+func TestLibrariesFromFileWinAndCarryNames(t *testing.T) {
+	clearConfigEnv(t)
+	writeConfig(t, `
+jellyfin:
+  libraries:
+    - id: aaa
+      name: Movies
+    - id: bbb
+      name: Kids Movies
+`)
+	t.Setenv("JELLYFIN_LIBRARIES", "ignored")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	want := []libraryRef{{ID: "aaa", Name: "Movies"}, {ID: "bbb", Name: "Kids Movies"}}
+	if !slices.Equal(cfg.JellyfinLibraries, want) {
+		t.Errorf("libraries = %+v, want %+v", cfg.JellyfinLibraries, want)
+	}
+	if p := cfg.Provenance["jellyfin.libraries"]; p.Source != sourceFile || !p.EnvIgnored {
+		t.Errorf("provenance = %+v, want file with the variable reported as ignored", p)
+	}
+}
+
+// An empty list in the file is a value, not an absence: it must not fall through
+// to the environment. Every reader treats it the same as no list at all — every
+// library — but the distinction decides which source supplied it, and therefore
+// what the settings screen shows.
+func TestEmptyLibraryListInFileIsNotAbsent(t *testing.T) {
+	clearConfigEnv(t)
+	writeConfig(t, `
+plex:
+  libraries: []
+`)
+	t.Setenv("PLEX_LIBRARY_SECTIONS", "7")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	if len(cfg.PlexLibraries) != 0 {
+		t.Errorf("libraries = %+v, want the file's empty list to win", cfg.PlexLibraries)
+	}
+	if p := cfg.Provenance["plex.libraries"]; p.Source != sourceFile {
+		t.Errorf("provenance source = %q, want the config file", p.Source)
+	}
+}
+
+// A file entry with no identifier names nothing and cannot be queried.
+func TestLibraryEntryWithoutAnIDIsDropped(t *testing.T) {
+	clearConfigEnv(t)
+	writeConfig(t, `
+plex:
+  libraries:
+    - name: Orphan
+    - id: "2"
+      name: Films
+`)
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	want := []libraryRef{{ID: "2", Name: "Films"}}
+	if !slices.Equal(cfg.PlexLibraries, want) {
+		t.Errorf("libraries = %+v, want %+v", cfg.PlexLibraries, want)
+	}
+}
+
+// The shipped compose file passes every variable through as `${VAR:-}`, so an
+// unconfigured deployment has them all present and empty. Present-and-empty
+// supplies nothing and must not be reported as overriding anything.
+func TestEmptyLibraryEnvironmentVariableSuppliesNothing(t *testing.T) {
+	clearConfigEnv(t)
+	writeConfig(t, `
+jellyfin:
+  libraries:
+    - id: aaa
+`)
+	t.Setenv("JELLYFIN_LIBRARIES", "")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	if p := cfg.Provenance["jellyfin.libraries"]; p.EnvIgnored {
+		t.Errorf("provenance = %+v; the variable is present and empty, so there is "+
+			"no conflict to report", p)
+	}
+}
+
+// With nothing configured anywhere the list is empty, which every reader takes as
+// every library. This is the upgrade-safety case: a deployment that has never
+// heard of these settings resolves exactly as it did before they existed.
+func TestNoLibraryConfigurationResolvesToEveryLibrary(t *testing.T) {
+	clearConfigEnv(t)
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	if len(cfg.JellyfinLibraries) != 0 || len(cfg.PlexLibraries) != 0 {
+		t.Errorf("libraries = %+v / %+v, want both empty",
+			cfg.JellyfinLibraries, cfg.PlexLibraries)
+	}
+	for _, key := range []string{"jellyfin.libraries", "plex.libraries"} {
+		p := cfg.Provenance[key]
+		if p.Source != sourceDefault {
+			t.Errorf("%s source = %q, want the default", key, p.Source)
+		}
+		if p.EnvVar == "" {
+			t.Errorf("%s names no variable; the screen still has to say which would apply", key)
 		}
 	}
 }
