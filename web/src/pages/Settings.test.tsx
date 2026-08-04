@@ -45,6 +45,10 @@ interface MockOptions {
     jellyfinCheck?: { valid: boolean; message?: string }
     plexCheck?: { valid: boolean; message?: string; sections?: { key: string; title: string }[] }
     providerListStatus?: number
+    // requireCandidateToken makes the provider endpoint answer 400 unless the
+    // request carries a token, which is how the real server behaves when nothing
+    // is stored to fall back to.
+    requireCandidateToken?: boolean
     // users undefined means the list endpoint fails, which is the state of a
     // Jellyfin the server could not read accounts from.
     users?: { id: string; name: string }[]
@@ -76,6 +80,12 @@ function installFetch(opts: MockOptions = {}) {
             return jsonResponse({ valid: opts.verifyValid ?? false, message: 'nope' })
         }
         if (url === '/api/settings/providers') {
+            if (opts.requireCandidateToken && !(body as { token?: string })?.token) {
+                return jsonResponse(
+                    { message: 'a TMDB read token is required to list providers' },
+                    { ok: false, status: 400 },
+                )
+            }
             if (opts.providerListStatus) {
                 return jsonResponse(
                     { message: 'could not reach TMDB to list providers' },
@@ -553,6 +563,55 @@ describe('Settings', () => {
         const field = await waitFor(() => screen.getByLabelText('Movie library (optional)'))
         expect(field.tagName).toBe('SELECT')
         expect(screen.getByRole('option', { name: 'Kids Films' })).toBeTruthy()
+    })
+
+    // The state a fresh deployment is in: nothing stored, a token typed into the
+    // form. The server cannot fall back to a stored credential that does not exist
+    // yet, so the provider list has to be fetched with the candidate. It was not:
+    // verifying flipped the picker on, which fired an effect that asked without
+    // one, and its 400 ("a TMDB read token is required to list providers") wiped
+    // the list. The result was an empty picker sitting beside "Token accepted."
+    it('lists the services for a token that is verified but not yet saved', async () => {
+        const fresh = settingsFixture({
+            jellyfin: { enabled: false, url: '', apiKeySet: false, userId: '' },
+            plex: { enabled: false, url: '', tokenSet: false, librarySection: '' },
+            streaming: {
+                enabled: true,
+                tmdbReadTokenSet: false,
+                watchRegion: 'US',
+                providers: [],
+            },
+        })
+        installFetch({
+            settings: fresh,
+            verifyValid: true,
+            providers: [{ id: 'netflix', name: 'Netflix' }],
+            // Any provider request without the candidate token is what the server
+            // rejects on a deployment with nothing stored.
+            requireCandidateToken: true,
+        })
+        const user = userEvent.setup()
+        renderSettings()
+        await enterToken(user)
+        await waitFor(() => expect(screen.getByLabelText('TMDB read token')).toBeTruthy())
+
+        await user.type(screen.getByLabelText('TMDB read token'), 'tmdb-v4-token')
+        await user.click(screen.getByRole('button', { name: 'Check token' }))
+
+        await waitFor(() => expect(screen.getByText('Token accepted.')).toBeTruthy())
+
+        // The picker is populated, and the contradiction is gone.
+        await user.type(screen.getByRole('combobox'), 'net')
+        await waitFor(() => expect(screen.getByRole('option', { name: 'Netflix' })).toBeTruthy())
+        expect(screen.queryByText(/a TMDB read token is required/)).toBeNull()
+
+        // Every provider request carried the candidate, because there is nothing
+        // stored for the server to fall back to.
+        const asked = posted.filter((p) => p.url === '/api/settings/providers')
+        expect(asked.length).toBeGreaterThan(0)
+        for (const req of asked) {
+            expect((req.body as { token?: string }).token).toBe('tmdb-v4-token')
+        }
     })
 
     // An empty picker reported an unreachable TMDB, a rejected token, and a region

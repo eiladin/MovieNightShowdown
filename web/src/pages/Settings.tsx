@@ -97,6 +97,12 @@ export default function Settings() {
     // it, an unreachable TMDB, a rejected token, and a region that genuinely
     // lists nothing all rendered as an empty picker.
     const [providerError, setProviderError] = useState('')
+    // checkedToken is a token that has been verified but not saved. The server
+    // cannot fall back to a stored credential that does not exist yet, so on a
+    // deployment configuring streaming for the first time this is the only thing
+    // the provider list can be fetched with. Empty means "use whatever is
+    // stored", which is the right request once a token has been saved.
+    const [checkedToken, setCheckedToken] = useState('')
     // users is null until the list has been asked for. Empty means it was asked
     // for and Jellyfin did not answer, which is a different state: the account
     // field is not offered at all rather than offered empty.
@@ -143,6 +149,14 @@ export default function Settings() {
     // token the list cannot be fetched, so an empty picker would appear with no
     // explanation.
     //
+    // This is the only place the list is fetched. Having the verify handler fetch
+    // it as well meant two requests raced: verifying flips tmdbVerified, which
+    // fires this effect, and the effect's answer overwrote the handler's. On a
+    // deployment with no stored token the effect asked without a candidate, got
+    // "a TMDB read token is required to list providers", and its 400 wiped the
+    // list the handler had just fetched successfully — an empty picker beside a
+    // token that had just been accepted.
+    //
     // The dependency is the region string, not the draft object. Depending on the
     // draft fired this request on every keystroke anywhere in the form, because
     // every edit produces a new object.
@@ -150,7 +164,7 @@ export default function Settings() {
     useEffect(() => {
         if (!token || !tmdbVerified || region === undefined) return
         let cancelled = false
-        listProviders(token, region)
+        listProviders(token, region, checkedToken || undefined)
             .then((list) => {
                 if (cancelled) return
                 setProviders(list.providers)
@@ -172,7 +186,7 @@ export default function Settings() {
         return () => {
             cancelled = true
         }
-    }, [token, tmdbVerified, region])
+    }, [token, tmdbVerified, region, checkedToken])
 
     // Read the Jellyfin accounts so the user id can be chosen rather than
     // transcribed. Same rule as above: the dependencies are the stored values
@@ -269,14 +283,9 @@ export default function Settings() {
                 message: v.valid ? 'Token accepted.' : (v.message ?? 'Token rejected.'),
             })),
         )
-        if (result?.valid && candidate) {
-            try {
-                const list = await listProviders(token, draft.streaming.watchRegion, candidate)
-                setProviders(list.providers)
-            } catch {
-                setProviders([])
-            }
-        }
+        // Record the token rather than fetching the list here. The effect above
+        // owns that fetch; doing it in both places is what made them race.
+        setCheckedToken(result?.valid ? candidate : '')
     }
 
     async function handleSave(e: React.FormEvent) {
@@ -731,6 +740,7 @@ export default function Settings() {
                                 value={draft.streaming.tmdbReadToken}
                                 onChange={(e) => {
                                     setCheck('streaming', NO_CHECK)
+                                    setCheckedToken('')
                                     setDraft({
                                         ...draft,
                                         streaming: {
@@ -746,6 +756,7 @@ export default function Settings() {
                                 draft.streaming.tmdbReadToken,
                                 () => {
                                     setCheck('streaming', NO_CHECK)
+                                    setCheckedToken('')
                                     setDraft({
                                         ...draft,
                                         streaming: { ...draft.streaming, tmdbReadToken: '' },
