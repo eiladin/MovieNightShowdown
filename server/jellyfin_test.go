@@ -32,7 +32,10 @@ func TestMoviesRequestsProviderIds(t *testing.T) {
 // server. It skips automatically unless JELLYFIN_URL/JELLYFIN_API_KEY are
 // set in the environment.
 func TestJellyfinClient_Movies(t *testing.T) {
-	cfg := LoadConfig()
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
 	if cfg.JellyfinURL == "" || cfg.JellyfinAPIKey == "" {
 		t.Skip("JELLYFIN_URL/JELLYFIN_API_KEY not set; skipping live Jellyfin integration test")
 	}
