@@ -15,6 +15,8 @@ type setupResponse struct {
 	Configured bool `json:"configured"`
 	// Jellyfin reports whether a local library is available.
 	Jellyfin bool `json:"jellyfin"`
+	// Plex reports whether a Plex library is available.
+	Plex bool `json:"plex"`
 	// Streaming reports whether any streaming service is available.
 	Streaming bool `json:"streaming"`
 	// Sources is the resolved source list, the same one the picker renders.
@@ -29,6 +31,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(setupResponse{
 		Configured: len(sources) > 0,
 		Jellyfin:   s.cfg.JellyfinConfigured(),
+		Plex:       s.cfg.PlexConfigured(),
 		Streaming:  s.cfg.StreamingConfigured(),
 		Sources:    sources,
 	})

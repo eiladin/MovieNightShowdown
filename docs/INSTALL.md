@@ -11,6 +11,9 @@ assumes a machine that can run Docker, and at least one place to get movies from
     `http://jellyfin.local:8096` — plus **a Jellyfin API key** (created below).
     The app uses the key server-side to read your library and fetch posters; it
     is never sent to the people swiping.
+  - **A Plex Media Server** reachable from wherever you run this — a URL like
+    `http://plex.local:32400` — plus **a Plex token** (found below). Plex is a
+    peer of Jellyfin, not a replacement: you can run either, or both at once.
   - **A TMDB API read token**, which lets the app draw from streaming services
     instead of (or alongside) a local library. See
     [Streaming services](#streaming-services).
@@ -31,6 +34,49 @@ If you want the "unwatched only" filter to work, you also need a user ID. Open
 the ID out of the browser's address bar (`.../useredit.html?userId=<this part>`).
 That value becomes `JELLYFIN_USER_ID`.
 
+### Getting a Plex token
+
+Plex does not have an API-key screen. Instead you copy the token your own
+session already uses:
+
+1. Open Plex Web and click any movie.
+2. Open the item's **⋮** menu → **Get Info** → **View XML**.
+3. A new tab opens with the item's raw XML. The address bar ends in
+   `?X-Plex-Token=<value>`.
+4. Copy that value. It becomes `PLEX_TOKEN`.
+
+Two alternatives if the web UI does not cooperate:
+
+- **From the server host.** `Preferences.xml` contains a `PlexOnlineToken`
+  attribute. On a package install it is usually at
+  `/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Preferences.xml`.
+- **From the API.** `POST https://plex.tv/users/sign_in.xml` with your
+  credentials and an `X-Plex-Client-Identifier` header returns an `authToken`.
+
+Treat the token as a password: it grants access to your library and your
+plex.tv account. Like the Jellyfin API key, the app uses it server-side only
+and never sends it to a browser.
+
+Unlike Jellyfin, no extra user ID is needed for the "unwatched only" filter — a
+Plex token already identifies one user, so play state is always available.
+
+#### Finding your movie library section
+
+A Plex server can hold several libraries, so the app needs to know which one
+holds movies. It discovers this automatically on first use by picking the first
+section of type `movie`, which is correct for most servers.
+
+If you have more than one movie library, set `PLEX_LIBRARY_SECTION` explicitly.
+List your sections with:
+
+```bash
+curl -sS -H "Accept: application/json" \
+  "$PLEX_URL/library/sections?X-Plex-Token=$PLEX_TOKEN" \
+  | jq '.MediaContainer.Directory[] | {key, type, title}'
+```
+
+The `key` of the section whose `type` is `"movie"` is the value to use.
+
 ## The quickest path
 
 Create a folder for the deployment with two files in it.
@@ -41,6 +87,9 @@ Create a folder for the deployment with two files in it.
 JELLYFIN_URL=http://jellyfin.local:8096
 JELLYFIN_API_KEY=your-jellyfin-api-key
 JELLYFIN_USER_ID=your-jellyfin-user-id   # optional; needed for "unwatched only"
+PLEX_URL=http://plex.local:32400         # optional; a Plex library as a source
+PLEX_TOKEN=your-plex-token               # required with PLEX_URL
+PLEX_LIBRARY_SECTION=2                   # optional; only if you have several movie libraries
 TMDB_READ_TOKEN=your-tmdb-v4-read-token  # optional; enables streaming sources
 STREAMING_PROVIDERS=netflix,prime,disney # optional; any TMDB watch provider, by name or id
 TMDB_WATCH_REGION=US                     # optional; defaults to US
@@ -106,6 +155,9 @@ Everything is configured through environment variables.
 | `JELLYFIN_URL` | one of¹ | Base URL of your Jellyfin server. |
 | `JELLYFIN_API_KEY` | one of¹ | Jellyfin API key. Stays server-side; never sent to clients. |
 | `JELLYFIN_USER_ID` | no | Needed for the "unwatched only" filter. |
+| `PLEX_URL` | one of¹ | Base URL of your Plex Media Server, including the port (usually `32400`). |
+| `PLEX_TOKEN` | one of¹ | Plex authentication token. Stays server-side; never sent to clients. See [Getting a Plex token](#getting-a-plex-token). |
+| `PLEX_LIBRARY_SECTION` | no | Key of the Plex library section holding movies. Discovered automatically when unset; set it only if your server has more than one movie library. See [Finding your movie library section](#finding-your-movie-library-section). |
 | `TMDB_READ_TOKEN` | one of¹ | TMDB v4 API Read Access Token. Unlocks streaming services as sources; without it only Jellyfin is offered. Stays server-side; never sent to clients. See [Streaming services](#streaming-services). |
 | `STREAMING_PROVIDERS` | no | Comma-separated list of streaming services to offer, by name or numeric TMDB provider id. Any provider TMDB tracks is accepted. Defaults to `netflix,prime,disney`. Ignored when `TMDB_READ_TOKEN` is unset. See [Choosing which services to offer](#choosing-which-services-to-offer). |
 | `TMDB_WATCH_REGION` | no | ISO 3166-1 country code deciding which streaming services exist and what they carry. Defaults to `US`. See [Setting the region](#setting-the-region). |
@@ -115,9 +167,15 @@ Everything is configured through environment variables.
 | `CACHE_DIR` | no | Where posters are cached on disk. Mount a volume here to keep the cache across restarts. |
 
 ¹ The app needs at least one movie source. Set `JELLYFIN_URL` **and**
-`JELLYFIN_API_KEY` for a local library, or `TMDB_READ_TOKEN` for streaming
-services, or all three for both. With none of them set, the app serves only its
-`/setup` page.
+`JELLYFIN_API_KEY` for a Jellyfin library, `PLEX_URL` **and** `PLEX_TOKEN` for a
+Plex library, or `TMDB_READ_TOKEN` for streaming services. Any combination works,
+and every configured source appears in the host's source picker. With none of
+them set, the app serves only its `/setup` page.
+
+A movie present in more than one source appears once, carrying a badge for each:
+the same film in your Plex library and on Netflix is one card, not two. Sources
+are matched on their TMDB id, so a Plex item its agents never matched to TMDB
+cannot merge and appears as a Plex-only card.
 
 The one that trips people up is `PUBLIC_URL`. It's the address the *phones* use,
 not the address the container uses internally. If your guests reach the app at

@@ -16,6 +16,7 @@ type SourceID string
 
 const (
 	SourceJellyfin SourceID = "jellyfin"
+	SourcePlex     SourceID = "plex"
 	SourceNetflix  SourceID = "netflix"
 	SourcePrime    SourceID = "prime"
 	SourceDisney   SourceID = "disney"
@@ -85,6 +86,13 @@ type MovieSource interface {
 
 var _ MovieSource = (*JellyfinClient)(nil)
 var _ DepthedSource = (*JellyfinClient)(nil)
+
+var _ MovieSource = (*PlexClient)(nil)
+var _ DepthedSource = (*PlexClient)(nil)
+var _ NamedSource = (*PlexClient)(nil)
+var _ UnwatchedSource = (*PlexClient)(nil)
+var _ VocabularySource = (*PlexClient)(nil)
+var _ PosterFetcher = (*PlexClient)(nil)
 
 // PosterFetcher fetches one poster's bytes from a source's upstream. It is
 // separate from MovieSource because the image proxy resolves a fetcher by

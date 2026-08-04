@@ -58,6 +58,16 @@ func New(cfg Config) *Server {
 		s.sources[SourceJellyfin] = jellyfin
 		s.order = append(s.order, SourceJellyfin)
 	}
+	// Plex is gated and ordered exactly like Jellyfin, and sits after it: the
+	// canonical order decides whose genre names win in the merged vocabulary
+	// (see gatherVocabulary), and Jellyfin's stay canonical so adding Plex
+	// cannot relabel an existing deployment's picker.
+	if cfg.PlexConfigured() {
+		plex := NewPlexClient(cfg)
+		s.fetchers[SourcePlex] = plex
+		s.sources[SourcePlex] = plex
+		s.order = append(s.order, SourcePlex)
+	}
 	// Resolution needs the network for anything outside the built-in table, so
 	// it is bounded and non-fatal: whatever resolves is offered, and the rest
 	// is logged. It is skipped entirely without a read token, so an unset
@@ -79,8 +89,9 @@ func New(cfg Config) *Server {
 	}
 	if len(s.sources) == 0 {
 		log.Print("server: no movie source is configured — set JELLYFIN_URL and " +
-			"JELLYFIN_API_KEY for a local library, and/or TMDB_READ_TOKEN for " +
-			"streaming services. Open the app for setup instructions.")
+			"JELLYFIN_API_KEY or PLEX_URL and PLEX_TOKEN for a local library, " +
+			"and/or TMDB_READ_TOKEN for streaming services. Open the app for " +
+			"setup instructions.")
 	}
 
 	s.routes()
