@@ -161,6 +161,12 @@ URL and a rejected credential are reported differently, because the fix differs.
 You do not have to save first, and if a credential is already stored you can leave
 the field alone and check what is saved.
 
+Checking also fills in the two settings you would otherwise have to go and look up.
+Jellyfin's account list appears as a dropdown for the "unwatched only" filter, and
+Plex's movie libraries appear as a dropdown for the library to deal from. Both are
+opaque identifiers — a 32-character user id and a numeric section key — so neither
+field is shown until a check has fetched the options.
+
 Most changes take effect immediately. Changing a movie source rebuilds the deck
 sources, which ends any session in progress, so the screen asks first.
 

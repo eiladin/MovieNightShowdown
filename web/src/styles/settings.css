@@ -35,6 +35,12 @@
   margin: 0;
 }
 
+/* The read-only section has no toggle to space its heading off the text below
+   it, so it needs the gap itself. */
+.settings-section h2 + .settings-hint {
+  margin-top: 0.6rem;
+}
+
 .settings-toggle {
   display: flex;
   align-items: center;
@@ -57,20 +63,37 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.5rem;
-  margin-top: 1.25rem;
-  padding-top: 1.25rem;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
   border-top: 1px solid var(--border);
 }
 
+/* 16px matches the font-size the global input rule sets, so a label is not
+   larger than the value it names. The page's 18px base makes it so otherwise. */
 .settings-fields label {
   color: var(--text-h);
-  font-weight: 500;
-  margin-top: 0.5rem;
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 0.9rem;
 }
 
 .settings-fields label:first-child {
   margin-top: 0;
+}
+
+/* A hint belongs to the label above it, not to the gap between fields. */
+.settings-fields label + .settings-hint {
+  margin-top: -0.15rem;
+}
+
+/* The provider picker names a composite control — chips plus a search box — so
+   its heading is a span rather than a label. It still has to look like one. */
+.settings-pseudo-label {
+  color: var(--text-h);
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 0.9rem;
 }
 
 .settings-fields input,
@@ -135,8 +158,8 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 0.6rem;
-  margin-top: 1.25rem;
-  padding-top: 1.25rem;
+  margin-top: 1.4rem;
+  padding-top: 1rem;
   border-top: 1px dashed var(--border);
 }
 

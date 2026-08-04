@@ -50,6 +50,12 @@ func rejectedCredential(err error) bool {
 		(se.status == http.StatusUnauthorized || se.status == http.StatusForbidden)
 }
 
+// librarySection is one selectable Plex movie library.
+type librarySection struct {
+	Key   string `json:"key"`
+	Title string `json:"title"`
+}
+
 // verifySourceResponse is the answer to any of the check routes.
 //
 // Message is written for an operator and is populated on success as well as
@@ -58,6 +64,12 @@ func rejectedCredential(err error) bool {
 type verifySourceResponse struct {
 	Valid   bool   `json:"valid"`
 	Message string `json:"message,omitempty"`
+	// Sections lists the movie libraries a Plex check found. It travels with the
+	// result so the section can be chosen from a list rather than typed: the
+	// value the app needs is an opaque numeric key, and there is no way to know
+	// it without asking the server. It is attached to a failing result too — an
+	// unknown configured key is exactly when the available ones are needed.
+	Sections []librarySection `json:"sections,omitempty"`
 }
 
 // checkRequest carries candidate connection details.
@@ -357,14 +369,24 @@ func (s *Server) handleVerifyPlex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Every answer from here carries the section list, including the failing one.
+	// The section key is an opaque number with no way to discover it except by
+	// asking Plex, so an error that withholds the list leaves the operator with
+	// nothing to correct it to.
+	sections := make([]librarySection, 0, len(movieSections))
+	for _, d := range movieSections {
+		sections = append(sections, librarySection{Key: d.Key, Title: d.name()})
+	}
+
 	// A configured section that does not exist is a misconfiguration the app
 	// would otherwise report as an empty library.
 	if section != "" {
 		for _, d := range movieSections {
 			if d.Key == section {
 				writeJSON(w, http.StatusOK, verifySourceResponse{
-					Valid:   true,
-					Message: fmt.Sprintf("Connected — using the %q library.", d.name()),
+					Valid:    true,
+					Message:  fmt.Sprintf("Connected — using the %q library.", d.name()),
+					Sections: sections,
 				})
 				return
 			}
@@ -372,6 +394,7 @@ func (s *Server) handleVerifyPlex(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, verifySourceResponse{
 			Message: fmt.Sprintf("Connected, but there is no movie library with key %q. Available: %s.",
 				section, describeSections(movieSections)),
+			Sections: sections,
 		})
 		return
 	}
@@ -383,14 +406,16 @@ func (s *Server) handleVerifyPlex(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, verifySourceResponse{
 			Valid: true,
 			Message: fmt.Sprintf("Connected. This server has several movie libraries (%s) — "+
-				"set a library section to choose, or %q will be used.",
+				"choose one below, or %q will be used.",
 				describeSections(movieSections), movieSections[0].name()),
+			Sections: sections,
 		})
 		return
 	}
 	writeJSON(w, http.StatusOK, verifySourceResponse{
-		Valid:   true,
-		Message: fmt.Sprintf("Connected — using the %q library.", movieSections[0].name()),
+		Valid:    true,
+		Message:  fmt.Sprintf("Connected — using the %q library.", movieSections[0].name()),
+		Sections: sections,
 	})
 }
 

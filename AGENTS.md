@@ -169,6 +169,18 @@ hand-curated and is not touched by this pipeline.
   text on a white page in light mode. It also restated control padding smaller
   than the global `input`/`select`/`button` rules; do not re-add that — the base
   styles already size these controls.
+- **An opaque identifier is offered as a list or not at all.** The Jellyfin user
+  id and the Plex library section key are both values nobody knows offhand —
+  each has to be read off the source itself. Neither field is rendered until a
+  check has enumerated the options, or unless a value is already stored (which
+  must stay visible so it can be seen and cleared). Whether a field shows is
+  decided by `settings`, never by `draft`: keying it on the draft made the
+  control unmount the moment its value was cleared, so it could not be retyped.
+- **A failed fetch reports its reason.** The service picker once fell back to an
+  empty list, which made an unreachable TMDB, a rejected token, and a region that
+  genuinely lists nothing indistinguishable — the least actionable of the three.
+  `listProviders` surfaces the server's message and the screen shows it. Do not
+  reintroduce a bare `.catch(() => setState([]))` on any of these calls.
 - **The provider picker renders no results for an empty query.** Not on focus
   either. TMDB returns several hundred services for a region, and that list is
   what the search box exists to avoid; showing it on focus buried the rest of the

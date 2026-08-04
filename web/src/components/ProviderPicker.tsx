@@ -132,6 +132,10 @@ export default function ProviderPicker({ options, selected, onChange }: Provider
                 ref={inputRef}
                 type="text"
                 role="combobox"
+                // The heading above the chips is a span, not a label — it names the
+                // whole control, chips included, not just this input. Pointing at it
+                // is what stops the combobox being announced unnamed.
+                aria-labelledby="provider-picker-label"
                 aria-expanded={showOptions}
                 aria-controls="provider-options"
                 aria-autocomplete="list"

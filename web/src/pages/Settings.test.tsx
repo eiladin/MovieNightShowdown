@@ -43,7 +43,8 @@ interface MockOptions {
     providers?: { id: string; name: string }[]
     getStatus?: number
     jellyfinCheck?: { valid: boolean; message?: string }
-    plexCheck?: { valid: boolean; message?: string }
+    plexCheck?: { valid: boolean; message?: string; sections?: { key: string; title: string }[] }
+    providerListStatus?: number
     // users undefined means the list endpoint fails, which is the state of a
     // Jellyfin the server could not read accounts from.
     users?: { id: string; name: string }[]
@@ -75,6 +76,12 @@ function installFetch(opts: MockOptions = {}) {
             return jsonResponse({ valid: opts.verifyValid ?? false, message: 'nope' })
         }
         if (url === '/api/settings/providers') {
+            if (opts.providerListStatus) {
+                return jsonResponse(
+                    { message: 'could not reach TMDB to list providers' },
+                    { ok: false, status: opts.providerListStatus },
+                )
+            }
             return jsonResponse({ region: 'US', providers: opts.providers ?? [] })
         }
         if (url === '/api/settings/verify/jellyfin') {
@@ -199,8 +206,8 @@ describe('Settings', () => {
         const tokenField = screen.getByLabelText('Token') as HTMLInputElement
         expect(tokenField.value).toBe(SECRET_PLACEHOLDER)
 
-        await user.clear(screen.getByLabelText('Library section (optional)'))
-        await user.type(screen.getByLabelText('Library section (optional)'), '3')
+        await user.clear(screen.getByLabelText('Movie library (optional)'))
+        await user.type(screen.getByLabelText('Movie library (optional)'), '3')
         await user.click(screen.getByRole('button', { name: 'Save settings' }))
 
         await waitFor(() => expect(posted).toHaveLength(1))
@@ -481,21 +488,93 @@ describe('Settings', () => {
         expect(screen.getByText(/ghost — not an account on this server/)).toBeTruthy()
     })
 
-    // A server whose accounts could not be read still has to be configurable, so
-    // the field falls back to accepting a typed id rather than an empty select.
-    it('falls back to a text field when the accounts cannot be read', async () => {
+    // With no account list and nothing stored there is nothing to offer. An empty
+    // text box would be a request to go and transcribe a 32-character id out of
+    // Jellyfin's admin URL bar, so the field is not shown at all and the hint
+    // points at the control that can populate it.
+    it('does not offer the account field until the accounts are known', async () => {
         const wired = settingsFixture({
             jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: '' },
+            plex: { enabled: false, url: '', tokenSet: false, librarySection: '' },
+        })
+        installFetch({ settings: wired })
+        const user = userEvent.setup()
+        renderSettings()
+        await enterToken(user)
+        await waitFor(() => expect(screen.getByLabelText('Server URL')).toBeTruthy())
+
+        expect(screen.queryByLabelText('Account for “unwatched only”')).toBeNull()
+        expect(screen.getByText(/Check the connection to choose which account/)).toBeTruthy()
+    })
+
+    // A stored id is a different case: it has to stay visible even with no list,
+    // or it could never be seen or cleared.
+    it('still shows a stored account id when the accounts cannot be read', async () => {
+        const wired = settingsFixture({
+            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: 'ghost' },
         })
         installFetch({ settings: wired })
         const user = userEvent.setup()
         renderSettings()
         await enterToken(user)
 
-        const field = await waitFor(() =>
-            screen.getByLabelText('Account for “unwatched only”'),
-        )
+        const field = await waitFor(() => screen.getByLabelText('Account for “unwatched only”'))
         expect(field.tagName).toBe('INPUT')
+        expect((field as HTMLInputElement).value).toBe('ghost')
+    })
+
+    // Same rule for the Plex library: its value is an opaque numeric key with no
+    // way to discover it except by asking Plex, so it is offered as a list or not
+    // at all.
+    it('offers the Plex library as a list only after a check', async () => {
+        const noSection = settingsFixture({
+            plex: { enabled: true, url: 'http://plex:32400', tokenSet: true, librarySection: '' },
+        })
+        installFetch({
+            settings: noSection,
+            plexCheck: {
+                valid: true,
+                message: 'Connected — using the "Films" library.',
+                sections: [
+                    { key: '1', title: 'Films' },
+                    { key: '3', title: 'Kids Films' },
+                ],
+            },
+        })
+        const user = userEvent.setup()
+        renderSettings()
+        await enterToken(user)
+        await waitFor(() => expect(screen.getByLabelText('Token')).toBeTruthy())
+
+        expect(screen.queryByLabelText('Movie library (optional)')).toBeNull()
+
+        await user.click(screen.getByRole('button', { name: 'Check connection' }))
+
+        const field = await waitFor(() => screen.getByLabelText('Movie library (optional)'))
+        expect(field.tagName).toBe('SELECT')
+        expect(screen.getByRole('option', { name: 'Kids Films' })).toBeTruthy()
+    })
+
+    // An empty picker reported an unreachable TMDB, a rejected token, and a region
+    // that genuinely lists nothing all the same way — the least actionable of the
+    // three. The server's own explanation is shown instead.
+    it('says why the streaming service list is empty', async () => {
+        const streaming = settingsFixture({
+            streaming: {
+                enabled: true,
+                tmdbReadTokenSet: true,
+                watchRegion: 'US',
+                providers: [],
+            },
+        })
+        installFetch({ settings: streaming, providerListStatus: 502 })
+        const user = userEvent.setup()
+        renderSettings()
+        await enterToken(user)
+
+        await waitFor(() =>
+            expect(screen.getByText('could not reach TMDB to list providers')).toBeTruthy(),
+        )
     })
 
     it('checks Plex against the candidate library section', async () => {

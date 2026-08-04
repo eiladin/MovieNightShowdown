@@ -365,6 +365,10 @@ export interface ProviderList {
 // listProviders fetches the services offered in a region. The candidate token
 // is optional: it lets the picker populate from a token that has been verified
 // but not yet saved.
+//
+// A failure carries the server's own explanation. Swallowing it made an
+// unreachable TMDB, a rejected token, and a region that genuinely lists nothing
+// all render as an empty picker, which is the least actionable of the three.
 export async function listProviders(
     token: string,
     region: string,
@@ -376,7 +380,10 @@ export async function listProviders(
         body: JSON.stringify({ region, token: candidate ?? '' }),
     })
     if (res.status === 401) throw new SettingsAuthError()
-    if (!res.ok) throw new Error(`provider list failed: ${res.status} ${res.statusText}`)
+    if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { message?: string }
+        throw new Error(body.message ?? `provider list failed: ${res.status} ${res.statusText}`)
+    }
     return res.json() as Promise<ProviderList>
 }
 
@@ -390,12 +397,22 @@ export interface SourceCheckRequest {
     librarySection?: string
 }
 
+// LibrarySection is one selectable Plex movie library.
+export interface LibrarySection {
+    key: string
+    title: string
+}
+
 // SourceCheck mirrors server.verifySourceResponse. `message` is populated on
 // success as well as failure: the movie count or the library name is the
 // confirmation the button exists to give.
 export interface SourceCheck {
     valid: boolean
     message?: string
+    // sections is present on a Plex check that reached the server. The section
+    // key is an opaque number, so this is the only way to offer it as a choice
+    // rather than something to be transcribed.
+    sections?: LibrarySection[]
 }
 
 async function checkSource(

@@ -286,6 +286,47 @@ func TestVerifyPlexRejectsAnUnknownLibrarySection(t *testing.T) {
 	if !strings.Contains(got.Message, "42") || !strings.Contains(got.Message, "Films") {
 		t.Errorf("message = %q, want the bad key and the available libraries", got.Message)
 	}
+	// The list travels even on the failure. The section key is opaque, so an
+	// error that withholds it leaves nothing to correct the value to.
+	if len(got.Sections) != 1 || got.Sections[0].Key != "1" {
+		t.Errorf("sections = %+v, want the available library on a failing check", got.Sections)
+	}
+}
+
+// The section list is what lets the settings screen offer the library as a
+// choice. Its value is an opaque number with no way to discover it except by
+// asking Plex, so a check that reached the server must return it — the non-movie
+// sections filtered out.
+func TestVerifyPlexReturnsTheMovieLibraries(t *testing.T) {
+	stub := plexStub(t, "good-token", "Films", "Kids Films")
+	s, setup := newCheckServer(t, "publicUrl: http://nas:8080\n")
+
+	got := decodeVerify(t, postJSON(t, s, "/api/settings/verify/plex", setup,
+		checkRequest{URL: stub.URL, Secret: "good-token"}))
+
+	want := []librarySection{{Key: "1", Title: "Films"}, {Key: "2", Title: "Kids Films"}}
+	if len(got.Sections) != len(want) {
+		t.Fatalf("sections = %+v, want %+v (the TV section must not be offered)", got.Sections, want)
+	}
+	for i, w := range want {
+		if got.Sections[i] != w {
+			t.Errorf("section %d = %+v, want %+v", i, got.Sections[i], w)
+		}
+	}
+}
+
+// Nothing to offer when the token was refused: no list, and no implication that
+// one was read.
+func TestVerifyPlexReturnsNoSectionsWhenItCouldNotRead(t *testing.T) {
+	stub := plexStub(t, "good-token", "Films")
+	s, setup := newCheckServer(t, "publicUrl: http://nas:8080\n")
+
+	got := decodeVerify(t, postJSON(t, s, "/api/settings/verify/plex", setup,
+		checkRequest{URL: stub.URL, Secret: "wrong-token"}))
+
+	if len(got.Sections) != 0 {
+		t.Errorf("sections = %+v, want none from a rejected check", got.Sections)
+	}
 }
 
 // A server with no movie library cannot deal a deck, whatever else it has.

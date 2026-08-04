@@ -11,6 +11,7 @@ import {
     verifyPlex,
     verifyTmdbToken,
     type JellyfinUser,
+    type LibrarySection,
     type ProviderOption,
     type Settings as SettingsData,
     type SourceCheck,
@@ -28,12 +29,16 @@ import '../styles/settings.css'
 
 // noAutofill keeps password managers out of these fields.
 //
-// They are credentials, so they are type="password" — but none of them is an
-// account password, and there is no username on this page. A manager that
-// offers to fill one is offering the wrong secret, and one that offers to save
-// it stores a server credential under a login it invented. `autocomplete="off"`
-// alone does not stop them; every major manager needs its own opt-out, so they
-// are all set. `new-password` is the value browsers honour for "do not fill".
+// Most of them are credentials, so they are type="password" — but none is an
+// account password, and there is no login on this page. A manager that offers to
+// fill one is offering the wrong secret, and one that offers to save it stores a
+// server credential under a login it invented. `autocomplete="off"` alone does
+// not stop them; every major manager needs its own opt-out, so they are all set.
+// `new-password` is the value browsers honour for "do not fill".
+//
+// The Jellyfin account field gets it too despite being plain text: it sits
+// directly above an API key field, and a text input followed by a password input
+// is exactly the shape a manager reads as a login form.
 const noAutofill = {
     autoComplete: 'new-password',
     'data-1p-ignore': '',
@@ -88,10 +93,18 @@ export default function Settings() {
         streaming: NO_CHECK,
     })
     const [providers, setProviders] = useState<ProviderOption[]>([])
+    // providerError carries why the service list could not be fetched. Without
+    // it, an unreachable TMDB, a rejected token, and a region that genuinely
+    // lists nothing all rendered as an empty picker.
+    const [providerError, setProviderError] = useState('')
     // users is null until the list has been asked for. Empty means it was asked
-    // for and Jellyfin did not answer, which is a different state: the field
-    // falls back to accepting a typed id rather than offering an empty select.
+    // for and Jellyfin did not answer, which is a different state: the account
+    // field is not offered at all rather than offered empty.
     const [users, setUsers] = useState<JellyfinUser[] | null>(null)
+    // sections holds the Plex movie libraries a check found. Until one has run
+    // there is nothing to choose from, and the key is an opaque number nobody
+    // knows offhand, so the field is not shown.
+    const [sections, setSections] = useState<LibrarySection[] | null>(null)
 
     // A stored token verified at some point, so the picker can be populated
     // without asking again.
@@ -139,10 +152,22 @@ export default function Settings() {
         let cancelled = false
         listProviders(token, region)
             .then((list) => {
-                if (!cancelled) setProviders(list.providers)
+                if (cancelled) return
+                setProviders(list.providers)
+                setProviderError(
+                    list.providers.length === 0
+                        ? `TMDB lists no streaming services for region ${region}.`
+                        : '',
+                )
             })
-            .catch(() => {
-                if (!cancelled) setProviders([])
+            .catch((err: unknown) => {
+                if (cancelled) return
+                setProviders([])
+                setProviderError(
+                    err instanceof Error
+                        ? err.message
+                        : 'The list of streaming services could not be fetched.',
+                )
             })
         return () => {
             cancelled = true
@@ -223,13 +248,16 @@ export default function Settings() {
 
     async function handleCheckPlex() {
         if (!draft || !token) return
-        void runCheck('plex', () =>
+        const result = await runCheck('plex', () =>
             verifyPlex(token, {
                 url: draft.plex.url,
                 secret: candidateSecret(draft.plex.token),
                 librarySection: draft.plex.librarySection,
             }),
         )
+        // Sections arrive on a failing result too — an unknown configured key is
+        // exactly when the available ones are needed.
+        if (result?.sections) setSections(result.sections)
     }
 
     async function handleVerify() {
@@ -337,6 +365,20 @@ export default function Settings() {
     const fieldError = (key: string) =>
         errors[key] ? <span className="settings-field-error">{errors[key]}</span> : null
 
+    // Two fields are only offered as a list, because both take a value nobody
+    // knows offhand: a Jellyfin user id and a Plex section key are both opaque
+    // identifiers that have to be read off the source itself. An empty text box
+    // asking for either is a request to go rummaging.
+    const hasUsers = !!users && users.length > 0
+    const hasSections = !!sections && sections.length > 0
+
+    // Whether the field is offered at all is decided by what the server holds,
+    // never by the draft. Keying it on the draft made the field unmount the moment
+    // its value was cleared — so an operator emptying it could not then retype,
+    // and the control vanished out from under the cursor.
+    const showUserField = hasUsers || settings.jellyfin.userId !== ''
+    const showSectionField = hasSections || settings.plex.librarySection !== ''
+
     // clearControl is the explicit way to remove a stored credential. Emptying
     // the field alone would also work, but nothing on screen would say so —
     // and an operator who cannot find how to remove a credential will leave a
@@ -421,6 +463,7 @@ export default function Settings() {
                                 has since been retyped is worse than no result. */}
                             <input
                                 id="jf-url"
+                                type="text"
                                 value={draft.jellyfin.url}
                                 onChange={(e) => {
                                     setCheck('jellyfin', NO_CHECK)
@@ -453,67 +496,91 @@ export default function Settings() {
                             {badge('jellyfin.apiKey')}
                             {fieldError('jellyfin.apiKey')}
 
-                            <label htmlFor="jf-user">Account for &ldquo;unwatched only&rdquo;</label>
-                            <p className="settings-hint" id="jf-user-hint">
-                                Optional. Filtering a deck to unwatched films needs an account to
-                                judge watched state against. Without one, the host cannot use that
-                                filter.
-                            </p>
-                            {/* A select once the accounts are known, a text field
-                                when they are not. A Jellyfin user id is a 32-character
-                                hex string from the admin dashboard's URL bar, and a
-                                mistyped one is never rejected — the unwatched filter
-                                just quietly returns nothing. */}
-                            {users && users.length > 0 ? (
-                                <select
-                                    id="jf-user"
-                                    aria-describedby="jf-user-hint"
-                                    value={draft.jellyfin.userId}
-                                    onChange={(e) =>
-                                        setDraft({
-                                            ...draft,
-                                            jellyfin: { ...draft.jellyfin, userId: e.target.value },
-                                        })
-                                    }
-                                >
-                                    <option value="">Not set — no unwatched filtering</option>
-                                    {users.map((u) => (
-                                        <option key={u.id} value={u.id}>
-                                            {u.name}
-                                        </option>
-                                    ))}
-                                    {/* A stored id this server does not list still
-                                        renders, so opening the screen cannot silently
-                                        drop it on the next save. */}
-                                    {draft.jellyfin.userId !== '' &&
-                                        !users.some((u) => u.id === draft.jellyfin.userId) && (
-                                            <option value={draft.jellyfin.userId}>
-                                                {draft.jellyfin.userId} — not an account on this
-                                                server
+                            {/* The account field appears only once the accounts are
+                                known, or when one is already stored.
+
+                                A Jellyfin user id is a 32-character hex string out of
+                                the admin dashboard's URL bar. An empty text box asking
+                                for it is a request to go and transcribe something, and
+                                a mistyped id is never rejected — the unwatched filter
+                                simply returns nothing. A stored id still renders even
+                                with no list, so it can always be seen and cleared. */}
+                            {showUserField && (
+                                <>
+                                    <label htmlFor="jf-user">
+                                        Account for &ldquo;unwatched only&rdquo;
+                                    </label>
+                                    <p className="settings-hint" id="jf-user-hint">
+                                        Optional. Filtering a deck to unwatched films needs an
+                                        account to judge watched state against. Without one, the
+                                        host cannot use that filter.
+                                    </p>
+                                    {hasUsers ? (
+                                        <select
+                                            id="jf-user"
+                                            aria-describedby="jf-user-hint"
+                                            value={draft.jellyfin.userId}
+                                            onChange={(e) =>
+                                                setDraft({
+                                                    ...draft,
+                                                    jellyfin: {
+                                                        ...draft.jellyfin,
+                                                        userId: e.target.value,
+                                                    },
+                                                })
+                                            }
+                                        >
+                                            <option value="">
+                                                Not set — no unwatched filtering
                                             </option>
-                                        )}
-                                </select>
-                            ) : (
-                                <input
-                                    id="jf-user"
-                                    aria-describedby="jf-user-hint"
-                                    value={draft.jellyfin.userId}
-                                    placeholder={
-                                        users
-                                            ? 'Check the connection to list accounts'
-                                            : 'Jellyfin user id'
-                                    }
-                                    onChange={(e) =>
-                                        setDraft({
-                                            ...draft,
-                                            jellyfin: { ...draft.jellyfin, userId: e.target.value },
-                                        })
-                                    }
-                                />
+                                            {users?.map((u) => (
+                                                <option key={u.id} value={u.id}>
+                                                    {u.name}
+                                                </option>
+                                            ))}
+                                            {/* A stored id this server does not list
+                                                still renders, so opening the screen
+                                                cannot silently drop it on the next
+                                                save. */}
+                                            {draft.jellyfin.userId !== '' &&
+                                                !users?.some(
+                                                    (u) => u.id === draft.jellyfin.userId,
+                                                ) && (
+                                                    <option value={draft.jellyfin.userId}>
+                                                        {draft.jellyfin.userId} — not an account
+                                                        on this server
+                                                    </option>
+                                                )}
+                                        </select>
+                                    ) : (
+                                        <input
+                                            id="jf-user"
+                                            type="text"
+                                            aria-describedby="jf-user-hint"
+                                            {...noAutofill}
+                                            value={draft.jellyfin.userId}
+                                            onChange={(e) =>
+                                                setDraft({
+                                                    ...draft,
+                                                    jellyfin: {
+                                                        ...draft.jellyfin,
+                                                        userId: e.target.value,
+                                                    },
+                                                })
+                                            }
+                                        />
+                                    )}
+                                    {badge('jellyfin.userId')}
+                                </>
                             )}
-                            {badge('jellyfin.userId')}
 
                             {checkControl('jellyfin', 'Check connection', handleCheckJellyfin)}
+                            {!hasUsers && (
+                                <p className="settings-hint">
+                                    Check the connection to choose which account the &ldquo;unwatched
+                                    only&rdquo; filter should follow.
+                                </p>
+                            )}
                         </div>
                     )}
                 </section>
@@ -535,6 +602,7 @@ export default function Settings() {
                             <label htmlFor="plex-url">Server URL</label>
                             <input
                                 id="plex-url"
+                                type="text"
                                 value={draft.plex.url}
                                 onChange={(e) => {
                                     setCheck('plex', NO_CHECK)
@@ -561,21 +629,80 @@ export default function Settings() {
                             {badge('plex.token')}
                             {fieldError('plex.token')}
 
-                            <label htmlFor="plex-section">Library section (optional)</label>
-                            <input
-                                id="plex-section"
-                                value={draft.plex.librarySection}
-                                onChange={(e) => {
-                                    setCheck('plex', NO_CHECK)
-                                    setDraft({
-                                        ...draft,
-                                        plex: { ...draft.plex, librarySection: e.target.value },
-                                    })
-                                }}
-                            />
-                            {badge('plex.librarySection')}
+                            {/* The library section appears only once a check has
+                                enumerated the libraries, or when one is already stored.
+
+                                Its value is an opaque numeric key with no way to
+                                discover it except by asking Plex, so an empty text box
+                                asking for it is a dead end. It is optional in any
+                                case: with nothing set, the first movie library is
+                                discovered on first use. */}
+                            {showSectionField && (
+                                <>
+                                    <label htmlFor="plex-section">Movie library (optional)</label>
+                                    {hasSections ? (
+                                        <select
+                                            id="plex-section"
+                                            value={draft.plex.librarySection}
+                                            onChange={(e) =>
+                                                setDraft({
+                                                    ...draft,
+                                                    plex: {
+                                                        ...draft.plex,
+                                                        librarySection: e.target.value,
+                                                    },
+                                                })
+                                            }
+                                        >
+                                            <option value="">
+                                                Discover automatically — uses the first one
+                                            </option>
+                                            {sections?.map((s) => (
+                                                <option key={s.key} value={s.key}>
+                                                    {s.title}
+                                                </option>
+                                            ))}
+                                            {/* A stored key this server does not list
+                                                still renders, so looking at the screen
+                                                cannot silently drop it. */}
+                                            {draft.plex.librarySection !== '' &&
+                                                !sections?.some(
+                                                    (s) => s.key === draft.plex.librarySection,
+                                                ) && (
+                                                    <option value={draft.plex.librarySection}>
+                                                        {draft.plex.librarySection} — not a library
+                                                        on this server
+                                                    </option>
+                                                )}
+                                        </select>
+                                    ) : (
+                                        <input
+                                            id="plex-section"
+                                            type="text"
+                                            value={draft.plex.librarySection}
+                                            onChange={(e) => {
+                                                setCheck('plex', NO_CHECK)
+                                                setDraft({
+                                                    ...draft,
+                                                    plex: {
+                                                        ...draft.plex,
+                                                        librarySection: e.target.value,
+                                                    },
+                                                })
+                                            }}
+                                        />
+                                    )}
+                                    {badge('plex.librarySection')}
+                                </>
+                            )}
 
                             {checkControl('plex', 'Check connection', handleCheckPlex)}
+                            {!hasSections && (
+                                <p className="settings-hint">
+                                    Check the connection to choose which movie library to deal
+                                    from.
+                                </p>
+                            )}
                         </div>
                     )}
                 </section>
@@ -631,6 +758,7 @@ export default function Settings() {
                             <label htmlFor="tmdb-region">Watch region</label>
                             <input
                                 id="tmdb-region"
+                                type="text"
                                 value={draft.streaming.watchRegion}
                                 onChange={(e) =>
                                     setDraft({
@@ -648,7 +776,19 @@ export default function Settings() {
                                 would look like a deployment with no services. */}
                             {tmdbVerified ? (
                                 <>
-                                    <span id="provider-picker-label">Services</span>
+                                    <span className="settings-pseudo-label" id="provider-picker-label">
+                                        Services
+                                    </span>
+                                    {/* Why the list is empty, when it is. An unreachable
+                                        TMDB, a rejected token, and a region that genuinely
+                                        lists nothing are three different problems, and an
+                                        empty picker is the least actionable way to report
+                                        any of them. */}
+                                    {providerError && (
+                                        <p className="settings-check-bad" role="status">
+                                            {providerError}
+                                        </p>
+                                    )}
                                     <ProviderPicker
                                         options={providers}
                                         selected={draft.streaming.providers}
@@ -675,6 +815,7 @@ export default function Settings() {
                         <label htmlFor="public-url">Public URL</label>
                         <input
                             id="public-url"
+                            type="text"
                             value={draft.publicUrl}
                             onChange={(e) => setDraft({ ...draft, publicUrl: e.target.value })}
                         />
@@ -684,6 +825,7 @@ export default function Settings() {
                         <label htmlFor="session-ttl">Session lifetime</label>
                         <input
                             id="session-ttl"
+                            type="text"
                             value={draft.sessionTtl}
                             onChange={(e) => setDraft({ ...draft, sessionTtl: e.target.value })}
                         />
