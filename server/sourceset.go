@@ -19,6 +19,27 @@ type sourceSet struct {
 	// order is this deployment's canonical source order: local libraries first
 	// in alphabetical order, then the streaming services as configured.
 	order []SourceID
+
+	// pending are libraries configured by name rather than by identifier. A name
+	// has to be turned into an identifier before anything can be queried, and that
+	// needs the media server, so these are not sources yet.
+	//
+	// They are deliberately absent from the maps above. An unresolved name would
+	// otherwise become a SourceID containing that name — spaces and all — which
+	// breaks the URL-safety this application requires of a SourceID, since the id
+	// is a path segment in the image proxy.
+	pending []pendingLibrary
+	// resolve turns this set into one with nothing pending. It is nil when there
+	// is nothing to resolve, and each set gets its own so a configuration change
+	// starts a fresh resolution rather than inheriting a stale answer.
+	resolve   *lazyValue[*sourceSet]
+	resolveFn func(context.Context) (*sourceSet, error)
+}
+
+// pendingLibrary is one library named rather than identified.
+type pendingLibrary struct {
+	service SourceID
+	name    string
 }
 
 // currentSources returns the live source set.
@@ -28,7 +49,40 @@ type sourceSet struct {
 // configurations, which is how a poster proxy ends up looking for a fetcher
 // that the search it is serving never used.
 func (s *Server) currentSources() *sourceSet {
-	return s.sources.Load()
+	set := s.sources.Load()
+	if set == nil || set.resolve == nil || len(set.pending) == 0 {
+		return set
+	}
+
+	// Resolve the named libraries now, on the first request that needs the source
+	// list. Doing it at startup instead would mean an application and a media
+	// server that start together can race: lose it and the process comes up with
+	// no sources at all, when it could have come up holding the ones configured by
+	// identifier and picked the rest up moments later.
+	//
+	// The context is bounded and detached from the caller. A request that is
+	// abandoned mid-resolution must not cancel the work for everyone behind it,
+	// and lazyValue deliberately does not record a cancellation as a failure.
+	ctx, cancel := context.WithTimeout(context.Background(), libraryResolveTimeout)
+	defer cancel()
+
+	resolved, err := set.resolve.get(ctx, set.resolveFn)
+	if err != nil {
+		// Report nothing and return what works. The sources configured by
+		// identifier are already registered in this set, so a media server that is
+		// still starting costs the named libraries and nothing else.
+		return set
+	}
+
+	// Swap, and swap only if nothing else has. A configuration save may have
+	// replaced the set while this resolution was in flight, and that set is newer.
+	//
+	// Sessions are deliberately not ended here. applyConfig ends them because the
+	// operator changed the configuration; this is the same configuration finally
+	// becoming resolvable, and ending a movie night for that would be a bug
+	// dressed as consistency. Do not "tidy" this into a call to applyConfig.
+	s.sources.CompareAndSwap(set, resolved)
+	return resolved
 }
 
 // libraryRefsOrAll turns a configured library list into the refs to build clients
@@ -75,10 +129,36 @@ func buildSourceSet(cfg Config) *sourceSet {
 		fetchers: map[SourceID]PosterFetcher{},
 	}
 
-	// Each source is gated on its own credentials. Registering one
-	// unconditionally would advertise a source every query fails against.
+	addLocalSources(set, cfg)
+	addStreamingSources(set, cfg)
+
+	if len(set.sources) == 0 && len(set.pending) == 0 {
+		log.Print("server: no movie source is configured — set JELLYFIN_URL and " +
+			"JELLYFIN_API_KEY or PLEX_URL and PLEX_TOKEN for a local library, " +
+			"and/or TMDB_READ_TOKEN for streaming services. Open the app for " +
+			"setup instructions.")
+	}
+	if len(set.pending) > 0 {
+		set.resolve = &lazyValue[*sourceSet]{}
+		set.resolveFn = func(ctx context.Context) (*sourceSet, error) {
+			return resolvePendingLibraries(ctx, cfg, set)
+		}
+	}
+	return set
+}
+
+// addLocalSources registers one source per configured Jellyfin library and Plex
+// section, recording any that is named rather than identified as pending.
+//
+// Each source is gated on its own credentials. Registering one unconditionally
+// would advertise a source every query fails against.
+func addLocalSources(set *sourceSet, cfg Config) {
 	if cfg.JellyfinConfigured() {
 		for _, ref := range libraryRefsOrAll(cfg.JellyfinLibraries) {
+			if isPendingName(SourceJellyfin, ref) {
+				set.pending = append(set.pending, pendingLibrary{SourceJellyfin, ref.ID})
+				continue
+			}
 			set.add(NewJellyfinClient(cfg, ref))
 		}
 	}
@@ -87,9 +167,17 @@ func buildSourceSet(cfg Config) *sourceSet {
 	// canonical so adding Plex cannot relabel an existing deployment's picker.
 	if cfg.PlexConfigured() {
 		for _, ref := range libraryRefsOrAll(cfg.PlexLibraries) {
+			if isPendingName(SourcePlex, ref) {
+				set.pending = append(set.pending, pendingLibrary{SourcePlex, ref.ID})
+				continue
+			}
 			set.add(NewPlexClient(cfg, ref))
 		}
 	}
+}
+
+// addStreamingSources registers the configured streaming services.
+func addStreamingSources(set *sourceSet, cfg Config) {
 	// Resolution needs the network for anything outside the built-in table, so
 	// it is bounded and non-fatal: whatever resolves is offered, and the rest
 	// is logged. It is skipped entirely without a read token, so an unset TMDB
@@ -109,13 +197,6 @@ func buildSourceSet(cfg Config) *sourceSet {
 		set.fetchers[p.ID] = src
 		set.order = append(set.order, p.ID)
 	}
-	if len(set.sources) == 0 {
-		log.Print("server: no movie source is configured — set JELLYFIN_URL and " +
-			"JELLYFIN_API_KEY or PLEX_URL and PLEX_TOKEN for a local library, " +
-			"and/or TMDB_READ_TOKEN for streaming services. Open the app for " +
-			"setup instructions.")
-	}
-	return set
 }
 
 // reloadOutcome is what a saved configuration did to the running server.

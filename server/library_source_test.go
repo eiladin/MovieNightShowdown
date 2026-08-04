@@ -11,6 +11,14 @@ import (
 	"testing"
 )
 
+// Realistic Jellyfin library identifiers: 32 hex characters, which is how the
+// resolver tells an identifier from a name. A toy value like "aaa" is a name and
+// would be left pending instead of becoming a source.
+const (
+	jfLibA = "f0e1d2c3b4a5968778695a4b3c2d1e0f"
+	jfLibB = "aabbccdd11223344556677889900aabb"
+)
+
 // jellyfinLibraryStub serves /Items and /Items/Filters per parentId, so a scoped
 // query can be told apart from an unscoped one and a scoped vocabulary from a
 // server-wide one.
@@ -80,17 +88,17 @@ func TestLibraryScopedIdentity(t *testing.T) {
 		},
 		{
 			name:    "id and name",
-			ref:     libraryRef{ID: "abc123", Name: "Kids Movies"},
-			wantID:  "jellyfin-abc123",
+			ref:     libraryRef{ID: jfLibA, Name: "Kids Movies"},
+			wantID:  SourceID("jellyfin-" + jfLibA),
 			wantLbl: "Jellyfin — Kids Movies",
 		},
 		{
 			// Configured by bare identifier: honest about what it knows rather
 			// than inventing a label.
 			name:    "id only",
-			ref:     libraryRef{ID: "abc123"},
-			wantID:  "jellyfin-abc123",
-			wantLbl: "Jellyfin — abc123",
+			ref:     libraryRef{ID: jfLibA},
+			wantID:  SourceID("jellyfin-" + jfLibA),
+			wantLbl: "Jellyfin — " + jfLibA,
 		},
 	}
 	for _, tc := range cases {
@@ -135,13 +143,13 @@ func libraryConfig(jellyfin, plex []libraryRef) Config {
 
 func TestBuildSourceSetOneSourcePerLibrary(t *testing.T) {
 	cfg := libraryConfig(
-		[]libraryRef{{ID: "aaa", Name: "Movies"}, {ID: "bbb", Name: "Kids Movies"}},
+		[]libraryRef{{ID: jfLibA, Name: "Movies"}, {ID: jfLibB, Name: "Kids Movies"}},
 		[]libraryRef{{ID: "1", Name: "Films"}},
 	)
 
 	set := buildSourceSet(cfg)
 
-	want := []SourceID{"jellyfin-aaa", "jellyfin-bbb", "plex-1"}
+	want := []SourceID{SourceID("jellyfin-" + jfLibA), SourceID("jellyfin-" + jfLibB), "plex-1"}
 	if len(set.order) != len(want) {
 		t.Fatalf("order = %v, want %v", set.order, want)
 	}
@@ -192,11 +200,11 @@ func TestBuildSourceSetWithNoLibrariesIsUnchanged(t *testing.T) {
 // Two entries naming the same library would deal the same movies twice into the
 // shoe and leave the picker with two identical chips.
 func TestBuildSourceSetSkipsADuplicateLibrary(t *testing.T) {
-	set := buildSourceSet(libraryConfig([]libraryRef{{ID: "aaa"}, {ID: "aaa"}}, nil))
+	set := buildSourceSet(libraryConfig([]libraryRef{{ID: jfLibA}, {ID: jfLibA}}, nil))
 
 	count := 0
 	for _, id := range set.order {
-		if id == "jellyfin-aaa" {
+		if id == SourceID("jellyfin-"+jfLibA) {
 			count++
 		}
 	}
@@ -210,18 +218,18 @@ func TestBuildSourceSetSkipsADuplicateLibrary(t *testing.T) {
 func TestJellyfinScopesItsQueryToItsLibrary(t *testing.T) {
 	stub := newJellyfinLibraryStub(t, nil)
 	c := NewJellyfinClient(Config{JellyfinURL: stub.URL, JellyfinAPIKey: "k"},
-		libraryRef{ID: "abc123", Name: "Kids Movies"})
+		libraryRef{ID: jfLibA, Name: "Kids Movies"})
 
 	movies, _, err := c.Movies(context.Background(), Filters{})
 	if err != nil {
 		t.Fatalf("Movies: %v", err)
 	}
-	if got := stub.lastQueryFor("/Items").Get("ParentId"); got != "abc123" {
+	if got := stub.lastQueryFor("/Items").Get("ParentId"); got != jfLibA {
 		t.Errorf("ParentId = %q, want the source's library", got)
 	}
 	// The poster path names this source, not the service, because the proxy looks
 	// a fetcher up by exactly that id.
-	if want := "/api/images/jellyfin-abc123/"; !strings.HasPrefix(movies[0].PosterURL, want) {
+	if want := "/api/images/jellyfin-" + jfLibA + "/"; !strings.HasPrefix(movies[0].PosterURL, want) {
 		t.Errorf("PosterURL = %q, want the prefix %q", movies[0].PosterURL, want)
 	}
 	// The badge stays the bare service name; the qualified form lives on the
@@ -230,7 +238,7 @@ func TestJellyfinScopesItsQueryToItsLibrary(t *testing.T) {
 		t.Errorf("badge label = %q, want the bare service name",
 			movies[0].Availability[0].Label)
 	}
-	if movies[0].Availability[0].Source != "jellyfin-abc123" {
+	if movies[0].Availability[0].Source != SourceID("jellyfin-"+jfLibA) {
 		t.Errorf("availability source = %q, want this library's source",
 			movies[0].Availability[0].Source)
 	}
@@ -241,12 +249,12 @@ func TestJellyfinScopesItsQueryToItsLibrary(t *testing.T) {
 func TestJellyfinIgnoresARequestedLibraryID(t *testing.T) {
 	stub := newJellyfinLibraryStub(t, nil)
 	c := NewJellyfinClient(Config{JellyfinURL: stub.URL, JellyfinAPIKey: "k"},
-		libraryRef{ID: "mine"})
+		libraryRef{ID: jfLibA, Name: "Mine"})
 
 	if _, _, err := c.Movies(context.Background(), Filters{LibraryID: "someone-elses"}); err != nil {
 		t.Fatalf("Movies: %v", err)
 	}
-	if got := stub.lastQueryFor("/Items").Get("ParentId"); got != "mine" {
+	if got := stub.lastQueryFor("/Items").Get("ParentId"); got != jfLibA {
 		t.Errorf("ParentId = %q, want the source's own library to win", got)
 	}
 }
@@ -292,27 +300,27 @@ func TestJellyfinVocabularyIsScopedToItsLibrary(t *testing.T) {
 // --- reload tiering ---
 
 func TestSourcesDifferOnALibraryChange(t *testing.T) {
-	base := libraryConfig([]libraryRef{{ID: "aaa", Name: "Movies"}}, nil)
+	base := libraryConfig([]libraryRef{{ID: jfLibA, Name: "Movies"}}, nil)
 
-	same := libraryConfig([]libraryRef{{ID: "aaa", Name: "Movies"}}, nil)
+	same := libraryConfig([]libraryRef{{ID: jfLibA, Name: "Movies"}}, nil)
 	if sourcesDiffer(base, same) {
 		t.Error("identical library lists reported as different; a reformatted config " +
 			"file would end every session")
 	}
 
-	added := libraryConfig([]libraryRef{{ID: "aaa", Name: "Movies"}, {ID: "bbb"}}, nil)
+	added := libraryConfig([]libraryRef{{ID: jfLibA, Name: "Movies"}, {ID: jfLibB}}, nil)
 	if !sourcesDiffer(base, added) {
 		t.Error("an added library was not reported; the save would claim a change it did not make")
 	}
 
-	renamed := libraryConfig([]libraryRef{{ID: "aaa", Name: "Films"}}, nil)
+	renamed := libraryConfig([]libraryRef{{ID: jfLibA, Name: "Films"}}, nil)
 	if !sourcesDiffer(base, renamed) {
 		t.Error("a renamed library was not reported; the picker would keep the stale label")
 	}
 
 	// Order decides the canonical source order, which decides whose genre names
 	// win in the merged vocabulary. A reordered list is a different configuration.
-	reordered := libraryConfig([]libraryRef{{ID: "bbb"}, {ID: "aaa", Name: "Movies"}}, nil)
+	reordered := libraryConfig([]libraryRef{{ID: jfLibB}, {ID: jfLibA, Name: "Movies"}}, nil)
 	if !sourcesDiffer(added, reordered) {
 		t.Error("a reordered library list was not reported")
 	}
@@ -324,8 +332,8 @@ func TestSourcesDifferOnALibraryChange(t *testing.T) {
 func TestOneFilmInTwoLibrariesMergesIntoOneCard(t *testing.T) {
 	stub := newJellyfinLibraryStub(t, nil)
 	cfg := Config{JellyfinURL: stub.URL, JellyfinAPIKey: "k"}
-	a := NewJellyfinClient(cfg, libraryRef{ID: "aaa"})
-	b := NewJellyfinClient(cfg, libraryRef{ID: "bbb"})
+	a := NewJellyfinClient(cfg, libraryRef{ID: jfLibA, Name: "A"})
+	b := NewJellyfinClient(cfg, libraryRef{ID: jfLibB, Name: "B"})
 
 	moviesA, err := a.Search(context.Background(), Filters{})
 	if err != nil {
