@@ -33,14 +33,24 @@ import '../styles/settings.css'
 // account password, and there is no login on this page. A manager that offers to
 // fill one is offering the wrong secret, and one that offers to save it stores a
 // server credential under a login it invented. `autocomplete="off"` alone does
-// not stop them; every major manager needs its own opt-out, so they are all set.
-// `new-password` is the value browsers honour for "do not fill".
+// not stop them, and for a password input browsers ignore it outright, so every
+// major manager gets its own opt-out attribute as well.
 //
-// The Jellyfin account field gets it too despite being plain text: it sits
-// directly above an API key field, and a text input followed by a password input
-// is exactly the shape a manager reads as a login form.
+// The autocomplete value is deliberately not a real token.
+//
+// It used to be `new-password`, which is the usual recommendation and is half
+// right: it does stop a manager filling a *saved* password. But it is a
+// recognized token meaning "a new password goes here", which is precisely the
+// signal that summons a password generator — and that is what was observed, a
+// generator offered on the Jellyfin API key field. An unrecognized value is not
+// matched at all, which is the actual goal. Do not "fix" this back to a standard
+// token; the standard tokens all describe a credential this page does not have.
+//
+// The Jellyfin account field gets these too despite being plain text: it sits in
+// a section with a password input, and a text field near a password field is the
+// shape a manager reads as a login form.
 const noAutofill = {
-    autoComplete: 'new-password',
+    autoComplete: 'off-server-credential',
     'data-1p-ignore': '',
     'data-lpignore': 'true',
     'data-bwignore': '',

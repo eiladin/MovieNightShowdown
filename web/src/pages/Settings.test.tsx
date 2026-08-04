@@ -239,10 +239,27 @@ describe('Settings', () => {
         // one saving it invents a login. autocomplete="off" alone does not stop
         // them, so each manager's opt-out has to be present.
         const field = screen.getByLabelText('Token')
-        expect(field.getAttribute('autocomplete')).toBe('new-password')
         expect(field.hasAttribute('data-1p-ignore')).toBe(true)
         expect(field.getAttribute('data-lpignore')).toBe('true')
         expect(field.hasAttribute('data-bwignore')).toBe(true)
+
+        // The autocomplete value must not be a token anything recognizes. It was
+        // "new-password", which stops a saved password being filled but also means
+        // "a new password goes here" — the signal that offers a password
+        // generator, which is what a manager was observed doing on the API key
+        // field. Every standard token describes a credential this page does not
+        // have, so the correct value is one that matches nothing.
+        const autocomplete = field.getAttribute('autocomplete') ?? ''
+        expect(autocomplete).not.toBe('')
+        expect([
+            'new-password',
+            'current-password',
+            'password',
+            'username',
+            'email',
+            'one-time-code',
+            'on',
+        ]).not.toContain(autocomplete)
     })
 
     it('badges a field whose environment variable is being ignored', async () => {
