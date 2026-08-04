@@ -12,11 +12,19 @@ type Config struct {
 	JellyfinURL    string
 	JellyfinAPIKey string
 	JellyfinUserID string
-	PublicURL      string
-	Port           string
-	SessionTTL     string
-	CacheDir       string
-	TMDBReadToken  string
+	PlexURL        string
+	PlexToken      string
+	// PlexLibrarySection is the key of the Plex library section holding
+	// movies. It is optional: with it unset the client discovers the first
+	// section of type "movie" on first use. A server with more than one movie
+	// section needs it set, since discovery would otherwise pick whichever
+	// Plex listed first.
+	PlexLibrarySection string
+	PublicURL          string
+	Port               string
+	SessionTTL         string
+	CacheDir           string
+	TMDBReadToken      string
 	// TMDBWatchRegion is the ISO 3166-1 region streaming availability is
 	// judged against. Which services exist, and what they carry, both depend
 	// on it.
@@ -70,11 +78,16 @@ func LoadConfig() Config {
 		JellyfinURL:    os.Getenv("JELLYFIN_URL"),
 		JellyfinAPIKey: os.Getenv("JELLYFIN_API_KEY"),
 		JellyfinUserID: os.Getenv("JELLYFIN_USER_ID"),
-		PublicURL:      os.Getenv("PUBLIC_URL"),
-		Port:           os.Getenv("PORT"),
-		SessionTTL:     os.Getenv("SESSION_TTL"),
-		CacheDir:       os.Getenv("CACHE_DIR"),
-		TMDBReadToken:  os.Getenv("TMDB_READ_TOKEN"),
+
+		PlexURL:            os.Getenv("PLEX_URL"),
+		PlexToken:          os.Getenv("PLEX_TOKEN"),
+		PlexLibrarySection: os.Getenv("PLEX_LIBRARY_SECTION"),
+
+		PublicURL:     os.Getenv("PUBLIC_URL"),
+		Port:          os.Getenv("PORT"),
+		SessionTTL:    os.Getenv("SESSION_TTL"),
+		CacheDir:      os.Getenv("CACHE_DIR"),
+		TMDBReadToken: os.Getenv("TMDB_READ_TOKEN"),
 
 		TMDBWatchRegion:    os.Getenv("TMDB_WATCH_REGION"),
 		StreamingProviders: parseStreamingProviders(os.Getenv("STREAMING_PROVIDERS")),
@@ -106,6 +119,13 @@ func (c Config) JellyfinConfigured() bool {
 	return c.JellyfinURL != "" && c.JellyfinAPIKey != ""
 }
 
+// PlexConfigured reports whether this deployment can query Plex. Both values
+// are needed for the same reason Jellyfin needs both: a URL without a token
+// cannot authenticate, and a token without a URL has nowhere to go.
+func (c Config) PlexConfigured() bool {
+	return c.PlexURL != "" && c.PlexToken != ""
+}
+
 // StreamingConfigured reports whether this deployment can query any streaming
 // service. Every streaming source goes through TMDB, so the token is required;
 // STREAMING_PROVIDERS can also narrow the list to nothing.
@@ -123,9 +143,15 @@ func (c Config) String() string {
 	if c.TMDBReadToken != "" {
 		maskedTMDB = "***"
 	}
+	maskedPlex := "(unset)"
+	if c.PlexToken != "" {
+		maskedPlex = "***"
+	}
 	return fmt.Sprintf(
-		"JellyfinURL=%s JellyfinAPIKey=%s JellyfinUserID=%s PublicURL=%s Port=%s SessionTTL=%s CacheDir=%s TMDBReadToken=%s TMDBWatchRegion=%s StreamingProviders=%s",
-		c.JellyfinURL, masked, c.JellyfinUserID, c.PublicURL, c.Port, c.SessionTTL, c.CacheDir, maskedTMDB,
+		"JellyfinURL=%s JellyfinAPIKey=%s JellyfinUserID=%s PlexURL=%s PlexToken=%s PlexLibrarySection=%s PublicURL=%s Port=%s SessionTTL=%s CacheDir=%s TMDBReadToken=%s TMDBWatchRegion=%s StreamingProviders=%s",
+		c.JellyfinURL, masked, c.JellyfinUserID,
+		c.PlexURL, maskedPlex, c.PlexLibrarySection,
+		c.PublicURL, c.Port, c.SessionTTL, c.CacheDir, maskedTMDB,
 		c.TMDBWatchRegion, strings.Join(c.StreamingProviders, ","),
 	)
 }

@@ -157,6 +157,7 @@ export interface SetupStatus {
     // state of a fresh install.
     configured: boolean
     jellyfin: boolean
+    plex: boolean
     streaming: boolean
     sources: SourceDescriptor[]
 }

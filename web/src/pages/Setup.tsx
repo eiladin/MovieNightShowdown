@@ -34,6 +34,9 @@ export default function Setup() {
                     <li className={status.jellyfin ? 'ok' : 'missing'}>
                         Jellyfin library: {status.jellyfin ? 'configured' : 'not configured'}
                     </li>
+                    <li className={status.plex ? 'ok' : 'missing'}>
+                        Plex library: {status.plex ? 'configured' : 'not configured'}
+                    </li>
                     <li className={status.streaming ? 'ok' : 'missing'}>
                         Streaming services: {status.streaming ? 'configured' : 'not configured'}
                     </li>
@@ -60,6 +63,24 @@ export default function Setup() {
                 <p className="setup-note">
                     Create the API key in Jellyfin under Dashboard → API Keys. It stays on this
                     server and is never sent to browsers.
+                </p>
+            </section>
+
+            <section className="setup-option">
+                <h2>Plex only</h2>
+                <p>Draw the deck from a Plex library instead of, or alongside, Jellyfin.</p>
+                <pre>
+                    <code>
+                        {'PLEX_URL=http://plex.local:32400\n'}
+                        {'PLEX_TOKEN=your-plex-token\n'}
+                        {'PLEX_LIBRARY_SECTION=2   # optional, only with several movie libraries'}
+                    </code>
+                </pre>
+                <p className="setup-note">
+                    Find the token in Plex Web: open any movie's ⋮ menu → Get Info → View XML, then
+                    copy the <code>X-Plex-Token</code> value out of the address bar. It stays on this
+                    server and is never sent to browsers. No separate user id is needed for
+                    &ldquo;unwatched only&rdquo; — a Plex token already identifies one user.
                 </p>
             </section>
 
