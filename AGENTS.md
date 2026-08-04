@@ -96,6 +96,21 @@ hand-curated and is not touched by this pipeline.
   localStorage and nothing else. Every other field is server-derived and must be
   re-fetched on reconnect; persisting a deck or roster would restore state the
   session disagrees with.
+- **Local library sources are peers, not variants.** Jellyfin and Plex share the
+  `Movie` type and the `MovieSource` interface and nothing else: their query
+  params, JSON shapes, and rating scales all differ, so `Filters.apply`
+  (Jellyfin) and `Filters.applyPlex` are deliberately separate rather than
+  generalized behind a shared applier. Plex maps `audienceRating` — not the
+  `rating` critic score — onto `CommunityRating`, so the leaderboard tiebreak in
+  `match.go` compares like with like across sources. Plex sits after Jellyfin in
+  the canonical order so Jellyfin's genre vocabulary stays canonical.
+- **Plex truncates genres to two per item** in a list response, so `Movie.Genres`
+  from Plex is display data and may be incomplete. This is not a bug to fix:
+  Plex applies the genre filter server-side against the untruncated tags, and
+  the picker's vocabulary comes from the section's `/genre` endpoint, so neither
+  correctness path depends on it. Recovering the rest would cost one detail
+  request per movie; `TestPlexSearchMakesOneRequest` pins that against
+  regression.
 - **Jellyfin is optional.** It is one source among peers and is registered only
   when its credentials are set. Code must not assume it exists: filter options
   fall back to `defaultAvailableFilters()` without it, and `selectSources` falls
@@ -110,6 +125,9 @@ hand-curated and is not touched by this pipeline.
 | `JELLYFIN_URL` | one of¹ | Base URL of the Jellyfin server |
 | `JELLYFIN_API_KEY` | one of¹ | Jellyfin API key (stays server-side, never sent to clients) |
 | `JELLYFIN_USER_ID` | optional | Needed for "unwatched" filtering |
+| `PLEX_URL` | one of¹ | Base URL of the Plex Media Server (usually port 32400) |
+| `PLEX_TOKEN` | one of¹ | Plex authentication token (stays server-side, never sent to clients) |
+| `PLEX_LIBRARY_SECTION` | optional | Key of the movie library section. Discovered on first use (first section of type `movie`) when unset; required only on a server with several movie libraries |
 | `PUBLIC_URL` | yes | Base URL used to build QR/join links |
 | `PORT` | optional | Listen port (default 8080) |
 | `SESSION_TTL` | optional | Session expiry (default a few hours) |
@@ -119,7 +137,8 @@ hand-curated and is not touched by this pipeline.
 | `TMDB_WATCH_REGION` | optional | ISO 3166-1 region for provider resolution and every Discover query. Defaults to `US`. |
 
 ¹ At least one movie source is required: Jellyfin (`JELLYFIN_URL` **and**
-`JELLYFIN_API_KEY`), streaming (`TMDB_READ_TOKEN`), or both. `Config.JellyfinConfigured`
-and `Config.StreamingConfigured` are the predicates. With neither set, `New`
+`JELLYFIN_API_KEY`), Plex (`PLEX_URL` **and** `PLEX_TOKEN`), streaming
+(`TMDB_READ_TOKEN`), or any combination. `Config.JellyfinConfigured`,
+`Config.PlexConfigured` and `Config.StreamingConfigured` are the predicates. With neither set, `New`
 registers no source, logs what is missing, and every client route redirects to
 the in-app `/setup` guide (`server/setup.go`, `web/src/pages/Setup.tsx`).
