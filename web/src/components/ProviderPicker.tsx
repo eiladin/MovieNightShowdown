@@ -8,13 +8,22 @@ interface ProviderPickerProps {
     onChange: (next: string[]) => void
 }
 
+// MAX_VISIBLE caps how many results are rendered at once.
+//
+// TMDB lists several hundred watch providers for a region. Rendering every match
+// makes the overlay a wall of services nobody has, which is the same problem the
+// search box was added to solve — a shorter list is easier to read than a
+// complete one you have to skim. The remainder is counted rather than dropped
+// silently, so the list never looks exhaustive when it is not.
+const MAX_VISIBLE = 5
+
 // ProviderPicker selects a handful of streaming services out of the several
 // hundred TMDB lists for a region.
 //
-// It shows what is selected and nothing else until you search. Rendering every
-// option as a checkbox spent a screen of space to express a choice that is
-// usually three or four items, and made the rest of the form unreachable
-// without scrolling past services nobody has.
+// It shows what is selected and nothing else until you type. An empty query
+// deliberately renders no results at all — not even on focus — because "every
+// service, unfiltered" is not a list anyone reads, and showing it on focus meant
+// clicking into the field buried the rest of the form under an overlay.
 //
 // The results appear in an overlay rather than inline so opening them does not
 // reflow the form underneath.
@@ -27,12 +36,23 @@ export default function ProviderPicker({ options, selected, onChange }: Provider
 
     const byId = useMemo(() => new Map(options.map((o) => [o.id, o])), [options])
 
+    const trimmed = query.trim().toLowerCase()
+
     const matches = useMemo(() => {
-        const q = query.trim().toLowerCase()
+        if (trimmed === '') return []
         return options.filter(
-            (o) => !selected.includes(o.id) && (q === '' || o.name.toLowerCase().includes(q)),
+            (o) => !selected.includes(o.id) && o.name.toLowerCase().includes(trimmed),
         )
-    }, [options, selected, query])
+    }, [options, selected, trimmed])
+
+    // visible is what the keyboard walks as well as what renders. Highlighting a
+    // row that was sliced off would make Enter select something invisible.
+    const visible = matches.slice(0, MAX_VISIBLE)
+    const hidden = matches.length - visible.length
+
+    // The overlay needs a query, not just focus. Gating on `open` alone is what
+    // made clicking the field cover the form with an unfiltered list.
+    const showOptions = open && trimmed !== ''
 
     // Reset the highlight whenever the result set changes, so Enter never
     // selects something that scrolled out from under the cursor.
@@ -71,9 +91,9 @@ export default function ProviderPicker({ options, selected, onChange }: Provider
             e.preventDefault()
             setOpen(true)
             setActive((i) => {
-                if (matches.length === 0) return 0
+                if (visible.length === 0) return 0
                 const next = e.key === 'ArrowDown' ? i + 1 : i - 1
-                return (next + matches.length) % matches.length
+                return (next + visible.length) % visible.length
             })
             return
         }
@@ -81,7 +101,7 @@ export default function ProviderPicker({ options, selected, onChange }: Provider
             // The picker lives inside the settings form; Enter here must choose
             // an option, not submit everything.
             e.preventDefault()
-            if (open && matches[active]) add(matches[active].id)
+            if (showOptions && visible[active]) add(visible[active].id)
         }
     }
 
@@ -112,10 +132,10 @@ export default function ProviderPicker({ options, selected, onChange }: Provider
                 ref={inputRef}
                 type="text"
                 role="combobox"
-                aria-expanded={open}
+                aria-expanded={showOptions}
                 aria-controls="provider-options"
                 aria-autocomplete="list"
-                placeholder="Search services to add…"
+                placeholder="Type to find a service…"
                 value={query}
                 onChange={(e) => {
                     setQuery(e.target.value)
@@ -126,7 +146,7 @@ export default function ProviderPicker({ options, selected, onChange }: Provider
                 autoComplete="off"
             />
 
-            {open && (
+            {showOptions && (
                 <ul className="provider-options" id="provider-options" role="listbox">
                     {matches.length === 0 && (
                         <li className="provider-none">
@@ -138,7 +158,7 @@ export default function ProviderPicker({ options, selected, onChange }: Provider
                     {/* The option is the interactive element itself rather than a
                         button inside it: a listbox option that only responds when
                         an inner control is hit is a target users miss. */}
-                    {matches.map((o, i) => (
+                    {visible.map((o, i) => (
                         <li
                             key={o.id}
                             role="option"
@@ -151,6 +171,11 @@ export default function ProviderPicker({ options, selected, onChange }: Provider
                             {o.name}
                         </li>
                     ))}
+                    {hidden > 0 && (
+                        <li className="provider-more" aria-live="polite">
+                            {hidden} more — keep typing to narrow.
+                        </li>
+                    )}
                 </ul>
             )}
         </div>

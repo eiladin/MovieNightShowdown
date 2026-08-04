@@ -80,20 +80,20 @@ describe('ProviderPicker', () => {
         const user = userEvent.setup()
         const onChange = renderPicker()
 
-        const input = screen.getByRole('combobox')
-        await user.click(input)
+        await user.type(screen.getByRole('combobox'), 'apple')
         await user.keyboard('{ArrowDown}{Enter}')
 
         // Enter must choose an option rather than submitting the settings form
         // the picker sits inside.
         expect(onChange).toHaveBeenCalledTimes(1)
+        expect(onChange).toHaveBeenCalledWith(['apple'])
     })
 
     it('closes the results on Escape', async () => {
         const user = userEvent.setup()
         renderPicker()
 
-        await user.click(screen.getByRole('combobox'))
+        await user.type(screen.getByRole('combobox'), 'net')
         expect(screen.getByRole('listbox')).toBeTruthy()
 
         await user.keyboard('{Escape}')
@@ -104,7 +104,64 @@ describe('ProviderPicker', () => {
         const user = userEvent.setup()
         renderPicker([], [])
 
-        await user.click(screen.getByRole('combobox'))
+        await user.type(screen.getByRole('combobox'), 'net')
         expect(screen.getByText('No services were returned for this region.')).toBeTruthy()
+    })
+
+    // Focus alone used to open the overlay, which meant clicking into the field
+    // covered the rest of the form with an unfiltered list of every service TMDB
+    // returns. Nobody reads that list; it is the problem the search box exists to
+    // solve.
+    it('shows no results on focus alone', async () => {
+        const user = userEvent.setup()
+        renderPicker()
+
+        await user.click(screen.getByRole('combobox'))
+
+        expect(screen.queryByRole('listbox')).toBeNull()
+    })
+
+    // Backspacing to an empty field has to close the overlay, not fall back to
+    // showing everything.
+    it('hides the results again when the query is cleared', async () => {
+        const user = userEvent.setup()
+        renderPicker()
+
+        const input = screen.getByRole('combobox')
+        await user.type(input, 'net')
+        expect(screen.getByRole('listbox')).toBeTruthy()
+
+        await user.clear(input)
+
+        expect(screen.queryByRole('listbox')).toBeNull()
+    })
+
+    // A region can match dozens of services on a two-letter query. The overlay
+    // caps what it renders, and counts the rest rather than dropping them
+    // silently — a truncated list that looks complete is worse than a short one
+    // that admits it.
+    it('caps the results and reports how many are hidden', async () => {
+        const user = userEvent.setup()
+        const many: ProviderOption[] = Array.from({ length: 9 }, (_, i) => ({
+            id: `channel-${i}`,
+            name: `Channel ${i}`,
+        }))
+        renderPicker([], many)
+
+        await user.type(screen.getByRole('combobox'), 'channel')
+
+        expect(screen.getAllByRole('option')).toHaveLength(5)
+        expect(screen.getByText('4 more — keep typing to narrow.')).toBeTruthy()
+    })
+
+    // Narrowing to a single match must leave no remainder note behind.
+    it('drops the remainder note once everything fits', async () => {
+        const user = userEvent.setup()
+        renderPicker()
+
+        await user.type(screen.getByRole('combobox'), 'net')
+
+        expect(screen.getAllByRole('option')).toHaveLength(1)
+        expect(screen.queryByText(/more — keep typing/)).toBeNull()
     })
 })
