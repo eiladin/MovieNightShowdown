@@ -18,6 +18,8 @@ import (
 // type and the MovieSource interface and nothing else. Their query params,
 // their JSON shapes, and their rating scales all differ, so the mapping lives
 // here rather than in a shared abstraction.
+// One client is one library section. A deployment that names several sections
+// registers several clients against the same server, each its own movie source.
 type PlexClient struct {
 	baseURL string
 	token   string
@@ -25,6 +27,8 @@ type PlexClient struct {
 	// discovered on first use, since a server may have several sections and
 	// only one of them is type "movie".
 	section string
+	id      SourceID
+	name    string
 	http    *http.Client
 
 	// discovered holds the lazily-found section key. Discovery needs the network,
@@ -39,21 +43,27 @@ type PlexClient struct {
 	discovered lazyValue[string]
 }
 
-// NewPlexClient builds a client from the server Config.
-func NewPlexClient(cfg Config) *PlexClient {
+// NewPlexClient builds a client for one library section. A zero libraryRef falls
+// back to discovering the first movie section, which is what a deployment that has
+// chosen none has always had.
+func NewPlexClient(cfg Config, library libraryRef) *PlexClient {
 	return &PlexClient{
 		baseURL: strings.TrimRight(cfg.PlexURL, "/"),
 		token:   cfg.PlexToken,
-		section: cfg.PlexLibrarySection,
+		// For Plex the library identifier *is* the section key, so there is no
+		// second lookup to do.
+		section: library.ID,
+		id:      libraryScopedID(SourcePlex, library),
+		name:    libraryScopedName("Plex", library),
 		http:    &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
 // ID identifies this source. PlexClient implements MovieSource.
-func (c *PlexClient) ID() SourceID { return SourcePlex }
+func (c *PlexClient) ID() SourceID { return c.id }
 
-// Name implements NamedSource.
-func (c *PlexClient) Name() string { return "Plex" }
+// Name implements NamedSource, returning the qualified library name.
+func (c *PlexClient) Name() string { return c.name }
 
 // FetchDepth implements DepthedSource. Like Jellyfin, a local library is cheap
 // to page through, so it contributes more candidates than a remote catalog.
@@ -245,7 +255,7 @@ func (c *PlexClient) Movies(ctx context.Context, filters Filters) ([]Movie, int,
 		// Doing it after the fetch means the rating floor narrows the sample
 		// rather than the query, which is acceptable for a filter the host
 		// uses to exclude a tail.
-		m := it.toMovie()
+		m := it.toMovie(c.id)
 		if filters.RatingMin > 0 && m.CommunityRating < filters.RatingMin {
 			continue
 		}
@@ -293,8 +303,12 @@ func (f Filters) applyPlex(q url.Values) {
 }
 
 // toMovie maps one Plex item onto the shared Movie type.
-func (it plexItem) toMovie() Movie {
-	posterURL := "/api/images/" + string(SourcePlex) + "/" + it.RatingKey
+//
+// source is the id of the client that fetched it, which under one source per
+// library is not the bare service id. The poster path has to name the source that
+// can serve the image: the proxy looks a fetcher up by that id.
+func (it plexItem) toMovie(source SourceID) Movie {
+	posterURL := "/api/images/" + string(source) + "/" + it.RatingKey
 	if tag := plexThumbTag(it.Thumb); tag != "" {
 		posterURL += "?tag=" + url.QueryEscape(tag)
 	}
@@ -327,7 +341,9 @@ func (it plexItem) toMovie() Movie {
 		CommunityRating: community,
 		OfficialRating:  it.ContentRating,
 		PosterURL:       posterURL,
-		Availability:    []Availability{{Source: SourcePlex, Label: "Plex"}},
+		// The badge label is the bare service name, not the qualified library
+		// name; the source list carries the qualified form separately.
+		Availability: []Availability{{Source: source, Label: "Plex"}},
 	}
 }
 

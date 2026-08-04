@@ -19,7 +19,7 @@ func TestMoviesRequestsProviderIds(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewJellyfinClient(Config{JellyfinURL: srv.URL, JellyfinAPIKey: "k"})
+	c := NewJellyfinClient(Config{JellyfinURL: srv.URL, JellyfinAPIKey: "k"}, libraryRef{})
 	if _, _, err := c.Movies(context.Background(), Filters{}); err != nil {
 		t.Fatalf("Movies: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestJellyfinClient_Movies(t *testing.T) {
 		t.Skip("JELLYFIN_URL/JELLYFIN_API_KEY not set; skipping live Jellyfin integration test")
 	}
 
-	client := NewJellyfinClient(cfg)
+	client := NewJellyfinClient(cfg, libraryRef{})
 	ctx := context.Background()
 
 	all, allCount, err := client.Movies(ctx, ParseFilters(nil))

@@ -26,15 +26,28 @@ type Movie struct {
 }
 
 // JellyfinClient talks to a Jellyfin server's REST API.
+//
+// One client is one library. A deployment that names several libraries registers
+// several clients against the same server, each its own movie source, so a host
+// can deal from one of them alone.
 type JellyfinClient struct {
 	baseURL string
 	apiKey  string
 	userID  string
+	// library is the library this client is scoped to. An empty ref means every
+	// library on the server, which is what a deployment that has chosen none has
+	// always had.
+	library libraryRef
+	id      SourceID
+	name    string
 	http    *http.Client
 }
 
 // ID identifies this source. JellyfinClient implements MovieSource.
-func (c *JellyfinClient) ID() SourceID { return SourceJellyfin }
+func (c *JellyfinClient) ID() SourceID { return c.id }
+
+// Name implements NamedSource, returning the qualified library name.
+func (c *JellyfinClient) Name() string { return c.name }
 
 // FetchDepth implements DepthedSource. A local library is cheap to page
 // through, so it contributes more candidates than a remote catalog.
@@ -47,12 +60,16 @@ func (c *JellyfinClient) Search(ctx context.Context, f Filters) ([]Movie, error)
 	return movies, err
 }
 
-// NewJellyfinClient builds a client from the server Config.
-func NewJellyfinClient(cfg Config) *JellyfinClient {
+// NewJellyfinClient builds a client for one library. A zero libraryRef queries
+// every library, which is the behaviour of a deployment that has chosen none.
+func NewJellyfinClient(cfg Config, library libraryRef) *JellyfinClient {
 	return &JellyfinClient{
 		baseURL: strings.TrimRight(cfg.JellyfinURL, "/"),
 		apiKey:  cfg.JellyfinAPIKey,
 		userID:  cfg.JellyfinUserID,
+		library: library,
+		id:      libraryScopedID(SourceJellyfin, library),
+		name:    libraryScopedName("Jellyfin", library),
 		http:    &http.Client{Timeout: 10 * time.Second},
 	}
 }
@@ -96,6 +113,12 @@ func (c *JellyfinClient) Movies(ctx context.Context, filters Filters) ([]Movie, 
 	if c.userID != "" {
 		q.Set("userId", c.userID)
 	}
+	// The source's own library wins over anything the request asked for. Under one
+	// source per library the scope *is* the source's identity, so honouring a
+	// client-supplied libraryId here would let a caller make one source answer for
+	// another. Setting it before apply keeps Filters.apply the only writer of
+	// ParentId.
+	filters.LibraryID = c.library.ID
 	filters.apply(q, c.userID != "")
 
 	reqURL := fmt.Sprintf("%s/Items?%s", c.baseURL, q.Encode())
@@ -122,15 +145,19 @@ func (c *JellyfinClient) Movies(ctx context.Context, filters Filters) ([]Movie, 
 
 	movies := make([]Movie, 0, len(parsed.Items))
 	for _, it := range parsed.Items {
-		movies = append(movies, it.toMovie())
+		movies = append(movies, it.toMovie(c.id))
 	}
 
 	return movies, parsed.TotalRecordCount, nil
 }
 
 // toMovie maps one Jellyfin item onto the shared Movie type.
-func (it jellyfinItem) toMovie() Movie {
-	posterURL := "/api/images/" + string(SourceJellyfin) + "/" + it.ID
+//
+// source is the id of the client that fetched it, which under one source per
+// library is not the bare service id. The poster path has to name the source that
+// can actually serve the image: the proxy looks a fetcher up by that id.
+func (it jellyfinItem) toMovie(source SourceID) Movie {
+	posterURL := "/api/images/" + string(source) + "/" + it.ID
 	if tag := it.ImageTags["Primary"]; tag != "" {
 		posterURL += "?tag=" + url.QueryEscape(tag)
 	}
@@ -152,7 +179,10 @@ func (it jellyfinItem) toMovie() Movie {
 		CommunityRating: it.CommunityRating,
 		OfficialRating:  it.OfficialRating,
 		PosterURL:       posterURL,
-		Availability:    []Availability{{Source: SourceJellyfin, Label: "Jellyfin"}},
+		// The badge label is the bare service name, not the qualified library
+		// name: a card badge has no room for "Jellyfin — Kids Movies", and the
+		// source list carries the qualified form separately.
+		Availability: []Availability{{Source: source, Label: "Jellyfin"}},
 	}
 }
 
@@ -175,6 +205,12 @@ func (c *JellyfinClient) Vocabulary(ctx context.Context) (AvailableFilters, erro
 	reqURL := fmt.Sprintf("%s/Items/Filters?IncludeItemTypes=Movie", c.baseURL)
 	if c.userID != "" {
 		reqURL += "&userId=" + url.QueryEscape(c.userID)
+	}
+	// Scope the vocabulary to this source's library. Unscoped, a host filtering a
+	// children's library is offered genres that only exist elsewhere on the server
+	// — filters that match nothing the source can return.
+	if c.library.ID != "" {
+		reqURL += "&parentId=" + url.QueryEscape(c.library.ID)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)

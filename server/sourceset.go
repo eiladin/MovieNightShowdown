@@ -31,6 +31,39 @@ func (s *Server) currentSources() *sourceSet {
 	return s.sources.Load()
 }
 
+// libraryRefsOrAll turns a configured library list into the refs to build clients
+// for.
+//
+// An empty list yields one zero ref, which is an unscoped source over every
+// library on the server. That is what a deployment which has never chosen a
+// library has always had, so upgrading changes nothing until somebody picks one.
+// Reading it as "no libraries" instead would leave a configured service with
+// nothing to query, which is not what anyone means by leaving a setting blank.
+func libraryRefsOrAll(refs []libraryRef) []libraryRef {
+	if len(refs) == 0 {
+		return []libraryRef{{}}
+	}
+	return refs
+}
+
+// add registers one source under its own id, in canonical order.
+//
+// It refuses a duplicate rather than overwriting: two configured entries naming
+// the same library would otherwise register the same source twice, deal the same
+// movies twice into the shoe, and leave the picker with two identical chips.
+func (set *sourceSet) add(src MovieSource) {
+	id := src.ID()
+	if _, clash := set.sources[id]; clash {
+		log.Printf("server: skipping duplicate source %q", id)
+		return
+	}
+	set.sources[id] = src
+	if f, ok := src.(PosterFetcher); ok {
+		set.fetchers[id] = f
+	}
+	set.order = append(set.order, id)
+}
+
 // buildSourceSet constructs the sources a configuration calls for.
 //
 // Startup and reload share this one path deliberately. Two construction paths
@@ -45,19 +78,17 @@ func buildSourceSet(cfg Config) *sourceSet {
 	// Each source is gated on its own credentials. Registering one
 	// unconditionally would advertise a source every query fails against.
 	if cfg.JellyfinConfigured() {
-		jellyfin := NewJellyfinClient(cfg)
-		set.sources[SourceJellyfin] = jellyfin
-		set.fetchers[SourceJellyfin] = jellyfin
-		set.order = append(set.order, SourceJellyfin)
+		for _, ref := range libraryRefsOrAll(cfg.JellyfinLibraries) {
+			set.add(NewJellyfinClient(cfg, ref))
+		}
 	}
 	// Plex sits after Jellyfin: the canonical order decides whose genre names
 	// win in the merged vocabulary (see gatherVocabulary), and Jellyfin's stay
 	// canonical so adding Plex cannot relabel an existing deployment's picker.
 	if cfg.PlexConfigured() {
-		plex := NewPlexClient(cfg)
-		set.sources[SourcePlex] = plex
-		set.fetchers[SourcePlex] = plex
-		set.order = append(set.order, SourcePlex)
+		for _, ref := range libraryRefsOrAll(cfg.PlexLibraries) {
+			set.add(NewPlexClient(cfg, ref))
+		}
 	}
 	// Resolution needs the network for anything outside the built-in table, so
 	// it is bounded and non-fatal: whatever resolves is offered, and the rest
@@ -119,6 +150,12 @@ func sourcesDiffer(a, b Config) bool {
 		a.PlexLibrarySection != b.PlexLibrarySection {
 		return true
 	}
+	// The library lists decide how many sources exist and what each one is called.
+	// Omitting them here would have a save report a change the server never made.
+	if !librariesEqual(a.JellyfinLibraries, b.JellyfinLibraries) ||
+		!librariesEqual(a.PlexLibraries, b.PlexLibraries) {
+		return true
+	}
 	if a.TMDBReadToken != b.TMDBReadToken ||
 		a.TMDBWatchRegion != b.TMDBWatchRegion {
 		return true
@@ -132,6 +169,26 @@ func sourcesDiffer(a, b Config) bool {
 		}
 	}
 	return false
+}
+
+// librariesEqual compares two library lists element by element.
+//
+// Order matters: it decides the order sources are offered in, and the canonical
+// order decides whose genre names win in the merged vocabulary. A reordered list
+// is a different configuration, not the same one written differently.
+//
+// The name is compared as well as the identifier. It is only a label, but it is a
+// label the picker shows, and a rebuild is what makes a corrected one visible.
+func librariesEqual(a, b []libraryRef) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // harmlessDiffer reports whether settings changed that can be applied without

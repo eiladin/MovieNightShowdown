@@ -20,7 +20,7 @@ func TestJellyfinItemToMovie_ID(t *testing.T) {
 			var it jellyfinItem
 			it.ID = c.id
 			it.ProviderIds.Tmdb = c.tmdb
-			if got := it.toMovie().ID; got != c.want {
+			if got := it.toMovie(SourceJellyfin).ID; got != c.want {
 				t.Errorf("ID = %q, want %q", got, c.want)
 			}
 		})
@@ -42,7 +42,7 @@ func TestJellyfinItemToMovie_Runtime(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			it := jellyfinItem{RunTimeTicks: c.ticks}
-			if got := it.toMovie().Runtime; got != c.want {
+			if got := it.toMovie(SourceJellyfin).Runtime; got != c.want {
 				t.Errorf("Runtime = %d, want %d", got, c.want)
 			}
 		})
@@ -65,7 +65,7 @@ func TestJellyfinItemToMovie_PosterURL(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			it := jellyfinItem{ID: c.id, ImageTags: c.tags}
-			if got := it.toMovie().PosterURL; got != c.want {
+			if got := it.toMovie(SourceJellyfin).PosterURL; got != c.want {
 				t.Errorf("PosterURL = %q, want %q", got, c.want)
 			}
 		})
@@ -78,7 +78,7 @@ func TestJellyfinItemToMovie_PosterURL(t *testing.T) {
 func TestJellyfinItemToMovie_PosterURLRoundTrip(t *testing.T) {
 	for _, tag := range []string{"", "deadbeef", "a b&c=d"} {
 		it := jellyfinItem{ID: "abc123", ImageTags: map[string]string{"Primary": tag}}
-		source, id, gotTag := parsePosterRef(it.toMovie().PosterURL)
+		source, id, gotTag := parsePosterRef(it.toMovie(SourceJellyfin).PosterURL)
 		if source != SourceJellyfin || id != "abc123" || gotTag != tag {
 			t.Errorf("round trip for tag %q = (%q,%q,%q), want (%q,%q,%q)",
 				tag, source, id, gotTag, SourceJellyfin, "abc123", tag)
@@ -87,7 +87,7 @@ func TestJellyfinItemToMovie_PosterURLRoundTrip(t *testing.T) {
 }
 
 func TestJellyfinItemToMovie_Availability(t *testing.T) {
-	m := jellyfinItem{ID: "abc123"}.toMovie()
+	m := jellyfinItem{ID: "abc123"}.toMovie(SourceJellyfin)
 	if len(m.Availability) != 1 {
 		t.Fatalf("Availability has %d entries, want 1", len(m.Availability))
 	}
@@ -106,7 +106,7 @@ func TestJellyfinItemToMovie_Fields(t *testing.T) {
 		CommunityRating: 8.5,
 		OfficialRating:  "R",
 	}
-	m := it.toMovie()
+	m := it.toMovie(SourceJellyfin)
 	if m.Title != "A Film" || m.Year != 1999 || m.Overview != "An overview." ||
 		m.CommunityRating != 8.5 || m.OfficialRating != "R" {
 		t.Errorf("unexpected mapping: %+v", m)
