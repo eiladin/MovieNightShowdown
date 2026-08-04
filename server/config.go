@@ -45,16 +45,21 @@ type Config struct {
 	// question.
 	ConfigPath string
 
-	// JellyfinEnabled, PlexEnabled and StreamingEnabled are the config file's
-	// per-source toggles, reported so the settings screen can render them.
-	// They do not gate the Configured predicates: LoadConfig clears a disabled
-	// source's credentials instead, so "disabled" has exactly one meaning
-	// downstream and a hand-built Config with a zero value here still behaves
-	// as its credentials say. They default to true, so a deployment without a
-	// config file behaves exactly as it did before one existed.
-	JellyfinEnabled  bool
-	PlexEnabled      bool
-	StreamingEnabled bool
+	// JellyfinDisabled, PlexDisabled and StreamingDisabled are the config
+	// file's per-source toggles, inverted.
+	//
+	// The inversion is load-bearing. Stored as "enabled", the zero value of a
+	// hand-built Config would disable every source, which is a trap for any
+	// caller that builds one directly. Stored as "disabled", the zero value
+	// means what a deployment without a config file has always meant: a source
+	// is available whenever its credentials are set.
+	//
+	// They gate the Configured predicates rather than causing credentials to be
+	// cleared, so a disabled source keeps its resolved values and the settings
+	// screen can still show what is stored for it.
+	JellyfinDisabled  bool
+	PlexDisabled      bool
+	StreamingDisabled bool
 
 	// Provenance records how each setting was resolved, keyed by the config
 	// file's dotted key names. It carries no values, only their origins.
@@ -117,7 +122,12 @@ func parseStreamingProviders(raw string) []string {
 // would fail against it, so it fails at startup instead.
 func LoadConfig() (Config, error) {
 	path, explicit := resolveConfigPath()
-	return resolveConfigAt(path, explicit)
+	cfg, err := resolveConfigAt(path, explicit)
+	if err != nil {
+		return Config{}, err
+	}
+	logResolvedConfig(cfg)
+	return cfg, nil
 }
 
 // resolveConfigAt performs the resolution LoadConfig describes against an
@@ -129,6 +139,15 @@ func resolveConfigAt(path string, explicit bool) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	if err := prepareConfigPath(file, path, explicit); err != nil {
+		return Config{}, err
+	}
+	return resolveFrom(file, path), nil
+}
+
+// prepareConfigPath reports whether a config file was found and makes sure an
+// explicitly named path is usable.
+func prepareConfigPath(file *configFile, path string, explicit bool) error {
 	if file == nil && explicit {
 		// A missing file at an explicitly configured path is the normal first
 		// boot: a fresh deployment has saved nothing yet, and the application
@@ -140,7 +159,7 @@ func resolveConfigAt(path string, explicit bool) (Config, error) {
 		// turns that into one clear startup error instead of a settings screen
 		// that reports success and persists nothing.
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			return Config{}, fmt.Errorf("config file %s: its directory cannot be created: %w", path, err)
+			return fmt.Errorf("config file %s: its directory cannot be created: %w", path, err)
 		}
 	}
 	if file != nil {
@@ -150,7 +169,17 @@ func resolveConfigAt(path string, explicit bool) (Config, error) {
 		log.Printf("config: no config file at %s yet; using environment and defaults, "+
 			"and saving settings will create it", path)
 	}
+	return nil
+}
 
+// resolveFrom merges an in-memory config file with the environment and the
+// built-in defaults.
+//
+// It takes the file rather than a path so a pending change can be resolved
+// before it is written. Validating and reporting against the merged file alone
+// would ignore every value the environment supplies — which is how a save came
+// to be rejected for a credential that was set, just not in the file.
+func resolveFrom(file *configFile, path string) Config {
 	// Dereference the file's optional sections once. An absent section is an
 	// all-nil value, which resolves exactly as an absent file does: every key
 	// falls through to the environment.
@@ -175,19 +204,19 @@ func resolveConfigAt(path string, explicit bool) (Config, error) {
 	cfg := Config{
 		ConfigPath: path,
 
-		JellyfinEnabled: r.enabled("jellyfin.enabled", jf.Enabled),
-		JellyfinURL:     r.str("jellyfin.url", "JELLYFIN_URL", jf.URL, ""),
-		JellyfinAPIKey:  r.secret("jellyfin.apiKey", "JELLYFIN_API_KEY", jf.APIKey),
-		JellyfinUserID:  r.str("jellyfin.userId", "JELLYFIN_USER_ID", jf.UserID, ""),
+		JellyfinDisabled: r.disabled("jellyfin.enabled", jf.Enabled),
+		JellyfinURL:      r.str("jellyfin.url", "JELLYFIN_URL", jf.URL, ""),
+		JellyfinAPIKey:   r.secret("jellyfin.apiKey", "JELLYFIN_API_KEY", jf.APIKey),
+		JellyfinUserID:   r.str("jellyfin.userId", "JELLYFIN_USER_ID", jf.UserID, ""),
 
-		PlexEnabled:        r.enabled("plex.enabled", px.Enabled),
+		PlexDisabled:       r.disabled("plex.enabled", px.Enabled),
 		PlexURL:            r.str("plex.url", "PLEX_URL", px.URL, ""),
 		PlexToken:          r.secret("plex.token", "PLEX_TOKEN", px.Token),
 		PlexLibrarySection: r.str("plex.librarySection", "PLEX_LIBRARY_SECTION", px.LibrarySection, ""),
 
-		StreamingEnabled: r.enabled("streaming.enabled", st.Enabled),
-		TMDBReadToken:    r.secret("streaming.tmdbReadToken", "TMDB_READ_TOKEN", st.TMDBReadToken),
-		TMDBWatchRegion:  r.str("streaming.watchRegion", "TMDB_WATCH_REGION", st.WatchRegion, defaultWatchRegion),
+		StreamingDisabled: r.disabled("streaming.enabled", st.Enabled),
+		TMDBReadToken:     r.secret("streaming.tmdbReadToken", "TMDB_READ_TOKEN", st.TMDBReadToken),
+		TMDBWatchRegion:   r.str("streaming.watchRegion", "TMDB_WATCH_REGION", st.WatchRegion, defaultWatchRegion),
 
 		PublicURL:  r.str("publicUrl", "PUBLIC_URL", top.PublicURL, "http://localhost:8080"),
 		SessionTTL: r.str("sessionTtl", "SESSION_TTL", top.SessionTTL, "4h"),
@@ -206,18 +235,6 @@ func resolveConfigAt(path string, explicit bool) (Config, error) {
 	// means; see resolver.providers.
 	streamingManaged := file != nil && file.Streaming != nil
 	cfg.StreamingProviders = r.providers("streaming.providers", "STREAMING_PROVIDERS", st.Providers, streamingManaged)
-	// A source the operator switched off must not be queryable, so its
-	// credentials are dropped here rather than checked at every use. The
-	// values stay in the config file; only this resolved view forgets them.
-	if !cfg.JellyfinEnabled {
-		cfg.JellyfinURL, cfg.JellyfinAPIKey, cfg.JellyfinUserID = "", "", ""
-	}
-	if !cfg.PlexEnabled {
-		cfg.PlexURL, cfg.PlexToken, cfg.PlexLibrarySection = "", "", ""
-	}
-	if !cfg.StreamingEnabled {
-		cfg.TMDBReadToken = ""
-	}
 	cfg.TMDBWatchRegion = normalizeRegion(cfg.TMDBWatchRegion)
 	if cfg.Port == "" {
 		cfg.Port = "8080"
@@ -226,16 +243,20 @@ func resolveConfigAt(path string, explicit bool) (Config, error) {
 		cfg.CacheDir = filepath.Join(os.TempDir(), "mns-posters")
 	}
 	cfg.Provenance = r.prov
-	logProvenance(r.prov, map[string]string{
+	return cfg
+}
+
+// logResolvedConfig states where every setting came from.
+func logResolvedConfig(cfg Config) {
+	logProvenance(cfg.Provenance, map[string]string{
 		"publicUrl": cfg.PublicURL, "sessionTtl": cfg.SessionTTL,
-		"jellyfin.enabled": strconv.FormatBool(cfg.JellyfinEnabled), "jellyfin.url": cfg.JellyfinURL,
+		"jellyfin.enabled": strconv.FormatBool(!cfg.JellyfinDisabled), "jellyfin.url": cfg.JellyfinURL,
 		"jellyfin.apiKey": cfg.JellyfinAPIKey, "jellyfin.userId": cfg.JellyfinUserID,
-		"plex.enabled": strconv.FormatBool(cfg.PlexEnabled), "plex.url": cfg.PlexURL,
+		"plex.enabled": strconv.FormatBool(!cfg.PlexDisabled), "plex.url": cfg.PlexURL,
 		"plex.token": cfg.PlexToken, "plex.librarySection": cfg.PlexLibrarySection,
-		"streaming.enabled": strconv.FormatBool(cfg.StreamingEnabled), "streaming.tmdbReadToken": cfg.TMDBReadToken,
+		"streaming.enabled": strconv.FormatBool(!cfg.StreamingDisabled), "streaming.tmdbReadToken": cfg.TMDBReadToken,
 		"streaming.watchRegion": cfg.TMDBWatchRegion, "streaming.providers": strings.Join(cfg.StreamingProviders, ","),
 	})
-	return cfg, nil
 }
 
 // normalizeRegion puts a watch region into the form TMDB expects. It is a
@@ -249,21 +270,21 @@ func normalizeRegion(region string) string {
 // values are needed: a URL without a key cannot authenticate, and a key without
 // a URL has nowhere to go.
 func (c Config) JellyfinConfigured() bool {
-	return c.JellyfinURL != "" && c.JellyfinAPIKey != ""
+	return !c.JellyfinDisabled && c.JellyfinURL != "" && c.JellyfinAPIKey != ""
 }
 
 // PlexConfigured reports whether this deployment can query Plex. Both values
 // are needed for the same reason Jellyfin needs both: a URL without a token
 // cannot authenticate, and a token without a URL has nowhere to go.
 func (c Config) PlexConfigured() bool {
-	return c.PlexURL != "" && c.PlexToken != ""
+	return !c.PlexDisabled && c.PlexURL != "" && c.PlexToken != ""
 }
 
 // StreamingConfigured reports whether this deployment can query any streaming
 // service. Every streaming source goes through TMDB, so the token is required;
 // STREAMING_PROVIDERS can also narrow the list to nothing.
 func (c Config) StreamingConfigured() bool {
-	return c.TMDBReadToken != "" && len(c.StreamingProviders) > 0
+	return !c.StreamingDisabled && c.TMDBReadToken != "" && len(c.StreamingProviders) > 0
 }
 
 // String renders the config for logging with the API key masked.

@@ -375,3 +375,143 @@ func TestSettingsReportsRuntimeSettingsReadOnly(t *testing.T) {
 		t.Error("a container-level setting reached the config file")
 	}
 }
+
+// TestSettingsShowsEnvironmentSeededValues is the regression test for a screen
+// that rendered the config file instead of the resolved configuration.
+//
+// A deployment configured entirely by environment variables has no file, so the
+// screen showed empty fields for a server that was working — and saving what it
+// showed was rejected as "required when Plex is enabled" for credentials that
+// demonstrably existed.
+func TestSettingsShowsEnvironmentSeededValues(t *testing.T) {
+	clearConfigEnv(t)
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	t.Setenv("CONFIG_FILE", path)
+	t.Setenv("CACHE_DIR", t.TempDir())
+	t.Setenv("PLEX_URL", "http://plex.local:32400")
+	t.Setenv("PLEX_TOKEN", "plex-secret")
+	t.Setenv("PUBLIC_URL", "http://nas:8080")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	s := New(cfg)
+
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, settingsRequestFor(t, http.MethodGet, s.setupToken, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var got settingsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if got.Plex.URL != "http://plex.local:32400" {
+		t.Errorf("plex.url = %q, want the environment-seeded value", got.Plex.URL)
+	}
+	if !got.Plex.TokenSet {
+		t.Error("want tokenSet true: the credential exists, it just came from the environment")
+	}
+	if got.PublicURL != "http://nas:8080" {
+		t.Errorf("publicUrl = %q, want the environment-seeded value", got.PublicURL)
+	}
+	// Still no secret in the body, and the provenance says where it came from.
+	if strings.Contains(rec.Body.String(), "plex-secret") {
+		t.Error("response contains the credential")
+	}
+	if p := got.Provenance["plex.url"]; p.Source != string(sourceEnv) {
+		t.Errorf("plex.url provenance = %q, want %q", p.Source, sourceEnv)
+	}
+}
+
+// TestSettingsShowsDisabledSourceValues pins that pausing a source does not
+// blank its fields; the operator must be able to switch it back on without
+// retyping a credential.
+func TestSettingsShowsDisabledSourceValues(t *testing.T) {
+	s, _, token := newSettingsServer(t, `
+plex:
+  enabled: false
+  url: http://plex.local:32400
+  token: plex-secret
+`)
+
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, settingsRequestFor(t, http.MethodGet, token, nil))
+	var got settingsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Plex.Enabled {
+		t.Error("want the toggle reported as off")
+	}
+	if got.Plex.URL != "http://plex.local:32400" || !got.Plex.TokenSet {
+		t.Error("a disabled source must still show what is stored for it")
+	}
+}
+
+// TestSettingsSaveAcceptsEnvironmentSuppliedCredentials is the second half of
+// the same regression. Validation ran against the merged config file while the
+// credentials lived in the environment, so saving the screen back rejected a
+// Plex token that was demonstrably set — the settings screen could not be used
+// at all on an environment-configured deployment.
+func TestSettingsSaveAcceptsEnvironmentSuppliedCredentials(t *testing.T) {
+	clearConfigEnv(t)
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	t.Setenv("CONFIG_FILE", path)
+	t.Setenv("CACHE_DIR", t.TempDir())
+	t.Setenv("PLEX_URL", "http://plex.local:32400")
+	t.Setenv("PLEX_TOKEN", "plex-secret")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	s := New(cfg)
+
+	// Save exactly what the screen renders: the URL is visible and editable,
+	// the token is a placeholder the client omits.
+	url := "http://plex.local:32400"
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, settingsRequestFor(t, http.MethodPost, s.setupToken, settingsRequest{
+		Plex: &plexRequest{Enabled: ptr(true), URL: &url},
+	}))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestSettingsToggleFollowsWhatIsConfigured pins that a fresh deployment does
+// not open with every section expanded and empty, demanding credentials for
+// services the operator does not use.
+func TestSettingsToggleFollowsWhatIsConfigured(t *testing.T) {
+	clearConfigEnv(t)
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	t.Setenv("CONFIG_FILE", path)
+	t.Setenv("CACHE_DIR", t.TempDir())
+	t.Setenv("PLEX_URL", "http://plex.local:32400")
+	t.Setenv("PLEX_TOKEN", "plex-secret")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	s := New(cfg)
+
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, settingsRequestFor(t, http.MethodGet, s.setupToken, nil))
+	var got settingsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !got.Plex.Enabled {
+		t.Error("want Plex on: it has credentials")
+	}
+	if got.Jellyfin.Enabled {
+		t.Error("want Jellyfin off: nothing is configured for it")
+	}
+	if got.Streaming.Enabled {
+		t.Error("want streaming off: no TMDB token is configured")
+	}
+}

@@ -153,16 +153,17 @@ func (r *resolver) secret(key, envVar string, fileVal *string) string {
 	return v
 }
 
-// enabled resolves a source's on/off toggle. Only the config file can disable a
-// source: with no file, a source is on whenever its credentials are present,
-// which is the behaviour every existing deployment has.
-func (r *resolver) enabled(key string, fileVal *bool) bool {
+// disabled resolves a source's on/off toggle, inverted — see the Disabled
+// fields on Config for why. Only the config file can switch a source off: with
+// no file, a source is on whenever its credentials are present, which is the
+// behaviour every existing deployment has.
+func (r *resolver) disabled(key string, fileVal *bool) bool {
 	if fileVal != nil {
 		r.prov[key] = settingProvenance{Source: sourceFile}
-		return *fileVal
+		return !*fileVal
 	}
 	r.prov[key] = settingProvenance{Source: sourceDefault}
-	return true
+	return false
 }
 
 // providers resolves the streaming provider list.

@@ -193,6 +193,24 @@ describe('Settings', () => {
         expect(body.plex.librarySection).toBe('3')
     })
 
+    it('keeps password managers out of the credential fields', async () => {
+        installFetch()
+        const user = userEvent.setup()
+        renderSettings()
+        await enterToken(user)
+        await waitFor(() => expect(screen.getByLabelText('Token')).toBeTruthy())
+
+        // These are credentials, but none is an account password and there is no
+        // username on the page. A manager filling one offers the wrong secret;
+        // one saving it invents a login. autocomplete="off" alone does not stop
+        // them, so each manager's opt-out has to be present.
+        const field = screen.getByLabelText('Token')
+        expect(field.getAttribute('autocomplete')).toBe('new-password')
+        expect(field.hasAttribute('data-1p-ignore')).toBe(true)
+        expect(field.getAttribute('data-lpignore')).toBe('true')
+        expect(field.hasAttribute('data-bwignore')).toBe(true)
+    })
+
     it('badges a field whose environment variable is being ignored', async () => {
         installFetch({
             settings: settingsFixture({

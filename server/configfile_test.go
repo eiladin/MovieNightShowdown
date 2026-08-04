@@ -154,7 +154,12 @@ plex:
 	}
 }
 
-func TestLoadConfigDisabledSourceDropsCredentials(t *testing.T) {
+// TestLoadConfigDisabledSourceKeepsCredentials pins that switching a source off
+// makes it unqueryable without discarding what is stored for it. The settings
+// screen renders the resolved configuration, so clearing the values here would
+// blank the fields of a source the operator merely paused — and they would have
+// to retype a credential to turn it back on.
+func TestLoadConfigDisabledSourceKeepsCredentials(t *testing.T) {
 	clearConfigEnv(t)
 	writeConfig(t, `
 plex:
@@ -170,8 +175,21 @@ plex:
 	if cfg.PlexConfigured() {
 		t.Error("want Plex unconfigured when the file disables it")
 	}
-	if cfg.PlexToken != "" {
-		t.Error("a disabled source must not keep a resolved credential")
+	if !cfg.PlexDisabled {
+		t.Error("want PlexDisabled true")
+	}
+	if cfg.PlexToken != "plex-token" || cfg.PlexURL != "http://plex.local:32400" {
+		t.Error("a disabled source must keep its stored values so they can be shown and re-enabled")
+	}
+}
+
+// TestZeroConfigEnablesEverySource is why the toggles are stored inverted: a
+// Config built directly, as several tests and any embedder do, must behave as
+// its credentials say rather than silently disabling every source.
+func TestZeroConfigEnablesEverySource(t *testing.T) {
+	cfg := Config{PlexURL: "http://plex.local:32400", PlexToken: "t"}
+	if !cfg.PlexConfigured() {
+		t.Error("a zero-valued toggle must mean enabled, not disabled")
 	}
 }
 

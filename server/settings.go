@@ -132,12 +132,7 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		unauthorized(w)
 		return
 	}
-	file, err := loadConfigFile(s.config().ConfigPath)
-	if err != nil {
-		http.Error(w, "config file unreadable", http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, http.StatusOK, s.settingsView(file, ""))
+	writeJSON(w, http.StatusOK, s.settingsView(s.config(), ""))
 }
 
 // handleSetSettings validates and persists a configuration change.
@@ -166,10 +161,13 @@ func (s *Server) handleSetSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	merged := applySettings(file, req)
-	if errs := validateSettings(merged); len(errs) > 0 {
-		// Validation runs on the merged result, not the request, so a change
-		// that would leave the configuration invalid is rejected even when the
-		// offending value was already on disk. Nothing is written.
+
+	// Validate what the server would actually run with, not the file alone. The
+	// environment still supplies every key the file leaves unset, so validating
+	// the file would reject a save for a credential that is set — just not
+	// there. This resolves the pending file in memory; nothing is written yet.
+	next := resolveFrom(merged, path)
+	if errs := validateSettings(next); len(errs) > 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"errors": errs})
 		return
 	}
@@ -179,16 +177,11 @@ func (s *Server) handleSetSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Re-resolve from the file just written rather than from the request: the
-	// environment still contributes every key the file does not set, so the
-	// request alone does not describe what the server will actually run with.
-	next, err := resolveConfigAt(path, true)
-	if err != nil {
-		http.Error(w, "the saved configuration could not be reloaded", http.StatusInternalServerError)
-		return
-	}
 	outcome := s.applyConfig(next)
-	writeJSON(w, http.StatusOK, s.settingsView(merged, outcome))
+	// Render from the configuration that is now live, not from the file just
+	// written: the environment still contributes every key the file leaves
+	// unset, so the file alone does not describe what the server is running.
+	writeJSON(w, http.StatusOK, s.settingsView(s.config(), outcome))
 }
 
 // applySettings merges a request onto the stored config file, returning the
@@ -266,17 +259,21 @@ func setBool(dst **bool, val *bool) {
 	}
 }
 
-// validateSettings checks a merged configuration, returning field-keyed errors.
-// The keys match the config file's dotted names so a client can attach each
-// message to the field that caused it.
-func validateSettings(cf *configFile) map[string]string {
+// validateSettings checks a resolved configuration, returning field-keyed
+// errors. The keys match the config file's dotted names so a client can attach
+// each message to the field that caused it.
+//
+// It takes the resolved Config rather than the config file because a value the
+// environment supplies is just as real as one the file holds. Validating the
+// file alone rejects a save for a credential that exists.
+func validateSettings(cfg Config) map[string]string {
 	errs := map[string]string{}
 
-	checkURL := func(key string, val *string) {
-		if val == nil || *val == "" {
+	checkURL := func(key, val string) {
+		if strings.TrimSpace(val) == "" {
 			return
 		}
-		u, err := url.Parse(*val)
+		u, err := url.Parse(val)
 		if err != nil || u.Host == "" {
 			errs[key] = "must be a valid URL, for example http://host:port"
 			return
@@ -286,110 +283,96 @@ func validateSettings(cf *configFile) map[string]string {
 		}
 	}
 
-	checkURL("publicUrl", cf.PublicURL)
-	checkURL("jellyfin.url", jellyfinURL(cf.Jellyfin))
-	checkURL("plex.url", plexURL(cf.Plex))
+	checkURL("publicUrl", cfg.PublicURL)
+	checkURL("jellyfin.url", cfg.JellyfinURL)
+	checkURL("plex.url", cfg.PlexURL)
 
-	// A source switched on without its credentials would be advertised and
-	// then fail every query, which is the state the setup page exists to
-	// prevent. Reject it at the point it is configured instead.
-	if cf.Jellyfin != nil && enabledOrDefault(cf.Jellyfin.Enabled) {
-		if isBlank(cf.Jellyfin.URL) {
+	// A source switched on without its credentials would be advertised and then
+	// fail every query, which is the state the setup page exists to prevent.
+	// Reject it at the point it is configured instead.
+	//
+	// A source that is off is not checked: an operator switching one off to fix
+	// it later must not be blocked by the very values they are removing.
+	if !cfg.JellyfinDisabled && (cfg.JellyfinURL != "" || cfg.JellyfinAPIKey != "") {
+		if strings.TrimSpace(cfg.JellyfinURL) == "" {
 			errs["jellyfin.url"] = "required when Jellyfin is enabled"
 		}
-		if isBlank(cf.Jellyfin.APIKey) {
+		if strings.TrimSpace(cfg.JellyfinAPIKey) == "" {
 			errs["jellyfin.apiKey"] = "required when Jellyfin is enabled"
 		}
 	}
-	if cf.Plex != nil && enabledOrDefault(cf.Plex.Enabled) {
-		if isBlank(cf.Plex.URL) {
+	if !cfg.PlexDisabled && (cfg.PlexURL != "" || cfg.PlexToken != "") {
+		if strings.TrimSpace(cfg.PlexURL) == "" {
 			errs["plex.url"] = "required when Plex is enabled"
 		}
-		if isBlank(cf.Plex.Token) {
+		if strings.TrimSpace(cfg.PlexToken) == "" {
 			errs["plex.token"] = "required when Plex is enabled"
 		}
 	}
-	if cf.Streaming != nil && enabledOrDefault(cf.Streaming.Enabled) {
-		if isBlank(cf.Streaming.TMDBReadToken) {
-			errs["streaming.tmdbReadToken"] = "required when streaming is enabled"
+	// Only a deliberate selection requires a token. The built-in default list
+	// is inert without one — it is what an untouched deployment carries — so
+	// demanding a token for it would reject every save from a deployment that
+	// never configured streaming at all.
+	if !cfg.StreamingDisabled &&
+		cfg.Provenance["streaming.providers"].Source == sourceFile &&
+		len(cfg.StreamingProviders) > 0 {
+		if strings.TrimSpace(cfg.TMDBReadToken) == "" {
+			errs["streaming.tmdbReadToken"] = "required when streaming services are selected"
 		}
 	}
 	return errs
 }
 
-func isBlank(s *string) bool { return s == nil || strings.TrimSpace(*s) == "" }
-
-func enabledOrDefault(b *bool) bool { return b == nil || *b }
-
-func jellyfinURL(s *jellyfinSection) *string {
-	if s == nil {
-		return nil
-	}
-	return s.URL
-}
-
-func plexURL(s *plexSection) *string {
-	if s == nil {
-		return nil
-	}
-	return s.URL
-}
-
-// settingsView renders the stored configuration for a client, reporting each
+// settingsView renders the live configuration for a client, reporting each
 // secret as set or unset and never as a value.
-func (s *Server) settingsView(file *configFile, outcome reloadOutcome) settingsResponse {
-	var top configFile
-	var jf jellyfinSection
-	var px plexSection
-	var st streamingSection
-	if file != nil {
-		top = *file
-		if file.Jellyfin != nil {
-			jf = *file.Jellyfin
-		}
-		if file.Plex != nil {
-			px = *file.Plex
-		}
-		if file.Streaming != nil {
-			st = *file.Streaming
-		}
-	}
-
-	live := s.config()
-	prov := make(map[string]provenanceView, len(live.Provenance))
-	for k, p := range live.Provenance {
+//
+// It renders the *resolved* configuration, not the config file. Those differ
+// for any deployment seeded by environment variables — which is every
+// deployment that has not saved settings yet — and rendering the file would
+// show that operator a screen of empty fields describing a server that is
+// working perfectly well. Worse, saving what they saw would then write those
+// blanks over a working configuration.
+//
+// Provenance travels alongside so the screen can still say which values came
+// from the environment rather than from a save.
+func (s *Server) settingsView(cfg Config, outcome reloadOutcome) settingsResponse {
+	prov := make(map[string]provenanceView, len(cfg.Provenance))
+	for k, p := range cfg.Provenance {
 		prov[k] = provenanceView{Source: string(p.Source), EnvVar: p.EnvVar, EnvIgnored: p.EnvIgnored}
 	}
 
-	providers := []string{}
-	if st.Providers != nil {
-		providers = *st.Providers
+	providers := cfg.StreamingProviders
+	if providers == nil {
+		providers = []string{}
 	}
 
 	return settingsResponse{
-		PublicURL:  orEmpty(top.PublicURL),
-		SessionTTL: orEmpty(top.SessionTTL),
+		PublicURL:  cfg.PublicURL,
+		SessionTTL: cfg.SessionTTL,
 		Runtime: runtimeSettings{
-			Port:       live.Port,
-			CacheDir:   live.CacheDir,
-			ConfigPath: live.ConfigPath,
+			Port:       cfg.Port,
+			CacheDir:   cfg.CacheDir,
+			ConfigPath: cfg.ConfigPath,
 		},
 		Jellyfin: jellyfinSettings{
-			Enabled:   enabledOrDefault(jf.Enabled),
-			URL:       orEmpty(jf.URL),
-			APIKeySet: !isBlank(jf.APIKey),
-			UserID:    orEmpty(jf.UserID),
+			Enabled: sourceEnabled(cfg.JellyfinDisabled, cfg.Provenance["jellyfin.enabled"],
+				cfg.JellyfinURL != "" || cfg.JellyfinAPIKey != ""),
+			URL:       cfg.JellyfinURL,
+			APIKeySet: cfg.JellyfinAPIKey != "",
+			UserID:    cfg.JellyfinUserID,
 		},
 		Plex: plexSettings{
-			Enabled:        enabledOrDefault(px.Enabled),
-			URL:            orEmpty(px.URL),
-			TokenSet:       !isBlank(px.Token),
-			LibrarySection: orEmpty(px.LibrarySection),
+			Enabled: sourceEnabled(cfg.PlexDisabled, cfg.Provenance["plex.enabled"],
+				cfg.PlexURL != "" || cfg.PlexToken != ""),
+			URL:            cfg.PlexURL,
+			TokenSet:       cfg.PlexToken != "",
+			LibrarySection: cfg.PlexLibrarySection,
 		},
 		Streaming: streamingSettings{
-			Enabled:          enabledOrDefault(st.Enabled),
-			TMDBReadTokenSet: !isBlank(st.TMDBReadToken),
-			WatchRegion:      orEmpty(st.WatchRegion),
+			Enabled: sourceEnabled(cfg.StreamingDisabled, cfg.Provenance["streaming.enabled"],
+				cfg.TMDBReadToken != ""),
+			TMDBReadTokenSet: cfg.TMDBReadToken != "",
+			WatchRegion:      cfg.TMDBWatchRegion,
 			Providers:        providers,
 		},
 		Provenance:      prov,
@@ -398,11 +381,20 @@ func (s *Server) settingsView(file *configFile, outcome reloadOutcome) settingsR
 	}
 }
 
-func orEmpty(s *string) string {
-	if s == nil {
-		return ""
+// sourceEnabled decides what the screen's toggle shows for one source.
+//
+// An explicit choice in the config file always wins. Without one, the toggle
+// follows whether the source has anything configured: a fresh install would
+// otherwise open with all three sections expanded and empty, demanding
+// credentials for services the operator does not use.
+func sourceEnabled(disabled bool, prov settingProvenance, hasValues bool) bool {
+	if disabled {
+		return false
 	}
-	return *s
+	if prov.Source == sourceFile {
+		return true
+	}
+	return hasValues
 }
 
 // unauthorized answers a request with a missing or wrong setup token. The two

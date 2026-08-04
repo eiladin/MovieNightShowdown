@@ -20,6 +20,23 @@ import {
 } from '../settingsDraft'
 import '../styles/settings.css'
 
+// noAutofill keeps password managers out of these fields.
+//
+// They are credentials, so they are type="password" — but none of them is an
+// account password, and there is no username on this page. A manager that
+// offers to fill one is offering the wrong secret, and one that offers to save
+// it stores a server credential under a login it invented. `autocomplete="off"`
+// alone does not stop them; every major manager needs its own opt-out, so they
+// are all set. `new-password` is the value browsers honour for "do not fill".
+const noAutofill = {
+    autoComplete: 'new-password',
+    'data-1p-ignore': '',
+    'data-lpignore': 'true',
+    'data-bwignore': '',
+    'data-protonpass-ignore': '',
+    'data-form-type': 'other',
+} as const
+
 const OUTCOME_TEXT: Record<string, string> = {
     no_change: 'Saved. Nothing changed, so nothing was restarted.',
     applied: 'Saved and applied. The new configuration is live.',
@@ -160,14 +177,14 @@ export default function Settings() {
                     <code>docker compose logs | grep &quot;setup: token&quot;</code>.
                 </p>
                 {failure && <p className="settings-error">{failure}</p>}
-                <form onSubmit={submitToken} className="settings-token-form">
+                <form onSubmit={submitToken} className="settings-token-form" data-form-type="other">
                     <label htmlFor="setup-token">Setup token</label>
                     <input
                         id="setup-token"
                         type="password"
                         value={tokenInput}
                         onChange={(e) => setTokenInput(e.target.value)}
-                        autoComplete="off"
+                        {...noAutofill}
                     />
                     <button type="submit">Continue</button>
                 </form>
@@ -231,7 +248,7 @@ export default function Settings() {
             {message && <p className="settings-success">{message}</p>}
             {failure && <p className="settings-error">{failure}</p>}
 
-            <form onSubmit={handleSave}>
+            <form onSubmit={handleSave} data-form-type="other">
                 <section className="settings-section">
                     <h2>Jellyfin</h2>
                     <label className="settings-toggle">
@@ -274,7 +291,7 @@ export default function Settings() {
                                         jellyfin: { ...draft.jellyfin, apiKey: e.target.value },
                                     })
                                 }
-                                autoComplete="off"
+                                {...noAutofill}
                             />
                             {clearControl(settings.jellyfin.apiKeySet, draft.jellyfin.apiKey, () =>
                                 setDraft({ ...draft, jellyfin: { ...draft.jellyfin, apiKey: '' } }),
@@ -331,7 +348,7 @@ export default function Settings() {
                                 onChange={(e) =>
                                     setDraft({ ...draft, plex: { ...draft.plex, token: e.target.value } })
                                 }
-                                autoComplete="off"
+                                {...noAutofill}
                             />
                             {clearControl(settings.plex.tokenSet, draft.plex.token, () =>
                                 setDraft({ ...draft, plex: { ...draft.plex, token: '' } }),
@@ -388,7 +405,7 @@ export default function Settings() {
                                         },
                                     })
                                 }}
-                                autoComplete="off"
+                                {...noAutofill}
                             />
                             {clearControl(
                                 settings.streaming.tmdbReadTokenSet,
