@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -28,11 +27,16 @@ type PlexClient struct {
 	section string
 	http    *http.Client
 
-	// discoverOnce guards lazy section discovery. Discovery needs the network,
+	// discovered holds the lazily-found section key. Discovery needs the network,
 	// so it cannot happen in the constructor without making startup depend on
 	// Plex being reachable.
-	discoverOnce sync.Once
-	discoverErr  error
+	//
+	// It is a lazyValue rather than a sync.Once because sync.Once caches a
+	// failure permanently: one unreachable moment on the first query and
+	// discovery never ran again for the life of the process. That presented as
+	// Plex working one day and returning nothing the next, recoverable only by
+	// recreating the container.
+	discovered lazyValue[string]
 }
 
 // NewPlexClient builds a client from the server Config.
@@ -165,30 +169,39 @@ func (c *PlexClient) get(ctx context.Context, path string, q url.Values) (*plexR
 // movie sections therefore needs the setting; guessing would silently deal
 // from whichever section Plex happened to list first.
 func (c *PlexClient) movieSection(ctx context.Context) (string, error) {
+	// A configured section needs no discovery and no locking.
 	if c.section != "" {
 		return c.section, nil
 	}
-	c.discoverOnce.Do(func() {
-		parsed, err := c.get(ctx, "/library/sections", nil)
+	return c.discovered.get(ctx, func(ctx context.Context) (string, error) {
+		sections, err := c.movieSections(ctx)
 		if err != nil {
-			c.discoverErr = err
-			return
+			return "", err
 		}
-		for _, d := range parsed.MediaContainer.Directory {
-			if d.Type == "movie" {
-				c.section = d.Key
-				return
-			}
+		if len(sections) == 0 {
+			return "", fmt.Errorf("plex: no library section of type %q; set PLEX_LIBRARY_SECTIONS", "movie")
 		}
-		c.discoverErr = fmt.Errorf("plex: no library section of type \"movie\"; set PLEX_LIBRARY_SECTION")
+		return sections[0].Key, nil
 	})
-	if c.discoverErr != nil {
-		return "", c.discoverErr
+}
+
+// movieSections lists the server's movie libraries.
+//
+// One reader, so the parsing of /library/sections lives in one place: the check
+// route and section discovery both need it, and two callers with their own filter
+// is how they come to disagree about what counts as a movie library.
+func (c *PlexClient) movieSections(ctx context.Context) ([]plexDirect, error) {
+	parsed, err := c.get(ctx, "/library/sections", nil)
+	if err != nil {
+		return nil, err
 	}
-	if c.section == "" {
-		return "", fmt.Errorf("plex: movie library section is unknown")
+	out := make([]plexDirect, 0, len(parsed.MediaContainer.Directory))
+	for _, d := range parsed.MediaContainer.Directory {
+		if d.Type == "movie" {
+			out = append(out, d)
+		}
 	}
-	return c.section, nil
+	return out, nil
 }
 
 // Search implements MovieSource by delegating to Movies and discarding the
