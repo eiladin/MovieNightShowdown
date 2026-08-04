@@ -176,8 +176,13 @@ func resolveConfigAt(path string, explicit bool) (Config, error) {
 
 		PublicURL:  r.str("publicUrl", "PUBLIC_URL", top.PublicURL, "http://localhost:8080"),
 		SessionTTL: r.str("sessionTtl", "SESSION_TTL", top.SessionTTL, "4h"),
-		CacheDir:   r.str("cacheDir", "CACHE_DIR", top.CacheDir, filepath.Join(os.TempDir(), "mns-posters")),
 
+		// CacheDir joins PORT and CONFIG_FILE as environment-only. It names a
+		// path inside the container, so a new value has to be mounted before it
+		// can be used — which means editing the deployment and recreating it
+		// anyway. Offering it in a form would imply a change that a save alone
+		// can never make good on.
+		CacheDir:    os.Getenv("CACHE_DIR"),
 		Port:        os.Getenv("PORT"),
 		tmdbBaseURL: tmdbAPIBase,
 	}
@@ -202,9 +207,12 @@ func resolveConfigAt(path string, explicit bool) (Config, error) {
 	if cfg.Port == "" {
 		cfg.Port = "8080"
 	}
+	if cfg.CacheDir == "" {
+		cfg.CacheDir = filepath.Join(os.TempDir(), "mns-posters")
+	}
 	cfg.Provenance = r.prov
 	logProvenance(r.prov, map[string]string{
-		"publicUrl": cfg.PublicURL, "sessionTtl": cfg.SessionTTL, "cacheDir": cfg.CacheDir,
+		"publicUrl": cfg.PublicURL, "sessionTtl": cfg.SessionTTL,
 		"jellyfin.enabled": strconv.FormatBool(cfg.JellyfinEnabled), "jellyfin.url": cfg.JellyfinURL,
 		"jellyfin.apiKey": cfg.JellyfinAPIKey, "jellyfin.userId": cfg.JellyfinUserID,
 		"plex.enabled": strconv.FormatBool(cfg.PlexEnabled), "plex.url": cfg.PlexURL,

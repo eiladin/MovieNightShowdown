@@ -144,8 +144,11 @@ func harmlessDiffer(a, b Config) bool {
 // restartRequiredDiffer reports whether settings changed that cannot take
 // effect in a running process. The listener is already bound to a port and
 // cannot be rebound under live connections.
+//
+// Only the port qualifies. The cache directory is environment-only and can
+// never differ between two resolved configurations of one process.
 func restartRequiredDiffer(a, b Config) bool {
-	return a.Port != b.Port || a.CacheDir != b.CacheDir
+	return a.Port != b.Port
 }
 
 // applyConfig makes a saved configuration live, returning what it did.

@@ -216,7 +216,6 @@ export interface SettingsProvenance {
 export interface Settings {
     publicUrl: string
     sessionTtl: string
-    cacheDir: string
     jellyfin: {
         enabled: boolean
         url: string
@@ -249,7 +248,6 @@ export interface Settings {
 export interface SettingsUpdate {
     publicUrl?: string
     sessionTtl?: string
-    cacheDir?: string
     jellyfin?: {
         enabled?: boolean
         url?: string

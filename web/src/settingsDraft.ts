@@ -11,7 +11,6 @@ export const SECRET_PLACEHOLDER = '••••••••'
 export interface Draft {
     publicUrl: string
     sessionTtl: string
-    cacheDir: string
     jellyfin: { enabled: boolean; url: string; apiKey: string; userId: string }
     plex: { enabled: boolean; url: string; token: string; librarySection: string }
     streaming: {
@@ -26,7 +25,6 @@ export function draftFrom(s: SettingsData): Draft {
     return {
         publicUrl: s.publicUrl,
         sessionTtl: s.sessionTtl,
-        cacheDir: s.cacheDir,
         jellyfin: {
             enabled: s.jellyfin.enabled,
             url: s.jellyfin.url,
@@ -70,7 +68,6 @@ export function buildUpdate(draft: Draft, from: SettingsData): SettingsUpdate {
     return {
         publicUrl: draft.publicUrl,
         sessionTtl: draft.sessionTtl,
-        cacheDir: draft.cacheDir,
         jellyfin: {
             enabled: draft.jellyfin.enabled,
             url: draft.jellyfin.url,

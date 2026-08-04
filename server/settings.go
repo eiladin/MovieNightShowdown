@@ -17,7 +17,6 @@ import (
 type settingsResponse struct {
 	PublicURL  string `json:"publicUrl"`
 	SessionTTL string `json:"sessionTtl"`
-	CacheDir   string `json:"cacheDir"`
 
 	Jellyfin  jellyfinSettings  `json:"jellyfin"`
 	Plex      plexSettings      `json:"plex"`
@@ -77,7 +76,6 @@ type provenanceView struct {
 type settingsRequest struct {
 	PublicURL  *string `json:"publicUrl"`
 	SessionTTL *string `json:"sessionTtl"`
-	CacheDir   *string `json:"cacheDir"`
 
 	Jellyfin  *jellyfinRequest  `json:"jellyfin"`
 	Plex      *plexRequest      `json:"plex"`
@@ -198,7 +196,6 @@ func applySettings(file *configFile, req settingsRequest) *configFile {
 
 	setString(&out.PublicURL, req.PublicURL, false)
 	setString(&out.SessionTTL, req.SessionTTL, false)
-	setString(&out.CacheDir, req.CacheDir, false)
 
 	if req.Jellyfin != nil {
 		if out.Jellyfin == nil {
@@ -357,7 +354,6 @@ func (s *Server) settingsView(file *configFile, outcome reloadOutcome) settingsR
 	return settingsResponse{
 		PublicURL:  orEmpty(top.PublicURL),
 		SessionTTL: orEmpty(top.SessionTTL),
-		CacheDir:   orEmpty(top.CacheDir),
 		Jellyfin: jellyfinSettings{
 			Enabled:   enabledOrDefault(jf.Enabled),
 			URL:       orEmpty(jf.URL),

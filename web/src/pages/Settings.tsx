@@ -478,16 +478,6 @@ export default function Settings() {
                         />
                         {badge('sessionTtl')}
 
-                        <label htmlFor="cache-dir">Poster cache directory</label>
-                        <input
-                            id="cache-dir"
-                            value={draft.cacheDir}
-                            onChange={(e) => setDraft({ ...draft, cacheDir: e.target.value })}
-                        />
-                        <span className="settings-hint">
-                            Changing this needs a restart before it takes effect.
-                        </span>
-                        {badge('cacheDir')}
                     </div>
                 </section>
 

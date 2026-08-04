@@ -14,7 +14,6 @@ function settingsFixture(overrides: Partial<SettingsData> = {}): SettingsData {
     return {
         publicUrl: 'http://nas:8080',
         sessionTtl: '4h',
-        cacheDir: '/cache',
         jellyfin: { enabled: false, url: '', apiKeySet: false, userId: '' },
         plex: {
             enabled: true,
@@ -333,22 +332,6 @@ describe('Settings', () => {
         expect(screen.getAllByRole('button', { name: 'Remove stored value' })).toHaveLength(1)
     })
 
-    it('can set the poster cache directory, which has no other control', async () => {
-        installFetch()
-        vi.spyOn(window, 'confirm').mockReturnValue(true)
-        const user = userEvent.setup()
-        renderSettings()
-        await enterToken(user)
-        await waitFor(() => expect(screen.getByLabelText('Poster cache directory')).toBeTruthy())
-
-        await user.clear(screen.getByLabelText('Poster cache directory'))
-        await user.type(screen.getByLabelText('Poster cache directory'), '/mnt/cache')
-        await user.click(screen.getByRole('button', { name: 'Save settings' }))
-
-        await waitFor(() => expect(posted).toHaveLength(1))
-        const body = posted[0].body as { cacheDir: string }
-        expect(body.cacheDir).toBe('/mnt/cache')
-    })
 })
 
 describe('buildUpdate', () => {

@@ -28,7 +28,6 @@ type configFile struct {
 	SetupToken *string           `yaml:"setupToken"`
 	PublicURL  *string           `yaml:"publicUrl"`
 	SessionTTL *string           `yaml:"sessionTtl"`
-	CacheDir   *string           `yaml:"cacheDir"`
 	Jellyfin   *jellyfinSection  `yaml:"jellyfin"`
 	Plex       *plexSection      `yaml:"plex"`
 	Streaming  *streamingSection `yaml:"streaming"`
@@ -243,7 +242,7 @@ func logProvenance(prov map[string]settingProvenance, values map[string]string) 
 // provenanceOrder fixes the log's line order. A map iterates randomly, and a
 // startup log that reorders itself between restarts cannot be diffed.
 var provenanceOrder = []string{
-	"publicUrl", "sessionTtl", "cacheDir",
+	"publicUrl", "sessionTtl",
 	"jellyfin.enabled", "jellyfin.url", "jellyfin.apiKey", "jellyfin.userId",
 	"plex.enabled", "plex.url", "plex.token", "plex.librarySection",
 	"streaming.enabled", "streaming.tmdbReadToken", "streaming.watchRegion", "streaming.providers",
