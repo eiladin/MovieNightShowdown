@@ -23,6 +23,9 @@ const defaultConfigPath = "./config/config.yaml"
 // operator deliberately blanked must stay blank rather than silently
 // resurrecting an environment variable they thought they had overridden.
 type configFile struct {
+	// SetupToken authorizes configuration changes. It is generated on first
+	// start and is the only field the application writes without being asked.
+	SetupToken *string           `yaml:"setupToken"`
 	PublicURL  *string           `yaml:"publicUrl"`
 	SessionTTL *string           `yaml:"sessionTtl"`
 	CacheDir   *string           `yaml:"cacheDir"`

@@ -29,9 +29,13 @@ type Server struct {
 	// present, then the streaming services in the order they were configured.
 	// It is per-deployment rather than a fixed list because which streaming
 	// services exist is resolved at startup from STREAMING_PROVIDERS.
-	order   []SourceID
-	version string
-	commit  string
+	order []SourceID
+	// setupToken authorizes configuration changes. It is generated on first
+	// start and printed to the log, which is the only delivery channel an
+	// application without accounts has.
+	setupToken string
+	version    string
+	commit     string
 }
 
 func New(cfg Config) *Server {
@@ -47,6 +51,8 @@ func New(cfg Config) *Server {
 		store: NewStore(ttl),
 		cache: newPosterCache(cfg.CacheDir),
 	}
+	s.setupToken = ensureSetupToken(cfg.ConfigPath)
+	logSetupToken(s.setupToken)
 	// Jellyfin is gated on its credentials exactly like the streaming sources.
 	// Registering it unconditionally would advertise a source every query fails
 	// against, which is what a streaming-only deployment would otherwise show.
@@ -109,6 +115,8 @@ func (s *Server) SetBuildInfo(version, commit string) {
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /healthz", s.handleHealth)
 	s.mux.HandleFunc("GET /api/setup", s.handleSetup)
+	s.mux.HandleFunc("GET /api/settings", s.handleGetSettings)
+	s.mux.HandleFunc("POST /api/settings", s.handleSetSettings)
 	s.mux.HandleFunc("GET /api/library/preview", s.handleLibraryPreview)
 	s.mux.HandleFunc("GET /api/library/filters", s.handleLibraryFilters)
 	s.mux.HandleFunc("POST /api/library/warm", s.handleLibraryWarm)
