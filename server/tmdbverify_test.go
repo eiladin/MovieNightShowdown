@@ -35,12 +35,25 @@ func newTMDBStub(t *testing.T, validToken string) (*httptest.Server, *atomic.Int
 	return ts, &calls
 }
 
-// newVerifyServer builds a server whose TMDB base URL points at a stub.
+// newVerifyServer builds a server whose TMDB base URL points at a stub, with no
+// stored TMDB token.
 func newVerifyServer(t *testing.T, baseURL string) (*Server, string) {
+	t.Helper()
+	return newVerifyServerWithToken(t, baseURL, "")
+}
+
+// newVerifyServerWithToken is newVerifyServer with a TMDB read token already in
+// the config file, which is the state a deployment is in once streaming has been
+// saved. The stored-credential fallbacks only mean anything from there.
+func newVerifyServerWithToken(t *testing.T, baseURL, stored string) (*Server, string) {
 	t.Helper()
 	clearConfigEnv(t)
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte("publicUrl: http://nas:8080\n"), 0o600); err != nil {
+	body := "publicUrl: http://nas:8080\n"
+	if stored != "" {
+		body += "streaming:\n  tmdbReadToken: " + stored + "\n"
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	t.Setenv("CACHE_DIR", t.TempDir())
@@ -169,17 +182,107 @@ func TestProviderListReturnsSortedOptions(t *testing.T) {
 	if got.Region != "GB" {
 		t.Errorf("region = %q, want GB (normalized)", got.Region)
 	}
-	want := []string{"Amazon Prime Video", "Disney Plus", "Netflix"}
-	if len(got.Providers) != len(want) {
-		t.Fatalf("got %d providers, want %d", len(got.Providers), len(want))
+	// The names and ids are the ones knownProviders pins, not TMDB's spellings:
+	// provider 9 is "Amazon Prime Video" upstream and "prime"/"Prime Video" here.
+	// Offering the upstream slug would hand the picker a second id for a service
+	// the source list already names, and the two would never merge.
+	want := []providerOption{
+		{ID: "disney", Name: "Disney+"},
+		{ID: "netflix", Name: "Netflix"},
+		{ID: "prime", Name: "Prime Video"},
 	}
-	for i, name := range want {
-		if got.Providers[i].Name != name {
-			t.Errorf("provider %d = %q, want %q (the picker order must be stable)", i, got.Providers[i].Name, name)
+	if len(got.Providers) != len(want) {
+		t.Fatalf("got %+v, want %d providers", got.Providers, len(want))
+	}
+	for i, w := range want {
+		if got.Providers[i] != w {
+			t.Errorf("provider %d = %+v, want %+v (the picker order must be stable)", i, got.Providers[i], w)
 		}
 	}
-	if got.Providers[2].ID != "netflix" {
-		t.Errorf("Netflix id = %q, want the slug the source list uses", got.Providers[2].ID)
+}
+
+// tmdbCollidingListBody holds two providers whose names differ only in
+// punctuation. Neither id is in knownProviders, so both fall back to the slug of
+// their name — and both slugify to "amc".
+const tmdbCollidingListBody = `{"results":[
+  {"provider_id":80,"provider_name":"AMC"},
+  {"provider_id":526,"provider_name":"AMC+"},
+  {"provider_id":8,"provider_name":"Netflix"}
+]}`
+
+// The picker keys its rows by provider id, so a list carrying the same id twice
+// renders under a duplicate React key and misrenders as soon as it is filtered
+// and unfiltered — the reported symptom was a service appearing twice after a
+// backspace. The endpoint must never emit a duplicate id.
+func TestProviderListNeverRepeatsAnID(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(tmdbCollidingListBody))
+	}))
+	t.Cleanup(ts.Close)
+	s, setup := newVerifyServer(t, ts.URL)
+
+	rec := postJSON(t, s, "/api/settings/providers", setup, providerListRequest{Token: "any", Region: "US"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var got providerListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	seen := map[string]string{}
+	for _, p := range got.Providers {
+		if prev, dup := seen[p.ID]; dup {
+			t.Errorf("id %q offered twice, for %q and %q", p.ID, prev, p.Name)
+		}
+		seen[p.ID] = p.Name
+	}
+	if len(got.Providers) != 2 {
+		t.Errorf("got %+v, want two options (the colliding pair contributes one)", got.Providers)
+	}
+}
+
+// The settings screen never receives a stored credential, so it has nothing to
+// submit when checking one that is already saved. An empty token therefore means
+// "check the stored one" — without that, checking a working stored token reported
+// no token at all, and the screen hid the provider picker on the strength of it.
+func TestVerifyTMDBChecksTheStoredTokenWhenNoneIsSubmitted(t *testing.T) {
+	stub, calls := newTMDBStub(t, "stored-token")
+	s, setup := newVerifyServerWithToken(t, stub.URL, "stored-token")
+
+	rec := postJSON(t, s, "/api/settings/verify/tmdb", setup, verifyTMDBRequest{Region: "US"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var got verifyTMDBResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !got.Valid {
+		t.Errorf("valid = false, message = %q; want the stored token to be checked", got.Message)
+	}
+	if n := calls.Load(); n != 1 {
+		t.Errorf("upstream calls = %d, want exactly 1 (the cache must not answer a verification)", n)
+	}
+}
+
+// With nothing submitted and nothing stored there is genuinely nothing to check,
+// and saying so is the useful answer.
+func TestVerifyTMDBReportsWhenThereIsNoTokenAtAll(t *testing.T) {
+	stub, calls := newTMDBStub(t, "unused")
+	s, setup := newVerifyServer(t, stub.URL)
+
+	rec := postJSON(t, s, "/api/settings/verify/tmdb", setup, verifyTMDBRequest{Region: "US"})
+	var got verifyTMDBResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Valid {
+		t.Error("valid = true with no token anywhere")
+	}
+	if calls.Load() != 0 {
+		t.Error("reached the upstream with no token to check")
 	}
 }
 

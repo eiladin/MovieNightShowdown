@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"sort"
 	"sync"
 	"time"
 )
@@ -98,7 +97,16 @@ func (s *Server) handleVerifyTMDB(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, verifyTMDBResponse{Message: "request body is not valid JSON"})
 		return
 	}
-	if req.Token == "" {
+	// An empty token means "check the one already stored", the same fallback the
+	// provider list uses. The settings screen never receives a stored credential,
+	// so it has nothing to submit for one that is already saved — without this
+	// fallback, checking a working stored token reported "no token was supplied"
+	// and the screen hid the provider picker on the strength of it.
+	token := req.Token
+	if token == "" {
+		token = s.config().TMDBReadToken
+	}
+	if token == "" {
 		writeJSON(w, http.StatusOK, verifyTMDBResponse{Message: "no token was supplied"})
 		return
 	}
@@ -111,7 +119,7 @@ func (s *Server) handleVerifyTMDB(w http.ResponseWriter, r *http.Request) {
 	// anyone ask about this region recently?" and report a garbage token as
 	// valid. Verification must reach the upstream every time; that is the
 	// entire point of the route.
-	if _, err := s.fetchProviderList(ctx, req.Token, s.regionOrDefault(req.Region), false); err != nil {
+	if _, err := s.fetchProviderList(ctx, token, s.regionOrDefault(req.Region), false); err != nil {
 		// The upstream error is logged, not returned: it can name the request
 		// URL, and the token travels in a header adjacent to it.
 		writeJSON(w, http.StatusOK, verifyTMDBResponse{
@@ -214,16 +222,16 @@ func (s *Server) fetchProviderList(ctx context.Context, token, region string, al
 		return nil, err
 	}
 
-	options := make([]providerOption, 0, len(list.Results))
-	for _, p := range list.Results {
-		options = append(options, providerOption{
-			ID:   slugifyProvider(p.ProviderName),
-			Name: p.ProviderName,
-		})
+	// The catalog is shared with resolveStreamingProviders, so every option
+	// offered here is one resolution can actually produce, under the same id.
+	// It is unique by id and already ordered by name — both matter to the picker,
+	// which keys its rows by id and would otherwise reorder itself between
+	// requests for no reason the operator can see.
+	cat := newProviderCatalog(list)
+	options := make([]providerOption, 0, len(cat.options))
+	for _, p := range cat.options {
+		options = append(options, providerOption{ID: string(p.ID), Name: p.Name})
 	}
-	// A stable order, because TMDB's is not: an unsorted picker reorders
-	// itself between requests for no reason the operator can see.
-	sort.Slice(options, func(i, j int) bool { return options[i].Name < options[j].Name })
 
 	s.providers.put(region, options)
 	return options, nil
