@@ -24,9 +24,10 @@ export default function Setup() {
             <h1>Finish setting up</h1>
 
             <p className="setup-lede">
-                Movie Night Showdown needs at least one place to get movies from. Pick whichever
-                of these fits your setup, add the environment variables to your{' '}
-                <code>.env</code> or <code>docker-compose.yml</code>, and restart the container.
+                Movie Night Showdown needs at least one place to get movies from. The quickest
+                way is the <Link to="/settings">settings screen</Link>, which needs the setup
+                token the server prints to its log at startup. The environment variables below
+                still work, and seed a deployment that has no saved configuration yet.
             </p>
 
             {status && (
