@@ -355,22 +355,21 @@ func (s *Server) settingsView(cfg Config, outcome reloadOutcome) settingsRespons
 			ConfigPath: cfg.ConfigPath,
 		},
 		Jellyfin: jellyfinSettings{
-			Enabled: sourceEnabled(cfg.JellyfinDisabled, cfg.Provenance["jellyfin.enabled"],
+			Enabled: sourceEnabled(cfg.JellyfinDisabled,
 				cfg.JellyfinURL != "" || cfg.JellyfinAPIKey != ""),
 			URL:       cfg.JellyfinURL,
 			APIKeySet: cfg.JellyfinAPIKey != "",
 			UserID:    cfg.JellyfinUserID,
 		},
 		Plex: plexSettings{
-			Enabled: sourceEnabled(cfg.PlexDisabled, cfg.Provenance["plex.enabled"],
+			Enabled: sourceEnabled(cfg.PlexDisabled,
 				cfg.PlexURL != "" || cfg.PlexToken != ""),
 			URL:            cfg.PlexURL,
 			TokenSet:       cfg.PlexToken != "",
 			LibrarySection: cfg.PlexLibrarySection,
 		},
 		Streaming: streamingSettings{
-			Enabled: sourceEnabled(cfg.StreamingDisabled, cfg.Provenance["streaming.enabled"],
-				cfg.TMDBReadToken != ""),
+			Enabled:          sourceEnabled(cfg.StreamingDisabled, cfg.TMDBReadToken != ""),
 			TMDBReadTokenSet: cfg.TMDBReadToken != "",
 			WatchRegion:      cfg.TMDBWatchRegion,
 			Providers:        providers,
@@ -383,18 +382,13 @@ func (s *Server) settingsView(cfg Config, outcome reloadOutcome) settingsRespons
 
 // sourceEnabled decides what the screen's toggle shows for one source.
 //
-// An explicit choice in the config file always wins. Without one, the toggle
-// follows whether the source has anything configured: a fresh install would
-// otherwise open with all three sections expanded and empty, demanding
-// credentials for services the operator does not use.
-func sourceEnabled(disabled bool, prov settingProvenance, hasValues bool) bool {
-	if disabled {
-		return false
-	}
-	if prov.Source == sourceFile {
-		return true
-	}
-	return hasValues
+// A source is on only when it is not switched off and something is actually
+// configured for it. An "enabled" flag with no values behind it is not a state
+// worth showing as on: no source is registered from it, every query would fail,
+// and the operator is left looking at an expanded section demanding credentials
+// for a service they do not use.
+func sourceEnabled(disabled, hasValues bool) bool {
+	return !disabled && hasValues
 }
 
 // unauthorized answers a request with a missing or wrong setup token. The two

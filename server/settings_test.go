@@ -515,3 +515,36 @@ func TestSettingsToggleFollowsWhatIsConfigured(t *testing.T) {
 		t.Error("want streaming off: no TMDB token is configured")
 	}
 }
+
+// TestSettingsToggleOffWhenNothingIsSet pins the stricter rule: a section is on
+// only when something is actually configured in it, even if the config file
+// carries an "enabled" flag with no values behind it. Such a source registers
+// nothing and fails every query, so showing it as on is a lie.
+func TestSettingsToggleOffWhenNothingIsSet(t *testing.T) {
+	s, _, token := newSettingsServer(t, `
+jellyfin:
+  enabled: true
+plex:
+  enabled: true
+  url: http://plex.local:32400
+  token: plex-secret
+streaming:
+  enabled: true
+`)
+
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, settingsRequestFor(t, http.MethodGet, token, nil))
+	var got settingsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Jellyfin.Enabled {
+		t.Error("want Jellyfin off: enabled is set but nothing is configured for it")
+	}
+	if got.Streaming.Enabled {
+		t.Error("want streaming off: enabled is set but there is no TMDB token")
+	}
+	if !got.Plex.Enabled {
+		t.Error("want Plex on: it has both a URL and a token")
+	}
+}

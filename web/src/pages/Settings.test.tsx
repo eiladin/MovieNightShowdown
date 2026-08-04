@@ -234,13 +234,13 @@ describe('Settings', () => {
         await waitFor(() => expect(screen.getByLabelText('Enable streaming services')).toBeTruthy())
 
         await user.click(screen.getByLabelText('Enable streaming services'))
-        expect(screen.queryByRole('group', { name: 'Services' })).toBeNull()
+        expect(screen.queryByRole('combobox')).toBeNull()
 
         await user.type(screen.getByLabelText('TMDB read token'), 'bad')
         await user.click(screen.getByRole('button', { name: 'Check token' }))
 
         await waitFor(() => expect(screen.getByText('nope')).toBeTruthy())
-        expect(screen.queryByRole('group', { name: 'Services' })).toBeNull()
+        expect(screen.queryByRole('combobox')).toBeNull()
     })
 
     it('shows the picker once the token verifies', async () => {
@@ -254,7 +254,10 @@ describe('Settings', () => {
         await user.type(screen.getByLabelText('TMDB read token'), 'good')
         await user.click(screen.getByRole('button', { name: 'Check token' }))
 
-        await waitFor(() => expect(screen.getByLabelText('Netflix')).toBeTruthy())
+        // The picker shows a search box rather than the whole catalogue.
+        await waitFor(() => expect(screen.getByRole('combobox')).toBeTruthy())
+        await user.type(screen.getByRole('combobox'), 'net')
+        expect(screen.getByRole('option', { name: 'Netflix' })).toBeTruthy()
     })
 
     it('reports the three save outcomes distinctly', async () => {

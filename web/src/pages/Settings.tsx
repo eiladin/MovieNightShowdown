@@ -10,6 +10,7 @@ import {
     type ProviderOption,
     type Settings as SettingsData,
 } from '../api'
+import ProviderPicker from '../components/ProviderPicker'
 import { getSetupToken, setSetupToken } from '../setupToken'
 import {
     buildUpdate,
@@ -169,7 +170,7 @@ export default function Settings() {
 
     if (needsToken) {
         return (
-            <div className="settings-page">
+            <div className="settings-page settings-gate">
                 <h1>Settings</h1>
                 <p className="settings-lede">
                     Changing this server&apos;s configuration needs its setup token. The server
@@ -444,28 +445,19 @@ export default function Settings() {
                                 one the list cannot be fetched, and an empty picker
                                 would look like a deployment with no services. */}
                             {tmdbVerified ? (
-                                <fieldset className="settings-providers">
-                                    <legend>Services</legend>
-                                    {providers.length === 0 && <p>No services were returned for this region.</p>}
-                                    {providers.map((p) => (
-                                        <label key={p.id}>
-                                            <input
-                                                type="checkbox"
-                                                checked={draft.streaming.providers.includes(p.id)}
-                                                onChange={(e) => {
-                                                    const next = e.target.checked
-                                                        ? [...draft.streaming.providers, p.id]
-                                                        : draft.streaming.providers.filter((id) => id !== p.id)
-                                                    setDraft({
-                                                        ...draft,
-                                                        streaming: { ...draft.streaming, providers: next },
-                                                    })
-                                                }}
-                                            />
-                                            {p.name}
-                                        </label>
-                                    ))}
-                                </fieldset>
+                                <>
+                                    <span id="provider-picker-label">Services</span>
+                                    <ProviderPicker
+                                        options={providers}
+                                        selected={draft.streaming.providers}
+                                        onChange={(next) =>
+                                            setDraft({
+                                                ...draft,
+                                                streaming: { ...draft.streaming, providers: next },
+                                            })
+                                        }
+                                    />
+                                </>
                             ) : (
                                 <p className="settings-hint">
                                     Check the token to choose which services to offer.
