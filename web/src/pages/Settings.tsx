@@ -481,6 +481,22 @@ export default function Settings() {
                     </div>
                 </section>
 
+                <section className="settings-section settings-readonly">
+                    <h2>Container</h2>
+                    <p className="settings-hint">
+                        These are fixed when the container starts. Change them in your deployment
+                        — a compose file or run command — and recreate it.
+                    </p>
+                    <dl className="settings-readonly-list">
+                        <dt>Listen port</dt>
+                        <dd>{settings.runtime.port}</dd>
+                        <dt>Poster cache directory</dt>
+                        <dd>{settings.runtime.cacheDir}</dd>
+                        <dt>Config file</dt>
+                        <dd>{settings.runtime.configPath}</dd>
+                    </dl>
+                </section>
+
                 <button type="submit" className="settings-save" disabled={saving}>
                     {saving ? 'Saving…' : 'Save settings'}
                 </button>

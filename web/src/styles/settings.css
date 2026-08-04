@@ -131,3 +131,24 @@
   font-size: 0.8rem;
   margin-bottom: 0.5rem;
 }
+
+/* Settings fixed at container level. Shown so the operator knows what is in
+   effect, styled flatter than the editable sections so it does not read as a
+   form they can submit. */
+.settings-readonly-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0.75rem 0 0;
+}
+
+.settings-readonly-list dt {
+  color: #bbb;
+  font-size: 0.9rem;
+}
+
+.settings-readonly-list dd {
+  margin: 0;
+  font-family: monospace;
+  overflow-wrap: anywhere;
+}

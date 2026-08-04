@@ -334,3 +334,44 @@ func TestWriteConfigFileIsAtomic(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// TestSettingsReportsRuntimeSettingsReadOnly pins that the container-level
+// settings are visible but not writable: they are reported so an operator can
+// see what is in effect, and absent from the request type because saving cannot
+// change something established before the process started.
+func TestSettingsReportsRuntimeSettingsReadOnly(t *testing.T) {
+	s, path, token := newSettingsServer(t, "publicUrl: http://nas:8080\n")
+
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, settingsRequestFor(t, http.MethodGet, token, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var got settingsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Runtime.Port != s.config().Port {
+		t.Errorf("runtime port = %q, want %q", got.Runtime.Port, s.config().Port)
+	}
+	if got.Runtime.CacheDir != s.config().CacheDir {
+		t.Errorf("runtime cacheDir = %q, want the live value", got.Runtime.CacheDir)
+	}
+	if got.Runtime.ConfigPath != path {
+		t.Errorf("runtime configPath = %q, want %q", got.Runtime.ConfigPath, path)
+	}
+
+	// Nothing in a save request can reach them: the config file has no key for
+	// the cache directory or the port at all.
+	cf, err := loadConfigFile(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if cf == nil || strings.Contains(string(raw), "cacheDir") || strings.Contains(string(raw), "port") {
+		t.Error("a container-level setting reached the config file")
+	}
+}

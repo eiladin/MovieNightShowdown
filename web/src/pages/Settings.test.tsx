@@ -14,6 +14,7 @@ function settingsFixture(overrides: Partial<SettingsData> = {}): SettingsData {
     return {
         publicUrl: 'http://nas:8080',
         sessionTtl: '4h',
+        runtime: { port: '8080', cacheDir: '/cache', configPath: '/config/config.yaml' },
         jellyfin: { enabled: false, url: '', apiKeySet: false, userId: '' },
         plex: {
             enabled: true,
@@ -126,7 +127,22 @@ describe('Settings', () => {
         expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`)
 
         const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
-        expect(headings).toEqual(['Jellyfin', 'Plex', 'Streaming', 'Server'])
+        expect(headings).toEqual(['Jellyfin', 'Plex', 'Streaming', 'Server', 'Container'])
+    })
+
+    it('shows container-level settings without offering to change them', async () => {
+        installFetch()
+        const user = userEvent.setup()
+        renderSettings()
+        await enterToken(user)
+        await waitFor(() => expect(screen.getByText('Listen port')).toBeTruthy())
+
+        expect(screen.getByText('8080')).toBeTruthy()
+        expect(screen.getByText('/cache')).toBeTruthy()
+        expect(screen.getByText('/config/config.yaml')).toBeTruthy()
+        // Reported, never editable: there is no input for any of them.
+        expect(screen.queryByLabelText('Listen port')).toBeNull()
+        expect(screen.queryByLabelText('Poster cache directory')).toBeNull()
     })
 
     it('re-prompts for the token when the server rejects it', async () => {

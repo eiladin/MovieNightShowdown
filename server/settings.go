@@ -18,6 +18,12 @@ type settingsResponse struct {
 	PublicURL  string `json:"publicUrl"`
 	SessionTTL string `json:"sessionTtl"`
 
+	// Runtime holds the settings fixed at container level. They are reported
+	// so an operator can see what is in effect, and are absent from the
+	// request type because saving cannot change them: each names something
+	// established before the process started.
+	Runtime runtimeSettings `json:"runtime"`
+
 	Jellyfin  jellyfinSettings  `json:"jellyfin"`
 	Plex      plexSettings      `json:"plex"`
 	Streaming streamingSettings `json:"streaming"`
@@ -33,6 +39,15 @@ type settingsResponse struct {
 
 	// RestartRequired reports that the saved values are not yet live.
 	RestartRequired bool `json:"restartRequired"`
+}
+
+// runtimeSettings are read-only. Changing any of them means changing the
+// deployment and recreating the container, so the screen shows them and says
+// so rather than offering an input that could not take effect.
+type runtimeSettings struct {
+	Port       string `json:"port"`
+	CacheDir   string `json:"cacheDir"`
+	ConfigPath string `json:"configPath"`
 }
 
 type jellyfinSettings struct {
@@ -354,6 +369,11 @@ func (s *Server) settingsView(file *configFile, outcome reloadOutcome) settingsR
 	return settingsResponse{
 		PublicURL:  orEmpty(top.PublicURL),
 		SessionTTL: orEmpty(top.SessionTTL),
+		Runtime: runtimeSettings{
+			Port:       live.Port,
+			CacheDir:   live.CacheDir,
+			ConfigPath: live.ConfigPath,
+		},
 		Jellyfin: jellyfinSettings{
 			Enabled:   enabledOrDefault(jf.Enabled),
 			URL:       orEmpty(jf.URL),

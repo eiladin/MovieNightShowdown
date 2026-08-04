@@ -213,9 +213,19 @@ export interface SettingsProvenance {
 
 // Settings mirrors server.settingsResponse. Secrets are never present — only a
 // boolean saying whether one is stored, so the screen can render a placeholder.
+// RuntimeSettings are fixed at container level. They are reported so the screen
+// can show what is in effect; there is no way to change them from here, and no
+// corresponding fields on SettingsUpdate.
+export interface RuntimeSettings {
+    port: string
+    cacheDir: string
+    configPath: string
+}
+
 export interface Settings {
     publicUrl: string
     sessionTtl: string
+    runtime: RuntimeSettings
     jellyfin: {
         enabled: boolean
         url: string
