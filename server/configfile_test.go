@@ -134,6 +134,72 @@ plex:
 	}
 }
 
+// An environment variable that is present but empty supplies nothing, so it is
+// not a value the config file overrode and must not be reported as one.
+//
+// This is the state of every variable in a stock deployment: the shipped
+// docker-compose.yml passes each one through as `${VAR:-}`, so with nothing set on
+// the host they all exist in the container as empty strings. Reporting them as
+// overridden badged every setting on the settings screen with "set but ignored"
+// for a conflict that did not exist — and a warning that fires on everything is
+// one nobody reads the day it means something.
+func TestEmptyEnvironmentVariableIsNotReportedAsOverridden(t *testing.T) {
+	clearConfigEnv(t)
+	writeConfig(t, `
+publicUrl: http://saved:8080
+plex:
+  url: http://from-file:32400
+  token: token-from-file
+streaming:
+  providers: [netflix]
+`)
+	// Exactly what compose produces for an unconfigured host: present, empty.
+	for _, k := range []string{"PUBLIC_URL", "PLEX_URL", "PLEX_TOKEN", "STREAMING_PROVIDERS"} {
+		t.Setenv(k, "")
+	}
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	for _, key := range []string{"publicUrl", "plex.url", "plex.token", "streaming.providers"} {
+		p := cfg.Provenance[key]
+		if p.Source != sourceFile {
+			t.Errorf("%s source = %q, want the config file", key, p.Source)
+		}
+		if p.EnvIgnored {
+			t.Errorf("%s reported %s as set but ignored; it is present and empty, so it "+
+				"supplied nothing and there is nothing to warn about", key, p.EnvVar)
+		}
+	}
+}
+
+// The warning still has to fire when it is real, or removing the false positives
+// would have removed the whole mitigation.
+func TestNonEmptyEnvironmentVariableIsStillReportedAsOverridden(t *testing.T) {
+	clearConfigEnv(t)
+	writeConfig(t, `
+plex:
+  url: http://from-file:32400
+streaming:
+  providers: [netflix]
+`)
+	t.Setenv("PLEX_URL", "http://from-env:32400")
+	t.Setenv("STREAMING_PROVIDERS", "hulu")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	for _, key := range []string{"plex.url", "streaming.providers"} {
+		if p := cfg.Provenance[key]; !p.EnvIgnored {
+			t.Errorf("%s provenance = %+v, want %s reported as ignored", key, p, p.EnvVar)
+		}
+	}
+}
+
 // TestLoadConfigEmptyStringInFileIsNotAbsent pins the reason every scalar is a
 // pointer: a key the operator deliberately blanked must stay blank rather than
 // falling back to an environment variable they believe they overrode.

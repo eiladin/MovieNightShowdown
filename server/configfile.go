@@ -99,8 +99,18 @@ type settingProvenance struct {
 	Source settingSource
 	// EnvVar is the environment variable that would supply this setting.
 	EnvVar string
-	// EnvIgnored is true when EnvVar is set but the config file won, which is
-	// the one combination an operator is likely to misread.
+	// EnvIgnored is true when EnvVar holds a value the config file overrode,
+	// which is the one combination an operator is likely to misread.
+	//
+	// "Holds a value" and "is present" are deliberately different tests. A
+	// variable present but empty was never going to supply anything — resolution
+	// already skips it (see the env case in str) — so reporting it as overridden
+	// warns about a conflict that does not exist. That matters more than it
+	// sounds: the shipped docker-compose.yml passes every variable through as
+	// `${VAR:-}`, so an unconfigured deployment has all of them present and
+	// empty. Keying this on presence alone badged every saved setting on the
+	// settings screen, and a warning that fires on everything is one nobody reads
+	// the day it is real.
 	EnvIgnored bool
 	// Secret marks a setting whose value must never be logged or returned.
 	Secret bool
@@ -124,15 +134,15 @@ func newResolver(file *configFile) *resolver {
 // str resolves one string setting: the file wins when it sets the key,
 // otherwise the environment, otherwise the default.
 func (r *resolver) str(key, envVar string, fileVal *string, def string) string {
-	env, envSet := os.LookupEnv(envVar)
+	env, envContributes := envValue(envVar)
 	p := settingProvenance{EnvVar: envVar}
 	switch {
 	case fileVal != nil:
 		p.Source = sourceFile
-		p.EnvIgnored = envSet
+		p.EnvIgnored = envContributes
 		r.prov[key] = p
 		return *fileVal
-	case envSet && env != "":
+	case envContributes:
 		p.Source = sourceEnv
 		r.prov[key] = p
 		return env
@@ -141,6 +151,18 @@ func (r *resolver) str(key, envVar string, fileVal *string, def string) string {
 		r.prov[key] = p
 		return def
 	}
+}
+
+// envValue reads an environment variable and reports whether it actually supplies
+// anything.
+//
+// A variable present but empty supplies nothing, and this is the single place that
+// decides so. Resolution and provenance both read it, which is the point: they
+// disagreed before, and an empty variable was skipped when choosing a value while
+// still being reported as one the config file had overridden.
+func envValue(envVar string) (value string, contributes bool) {
+	v, ok := os.LookupEnv(envVar)
+	return v, ok && v != ""
 }
 
 // secret resolves a credential. It behaves exactly as str but marks the
@@ -179,21 +201,21 @@ func (r *resolver) disabled(key string, fileVal *bool) bool {
 // file has a settings screen and must choose explicitly; defaulting there would
 // silently add services nobody selected.
 func (r *resolver) providers(key, envVar string, fileVal *[]string, fileManaged bool) []string {
-	env, envSet := os.LookupEnv(envVar)
+	env, envContributes := envValue(envVar)
 	p := settingProvenance{EnvVar: envVar}
 	if fileVal != nil {
 		p.Source = sourceFile
-		p.EnvIgnored = envSet
+		p.EnvIgnored = envContributes
 		r.prov[key] = p
 		return normalizeProviders(*fileVal)
 	}
 	if fileManaged {
 		p.Source = sourceFile
-		p.EnvIgnored = envSet
+		p.EnvIgnored = envContributes
 		r.prov[key] = p
 		return []string{}
 	}
-	if envSet && env != "" {
+	if envContributes {
 		p.Source = sourceEnv
 		r.prov[key] = p
 		return parseStreamingProviders(env)
