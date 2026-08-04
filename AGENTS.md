@@ -93,6 +93,24 @@ hand-curated and is not touched by this pipeline.
   on the source list, `Availability.Label` on each card. `knownProviders` in
   `server/providers.go` is an offline shortcut and a pin for the ids this app
   shipped with — never a limit on what can be configured.
+- **`providerCatalog` owns the TMDB-provider-to-`SourceID` mapping, and is the
+  only thing that may.** Both the settings screen's picker
+  (`fetchProviderList`) and startup resolution (`resolveStreamingProviders`)
+  read from it. They previously built separate indexes and drifted, which caused
+  two bugs. Do not add a third index.
+  - **A `SourceID` is claimed by exactly one provider.** `slugifyProvider` folds
+    everything outside `[a-z0-9]` to a separator, so names differing only in
+    punctuation collapse onto one id ("Apple TV" and "Apple TV+" both give
+    `apple-tv`). The catalog sorts by name and lets the first claim it; the loser
+    stays reachable by exact name and TMDB id. Emitting both put a duplicate
+    React key in the picker, and resolution can only ever map an id to one
+    provider anyway.
+  - **`knownProviders` wins on both id and display name, matched by TMDB id.**
+    TMDB calls provider 9 "Amazon Prime Video"; this application calls it
+    `prime`/"Prime Video". Slugifying TMDB's name gives one service two ids, and
+    two ids never merge into one deck entry. The slug of the upstream name is
+    kept as a lookup alias so a config file written before this rule existed
+    still resolves.
 - **Only the host's filter picks are persisted client-side.** `web/src/store.ts`
   persists `filtersByCode` (keyed by session code, capped at 5 entries) to
   localStorage and nothing else. Every other field is server-derived and must be
@@ -126,6 +144,38 @@ hand-curated and is not touched by this pipeline.
   source-affecting tier.** The server remains authoritative; the client copy only
   decides whether to confirm before saving. A new setting joining that tier needs
   updating in both, and only the server has a test that would notice.
+- **The check routes require the setup token, permanently.**
+  `POST /api/settings/verify/{tmdb,jellyfin,plex}` and
+  `POST /api/settings/jellyfin/users` (`server/sourceverify.go`,
+  `server/tmdbverify.go`) each take a URL from the request and make the server
+  fetch it. Unauthenticated, that is a request-forgery primitive aimed at the
+  interior of whatever network this is deployed on, with the responses returned
+  to the caller. The token is the whole boundary.
+- **A check falls back to the stored credential per field.** The settings screen
+  never receives a stored secret, so it cannot submit one for a source that is
+  already saved — which is the case most worth checking. An empty secret in a
+  check request therefore means "use what is stored", never "check an empty
+  credential". This applies to the TMDB check too; it once lacked the fallback
+  and reported a working stored token as absent.
+- **A check distinguishes an unreachable host from a rejected credential.** They
+  have different fixes, and sending an operator to the wrong one is worse than
+  saying nothing. That needs the upstream status code, which is why
+  `server/sourceverify.go` builds its own requests instead of going through
+  `JellyfinClient`/`PlexClient` — those exist to return movies and collapse every
+  non-200 into one error string.
+- **The settings screen takes its colours from the tokens in
+  `web/src/index.css`.** They carry a light and a dark definition. An earlier
+  version of `settings.css` hardcoded a dark palette, which rendered near-white
+  text on a white page in light mode. It also restated control padding smaller
+  than the global `input`/`select`/`button` rules; do not re-add that — the base
+  styles already size these controls.
+- **The provider picker renders no results for an empty query.** Not on focus
+  either. TMDB returns several hundred services for a region, and that list is
+  what the search box exists to avoid; showing it on focus buried the rest of the
+  form under an overlay. Matches are also capped (`MAX_VISIBLE` in
+  `web/src/components/ProviderPicker.tsx`) with the remainder counted on screen,
+  because a truncated list that looks complete is worse than a short one that
+  says so.
 - The docs (`AGENTS.md`, `README.md`, `docs/*`) are written in a neutral,
   professional voice, since they are read by other agents and humans.
 

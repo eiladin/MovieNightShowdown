@@ -30,10 +30,12 @@ In Jellyfin, open **Dashboard → API Keys** and create a new key. Give it a nam
 you'll recognize (for example, `movie-night-showdown`) and copy the value — this
 becomes `JELLYFIN_API_KEY` below.
 
-If you want the "unwatched only" filter to work, you also need a user ID. Open
-**Dashboard → Users**, click the user whose watch state should count, and copy
-the ID out of the browser's address bar (`.../useredit.html?userId=<this part>`).
-That value becomes `JELLYFIN_USER_ID`.
+If you want the "unwatched only" filter to work, you also need to say whose watch
+state counts. The settings screen lists your Jellyfin accounts and lets you pick
+one, so you only need to find the raw ID when configuring by environment variable:
+open **Dashboard → Users**, click the user, and copy the ID out of the browser's
+address bar (`.../useredit.html?userId=<this part>`). That value becomes
+`JELLYFIN_USER_ID`.
 
 ### Getting a Plex token
 
@@ -151,6 +153,13 @@ offered to hosts.
 Credentials are stored on the server and are never sent back to the browser — a
 saved one shows as a placeholder, and you replace it by typing a new value or
 remove it with the button beside it.
+
+Each section has a **Check** button. Use it. It makes the server query that source
+for real and tells you what came back — the number of movies Jellyfin can see, the
+name of the Plex library that will be used, or which part is wrong: an unreachable
+URL and a rejected credential are reported differently, because the fix differs.
+You do not have to save first, and if a credential is already stored you can leave
+the field alone and check what is saved.
 
 Most changes take effect immediately. Changing a movie source rebuilds the deck
 sources, which ends any session in progress, so the screen asks first.
