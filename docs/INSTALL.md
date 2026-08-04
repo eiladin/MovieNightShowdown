@@ -63,14 +63,32 @@ and never sends it to a browser.
 Unlike Jellyfin, no extra user ID is needed for the "unwatched only" filter — a
 Plex token already identifies one user, so play state is always available.
 
-#### Finding your movie library section
+#### Choosing which movie libraries to use
 
-A Plex server can hold several libraries, so the app needs to know which one
-holds movies. It discovers this automatically on first use by picking the first
-section of type `movie`, which is correct for most servers.
+Both Jellyfin and Plex can hold several libraries, and each library you name becomes
+its own movie source — so a host can run a session against your children's library
+alone. Name none and every library is used, which is what an untouched deployment
+does.
 
-If you have more than one movie library, set `PLEX_LIBRARY_SECTION` explicitly.
-List your sections with:
+The easiest way to choose is the settings screen: check the connection and it lists
+what your server actually has.
+
+By environment variable, name them however you like — the display name or the
+identifier:
+
+```
+JELLYFIN_LIBRARIES=Films,Kids Films
+PLEX_LIBRARY_SECTIONS=Films,Kids Films
+```
+
+Names are what you know. Identifiers are what works when the app starts *before*
+your media server does: a name has to be looked up on the server first, so on a cold
+start the app comes up without those libraries and adds them once the server answers,
+whereas an identifier needs no lookup and is registered immediately. If your app and
+your media server start together and you want the sources present from the first
+second, use identifiers.
+
+To find Plex's section keys by hand:
 
 ```bash
 curl -sS -H "Accept: application/json" \
@@ -161,11 +179,18 @@ URL and a rejected credential are reported differently, because the fix differs.
 You do not have to save first, and if a credential is already stored you can leave
 the field alone and check what is saved.
 
-Checking also fills in the two settings you would otherwise have to go and look up.
-Jellyfin's account list appears as a dropdown for the "unwatched only" filter, and
-Plex's movie libraries appear as a dropdown for the library to deal from. Both are
-opaque identifiers — a 32-character user id and a numeric section key — so neither
-field is shown until a check has fetched the options.
+Checking also fills in the settings you would otherwise have to go and look up.
+Jellyfin's accounts appear as a dropdown for the "unwatched only" filter, and each
+service's movie libraries appear as chips you pick from. All of them are opaque
+identifiers — a 32-character user id, a hexadecimal library id, a numeric section key
+— so none of those fields is shown until a check has fetched the options. There is
+nothing to type.
+
+**Choosing several libraries changes what a host sees.** Each library you pick becomes
+its own source, so the host's picker lists "Jellyfin — Kids Movies" beside "Netflix"
+rather than one entry called "Jellyfin". That is the point: a session can be dealt
+from one library alone. Pick none and every library is used, which is what a
+deployment that has never touched this setting already does.
 
 Most changes take effect immediately. Changing a movie source rebuilds the deck
 sources, which ends any session in progress, so the screen asks first.
@@ -274,7 +299,9 @@ which takes precedence — see [How settings are resolved](#how-settings-are-res
 | `JELLYFIN_USER_ID` | no | Needed for the "unwatched only" filter. |
 | `PLEX_URL` | one of¹ | Base URL of your Plex Media Server, including the port (usually `32400`). |
 | `PLEX_TOKEN` | one of¹ | Plex authentication token. Stays server-side; never sent to clients. See [Getting a Plex token](#getting-a-plex-token). |
-| `PLEX_LIBRARY_SECTION` | no | Key of the Plex library section holding movies. Discovered automatically when unset; set it only if your server has more than one movie library. See [Finding your movie library section](#finding-your-movie-library-section). |
+| `PLEX_LIBRARY_SECTIONS` | no | Comma-separated movie libraries to draw from, by name or by section key. Each becomes its own source. Unset means every library. See [Choosing which movie libraries to use](#choosing-which-movie-libraries-to-use). |
+| `PLEX_LIBRARY_SECTION` | no | Deprecated singular form, still read when the plural is unset so existing deployments keep working. Use the plural. |
+| `JELLYFIN_LIBRARIES` | no | Comma-separated movie libraries to draw from, by name or by library id. Each becomes its own source. Unset means every library. |
 | `TMDB_READ_TOKEN` | one of¹ | TMDB v4 API Read Access Token. Unlocks streaming services as sources; without it only Jellyfin is offered. Stays server-side; never sent to clients. See [Streaming services](#streaming-services). |
 | `STREAMING_PROVIDERS` | no | Comma-separated list of streaming services to offer, by name or numeric TMDB provider id. Any provider TMDB tracks is accepted. Defaults to `netflix,prime,disney` **only for a deployment that has not saved streaming settings** — once the settings screen manages them, services are chosen explicitly or not at all. Ignored when `TMDB_READ_TOKEN` is unset. See [Choosing which services to offer](#choosing-which-services-to-offer). |
 | `TMDB_WATCH_REGION` | no | ISO 3166-1 country code deciding which streaming services exist and what they carry. Defaults to `US`. See [Setting the region](#setting-the-region). |

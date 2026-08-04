@@ -181,11 +181,60 @@ hand-curated and is not touched by this pipeline.
   genuinely lists nothing indistinguishable — the least actionable of the three.
   `listProviders` surfaces the server's message and the screen shows it. Do not
   reintroduce a bare `.catch(() => setState([]))` on any of these calls.
-- **The provider picker renders no results for an empty query.** Not on focus
+- **A library is a source.** Each configured library becomes its own `SourceID`,
+  formed as `<service>-<libraryId>` by `libraryScopedID`. An empty library list
+  registers one unscoped source per service under its bare id (`jellyfin`, `plex`),
+  which is what keeps an unconfigured deployment — and its saved host selections and
+  cached poster URLs — working exactly as before.
+- **The identifier is the library's own, never a slug of its name.** Names get
+  renamed; this value is embedded in the image proxy path and in the host's
+  persisted source selection.
+- **Two labels, deliberately.** `SourceDescriptor.label` is qualified
+  (`Jellyfin — Kids Movies`) because the host picker is one flat list, and a
+  Jellyfin server and a Plex server pointed at the same media both hold a library of
+  that name. `Availability.Label` on a card badge stays the bare service name,
+  because a badge has no room for the qualified form. They are separate fields set
+  in separate places; do not collapse them.
+- **Library identifiers are never case-folded.** `normalizeProviders` lowercases,
+  which is right for a provider name and wrong for an opaque identifier — Jellyfin's
+  is hexadecimal, Plex's is an integer. `parseLibraryList` trims and de-duplicates
+  and stops there. Name matching folds case at the point of comparison, in
+  `resolveLibraryNames`, where it cannot damage a stored value. The same list holds
+  both kinds, so one rule cannot be applied to all of it.
+- **A name is resolved lazily, and a success is never re-resolved.** A name has to
+  become an identifier before anything can be queried; an identifier does not.
+  Identifiers therefore resolve at startup with no network call, and names resolve on
+  the first request that needs the source list, through `currentSources()`. Resolving
+  at startup would let an application and a media server that start together race,
+  and losing it would mean registering no sources at all. Re-resolving a success
+  would change a `SourceID` under a live session: poster URLs carry the id and the
+  image handler looks the fetcher up by it, so every card in an in-progress deck
+  would start returning 404. The retry floor (`lazyValue`) applies to failures only.
+- **A resolution must not end sessions.** `applyConfig` ends them because the
+  operator changed the configuration; a lazy resolution is the same configuration
+  becoming resolvable. It builds a new set and `CompareAndSwap`s it in, without
+  `EndAll`. Do not "tidy" that into a call to `applyConfig`.
+- **A name that cannot be resolved registers no source.** An unresolved name used
+  verbatim produced ids like `jellyfin-Kids Movies`, and a `SourceID` is a path
+  segment in the image proxy. `isPendingName` is the gate; two libraries sharing a
+  title resolve deterministically by sorted order with the loser logged, the same
+  rule `providerCatalog` uses for colliding provider slugs.
+- **`PLEX_LIBRARY_SECTION` is a deprecated alias**, read only when
+  `PLEX_LIBRARY_SECTIONS` is unset. Dropping it would silently change which library
+  an existing deployment deals from, and the symptom appears mid-session rather than
+  at startup. `Config.PlexLibrarySection` is the compatibility input only — nothing
+  reads it to decide what to query.
+- **A capability is still declared, never inferred.** Nothing may branch on a
+  `SourceID` to decide what a source supports. Composite ids make that easier to get
+  wrong, which is why it is restated here.
+- **The chip picker is generic.** `web/src/components/ChipPicker.tsx` takes an
+  id-and-name list and knows nothing about providers or libraries. Both callers use
+  it. Do not fork it for a third.
+- **The chip picker renders no results for an empty query.** Not on focus
   either. TMDB returns several hundred services for a region, and that list is
   what the search box exists to avoid; showing it on focus buried the rest of the
   form under an overlay. Matches are also capped (`MAX_VISIBLE` in
-  `web/src/components/ProviderPicker.tsx`) with the remainder counted on screen,
+  `web/src/components/ChipPicker.tsx`) with the remainder counted on screen,
   because a truncated list that looks complete is worse than a short one that
   says so.
 - The docs (`AGENTS.md`, `README.md`, `docs/*`) are written in a neutral,
@@ -243,7 +292,9 @@ Rules that follow from it, all load-bearing:
 | `JELLYFIN_USER_ID` | optional | Needed for "unwatched" filtering |
 | `PLEX_URL` | one of¹ | Base URL of the Plex Media Server (usually port 32400) |
 | `PLEX_TOKEN` | one of¹ | Plex authentication token (stays server-side, never sent to clients) |
-| `PLEX_LIBRARY_SECTION` | optional | Key of the movie library section. Discovered on first use (first section of type `movie`) when unset; required only on a server with several movie libraries |
+| `PLEX_LIBRARY_SECTIONS` | optional | Comma-separated movie libraries to draw from, by **name or section key**. Each becomes its own source. Unset means every library, which is one unscoped source |
+| `PLEX_LIBRARY_SECTION` | deprecated | The singular predecessor. Still read when the plural is unset, so an existing deployment does not silently change which library it deals from |
+| `JELLYFIN_LIBRARIES` | optional | Comma-separated movie libraries to draw from, by **name or library id**. Same semantics as `PLEX_LIBRARY_SECTIONS` |
 | `PUBLIC_URL` | yes | Base URL used to build QR/join links |
 | `PORT` | optional | Listen port (default 8080). Environment-only |
 | `SESSION_TTL` | optional | Session expiry (default a few hours) |

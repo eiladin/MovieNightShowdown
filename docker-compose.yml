@@ -22,12 +22,18 @@ services:
       #
       # Leave them all unset to configure entirely through the settings screen:
       # start the app, read the setup token from the log, and open /settings.
+      #
+      # Note the ${VAR:-} form: with nothing set on the host, every variable below
+      # still exists inside the container as an empty string. That is why the app
+      # treats "present but empty" as supplying nothing, and reports a variable as
+      # overridden only when it actually holds a value.
       JELLYFIN_URL: ${JELLYFIN_URL:-}
       JELLYFIN_API_KEY: ${JELLYFIN_API_KEY:-}
       JELLYFIN_USER_ID: ${JELLYFIN_USER_ID:-}
+      JELLYFIN_LIBRARIES: ${JELLYFIN_LIBRARIES:-}
       PLEX_URL: ${PLEX_URL:-}
       PLEX_TOKEN: ${PLEX_TOKEN:-}
-      PLEX_LIBRARY_SECTION: ${PLEX_LIBRARY_SECTION:-}
+      PLEX_LIBRARY_SECTIONS: ${PLEX_LIBRARY_SECTIONS:-}
       TMDB_READ_TOKEN: ${TMDB_READ_TOKEN:-}
       STREAMING_PROVIDERS: ${STREAMING_PROVIDERS:-}
       TMDB_WATCH_REGION: ${TMDB_WATCH_REGION:-}
