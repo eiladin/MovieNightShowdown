@@ -17,6 +17,7 @@ import {
     type SourceCheck,
 } from '../api'
 import ProviderPicker from '../components/ProviderPicker'
+import SecretField from '../components/SecretField'
 import { getSetupToken, setSetupToken } from '../setupToken'
 import {
     buildUpdate,
@@ -346,12 +347,15 @@ export default function Settings() {
                 {failure && <p className="settings-error">{failure}</p>}
                 <form onSubmit={submitToken} className="settings-token-form" data-form-type="other">
                     <label htmlFor="setup-token">Setup token</label>
-                    <input
+                    {/* This one has no stored marker to protect, and it is the
+                        field most likely to be wrong: 64 hex characters copied out
+                        of a container log. Being able to read it back is the
+                        difference between fixing a typo and re-reading the log. */}
+                    <SecretField
                         id="setup-token"
-                        type="password"
                         value={tokenInput}
-                        onChange={(e) => setTokenInput(e.target.value)}
-                        {...noAutofill}
+                        inputProps={noAutofill}
+                        onChange={setTokenInput}
                     />
                     <button type="submit">Continue</button>
                 </form>
@@ -496,18 +500,18 @@ export default function Settings() {
                             {fieldError('jellyfin.url')}
 
                             <label htmlFor="jf-key">API key</label>
-                            <input
+                            <SecretField
                                 id="jf-key"
-                                type="password"
                                 value={draft.jellyfin.apiKey}
-                                onChange={(e) => {
+                                storedMarker={SECRET_PLACEHOLDER}
+                                inputProps={noAutofill}
+                                onChange={(value) => {
                                     setCheck('jellyfin', NO_CHECK)
                                     setDraft({
                                         ...draft,
-                                        jellyfin: { ...draft.jellyfin, apiKey: e.target.value },
+                                        jellyfin: { ...draft.jellyfin, apiKey: value },
                                     })
                                 }}
-                                {...noAutofill}
                             />
                             {clearControl(settings.jellyfin.apiKeySet, draft.jellyfin.apiKey, () =>
                                 setDraft({ ...draft, jellyfin: { ...draft.jellyfin, apiKey: '' } }),
@@ -632,15 +636,15 @@ export default function Settings() {
                             {fieldError('plex.url')}
 
                             <label htmlFor="plex-token">Token</label>
-                            <input
+                            <SecretField
                                 id="plex-token"
-                                type="password"
                                 value={draft.plex.token}
-                                onChange={(e) => {
+                                storedMarker={SECRET_PLACEHOLDER}
+                                inputProps={noAutofill}
+                                onChange={(value) => {
                                     setCheck('plex', NO_CHECK)
-                                    setDraft({ ...draft, plex: { ...draft.plex, token: e.target.value } })
+                                    setDraft({ ...draft, plex: { ...draft.plex, token: value } })
                                 }}
-                                {...noAutofill}
                             />
                             {clearControl(settings.plex.tokenSet, draft.plex.token, () =>
                                 setDraft({ ...draft, plex: { ...draft.plex, token: '' } }),
@@ -744,22 +748,22 @@ export default function Settings() {
                     {draft.streaming.enabled && (
                         <div className="settings-fields">
                             <label htmlFor="tmdb-token">TMDB read token</label>
-                            <input
+                            <SecretField
                                 id="tmdb-token"
-                                type="password"
                                 value={draft.streaming.tmdbReadToken}
-                                onChange={(e) => {
+                                storedMarker={SECRET_PLACEHOLDER}
+                                inputProps={noAutofill}
+                                onChange={(value) => {
                                     setCheck('streaming', NO_CHECK)
                                     setCheckedToken('')
                                     setDraft({
                                         ...draft,
                                         streaming: {
                                             ...draft.streaming,
-                                            tmdbReadToken: e.target.value,
+                                            tmdbReadToken: value,
                                         },
                                     })
                                 }}
-                                {...noAutofill}
                             />
                             {clearControl(
                                 settings.streaming.tmdbReadTokenSet,
