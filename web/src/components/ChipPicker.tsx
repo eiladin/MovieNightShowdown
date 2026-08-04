@@ -1,11 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ProviderOption } from '../api'
-import '../styles/provider-picker.css'
+import '../styles/chip-picker.css'
 
-interface ProviderPickerProps {
-    options: ProviderOption[]
+// ChipOption is one selectable thing. Both callers happen to name their entities
+// this way — a streaming provider and a media library are each an opaque id with a
+// display name — so the picker needs no knowledge of either.
+export interface ChipOption {
+    id: string
+    name: string
+}
+
+interface ChipPickerProps {
+    options: ChipOption[]
     selected: string[]
     onChange: (next: string[]) => void
+    // labelId points at the heading that names this control, so the combobox is
+    // announced rather than reaching a screen reader unnamed.
+    labelId: string
+    placeholder: string
+    // emptyLabel is shown when nothing is selected, and noneLabel when the option
+    // list itself came back empty. They are different states with different fixes,
+    // so they are different messages.
+    emptyLabel: string
+    noneLabel: string
 }
 
 // MAX_VISIBLE caps how many results are rendered at once.
@@ -17,17 +33,28 @@ interface ProviderPickerProps {
 // silently, so the list never looks exhaustive when it is not.
 const MAX_VISIBLE = 5
 
-// ProviderPicker selects a handful of streaming services out of the several
-// hundred TMDB lists for a region.
+// ChipPicker selects a handful of items out of a list too long to render.
+//
+// It was written for the several hundred streaming services TMDB lists for a
+// region, and is used for media libraries too. It knows nothing about either: an
+// option is an id and a name.
 //
 // It shows what is selected and nothing else until you type. An empty query
-// deliberately renders no results at all — not even on focus — because "every
-// service, unfiltered" is not a list anyone reads, and showing it on focus meant
-// clicking into the field buried the rest of the form under an overlay.
+// deliberately renders no results at all — not even on focus — because "everything,
+// unfiltered" is not a list anyone reads, and showing it on focus meant clicking
+// into the field buried the rest of the form under an overlay.
 //
 // The results appear in an overlay rather than inline so opening them does not
 // reflow the form underneath.
-export default function ProviderPicker({ options, selected, onChange }: ProviderPickerProps) {
+export default function ChipPicker({
+    options,
+    selected,
+    onChange,
+    labelId,
+    placeholder,
+    emptyLabel,
+    noneLabel,
+}: ChipPickerProps) {
     const [query, setQuery] = useState('')
     const [open, setOpen] = useState(false)
     const [active, setActive] = useState(0)
@@ -108,9 +135,7 @@ export default function ProviderPicker({ options, selected, onChange }: Provider
     return (
         <div className="provider-picker" ref={containerRef}>
             <ul className="provider-chips">
-                {selected.length === 0 && (
-                    <li className="provider-empty">No services selected yet.</li>
-                )}
+                {selected.length === 0 && <li className="provider-empty">{emptyLabel}</li>}
                 {selected.map((id) => (
                     <li key={id} className="provider-chip">
                         {/* A saved service that the current region's list does not
@@ -135,11 +160,11 @@ export default function ProviderPicker({ options, selected, onChange }: Provider
                 // The heading above the chips is a span, not a label — it names the
                 // whole control, chips included, not just this input. Pointing at it
                 // is what stops the combobox being announced unnamed.
-                aria-labelledby="provider-picker-label"
+                aria-labelledby={labelId}
                 aria-expanded={showOptions}
-                aria-controls="provider-options"
+                aria-controls={`${labelId}-options`}
                 aria-autocomplete="list"
-                placeholder="Type to find a service…"
+                placeholder={placeholder}
                 value={query}
                 onChange={(e) => {
                     setQuery(e.target.value)
@@ -151,12 +176,10 @@ export default function ProviderPicker({ options, selected, onChange }: Provider
             />
 
             {showOptions && (
-                <ul className="provider-options" id="provider-options" role="listbox">
+                <ul className="provider-options" id={`${labelId}-options`} role="listbox">
                     {matches.length === 0 && (
                         <li className="provider-none">
-                            {options.length === 0
-                                ? 'No services were returned for this region.'
-                                : 'No matches.'}
+                            {options.length === 0 ? noneLabel : 'No matches.'}
                         </li>
                     )}
                     {/* The option is the interactive element itself rather than a

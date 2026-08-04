@@ -1,4 +1,4 @@
-import type { Settings as SettingsData, SettingsUpdate } from './api'
+import type { LibraryOption, Settings as SettingsData, SettingsUpdate } from './api'
 
 // SECRET_PLACEHOLDER is what a stored credential looks like on screen. The
 // server never sends one back, so this is not a masked value — it is a marker
@@ -11,8 +11,20 @@ export const SECRET_PLACEHOLDER = '••••••••'
 export interface Draft {
     publicUrl: string
     sessionTtl: string
-    jellyfin: { enabled: boolean; url: string; apiKey: string; userId: string }
-    plex: { enabled: boolean; url: string; token: string; librarySection: string }
+    jellyfin: {
+        enabled: boolean
+        url: string
+        apiKey: string
+        userId: string
+        libraries: LibraryOption[]
+    }
+    plex: {
+        enabled: boolean
+        url: string
+        token: string
+        librarySection: string
+        libraries: LibraryOption[]
+    }
     streaming: {
         enabled: boolean
         tmdbReadToken: string
@@ -30,12 +42,14 @@ export function draftFrom(s: SettingsData): Draft {
             url: s.jellyfin.url,
             apiKey: s.jellyfin.apiKeySet ? SECRET_PLACEHOLDER : '',
             userId: s.jellyfin.userId,
+            libraries: s.jellyfin.libraries ?? [],
         },
         plex: {
             enabled: s.plex.enabled,
             url: s.plex.url,
             token: s.plex.tokenSet ? SECRET_PLACEHOLDER : '',
             librarySection: s.plex.librarySection,
+            libraries: s.plex.libraries ?? [],
         },
         streaming: {
             enabled: s.streaming.enabled,
@@ -74,6 +88,7 @@ export function buildUpdate(draft: Draft, from: SettingsData): SettingsUpdate {
             apiKey: jfKey.value,
             clearApiKey: jfKey.clear,
             userId: draft.jellyfin.userId,
+            libraries: draft.jellyfin.libraries,
         },
         plex: {
             enabled: draft.plex.enabled,
@@ -81,6 +96,7 @@ export function buildUpdate(draft: Draft, from: SettingsData): SettingsUpdate {
             token: plexToken.value,
             clearToken: plexToken.clear,
             librarySection: draft.plex.librarySection,
+            libraries: draft.plex.libraries,
         },
         streaming: {
             enabled: draft.streaming.enabled,
@@ -90,6 +106,13 @@ export function buildUpdate(draft: Draft, from: SettingsData): SettingsUpdate {
             providers: draft.streaming.providers,
         },
     }
+}
+
+// libraryKey renders a library list for comparison. Order is included because it
+// decides the order sources are offered in, and the name because the picker shows
+// it — the server treats both as source-affecting.
+function libraryKey(libraries: LibraryOption[]): string {
+    return libraries.map((l) => `${l.id}:${l.name}`).join(',')
 }
 
 // sourceAffecting reports whether a draft changes something that would rebuild
@@ -109,6 +132,12 @@ export function sourceAffecting(draft: Draft, from: SettingsData): boolean {
         draft.streaming.watchRegion !== from.streaming.watchRegion ||
         draft.streaming.tmdbReadToken !==
             (from.streaming.tmdbReadTokenSet ? SECRET_PLACEHOLDER : '') ||
-        draft.streaming.providers.join(',') !== from.streaming.providers.join(',')
+        draft.streaming.providers.join(',') !== from.streaming.providers.join(',') ||
+        // A library change rebuilds the source set and ends every session, so the
+        // confirmation has to fire for it. This mirrors sourcesDiffer on the server,
+        // which remains authoritative; only the server has a test that would notice
+        // the two drifting apart.
+        libraryKey(draft.jellyfin.libraries) !== libraryKey(from.jellyfin.libraries) ||
+        libraryKey(draft.plex.libraries) !== libraryKey(from.plex.libraries)
     )
 }

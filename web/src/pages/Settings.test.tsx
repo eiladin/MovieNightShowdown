@@ -15,12 +15,13 @@ function settingsFixture(overrides: Partial<SettingsData> = {}): SettingsData {
         publicUrl: 'http://nas:8080',
         sessionTtl: '4h',
         runtime: { port: '8080', cacheDir: '/cache', configPath: '/config/config.yaml' },
-        jellyfin: { enabled: false, url: '', apiKeySet: false, userId: '' },
+        jellyfin: { enabled: false, url: '', apiKeySet: false, userId: '', libraries: [] },
         plex: {
             enabled: true,
             url: 'http://plex.local:32400',
             tokenSet: true,
             librarySection: '2',
+            libraries: [],
         },
         streaming: {
             enabled: false,
@@ -42,8 +43,8 @@ interface MockOptions {
     verifyValid?: boolean
     providers?: { id: string; name: string }[]
     getStatus?: number
-    jellyfinCheck?: { valid: boolean; message?: string }
-    plexCheck?: { valid: boolean; message?: string; sections?: { key: string; title: string }[] }
+    jellyfinCheck?: { valid: boolean; message?: string; libraries?: { id: string; name: string }[] }
+    plexCheck?: { valid: boolean; message?: string; libraries?: { id: string; name: string }[] }
     providerListStatus?: number
     // requireCandidateToken makes the provider endpoint answer 400 unless the
     // request carries a token, which is how the real server behaves when nothing
@@ -216,15 +217,15 @@ describe('Settings', () => {
         const tokenField = screen.getByLabelText('Token') as HTMLInputElement
         expect(tokenField.value).toBe(SECRET_PLACEHOLDER)
 
-        await user.clear(screen.getByLabelText('Movie library (optional)'))
-        await user.type(screen.getByLabelText('Movie library (optional)'), '3')
+        // Any source-affecting edit will do; the point of the test is the secret.
+        await user.type(screen.getByLabelText('Server URL'), '/x')
         await user.click(screen.getByRole('button', { name: 'Save settings' }))
 
         await waitFor(() => expect(posted).toHaveLength(1))
         const body = posted[0].body as { plex: Record<string, unknown> }
         expect(body.plex.token).toBeUndefined()
         expect(body.plex.clearToken).toBeUndefined()
-        expect(body.plex.librarySection).toBe('3')
+        expect(body.plex.url).toBe('http://plex.local:32400/x')
     })
 
     it('keeps password managers out of the credential fields', async () => {
@@ -426,8 +427,8 @@ describe('Settings', () => {
         // Plex is switched off so "Server URL" and "Check connection" name exactly
         // one control each; both sections render the same labels.
         const wired = settingsFixture({
-            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: '' },
-            plex: { enabled: false, url: '', tokenSet: false, librarySection: '' },
+            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: '', libraries: [] },
+            plex: { enabled: false, url: '', tokenSet: false, librarySection: '', libraries: [] },
         })
         installFetch({
             settings: wired,
@@ -450,8 +451,8 @@ describe('Settings', () => {
     // claim about a configuration that no longer exists.
     it('discards a check result when the field it checked is edited', async () => {
         const wired = settingsFixture({
-            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: '' },
-            plex: { enabled: false, url: '', tokenSet: false, librarySection: '' },
+            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: '', libraries: [] },
+            plex: { enabled: false, url: '', tokenSet: false, librarySection: '', libraries: [] },
         })
         installFetch({ settings: wired, users: [], jellyfinCheck: { valid: true, message: 'Connected.' } })
         const user = userEvent.setup()
@@ -472,7 +473,7 @@ describe('Settings', () => {
     // pointed at nothing: a wrong id is never rejected, it just returns no films.
     it('offers the Jellyfin accounts as a list', async () => {
         const wired = settingsFixture({
-            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: 'bbb' },
+            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: 'bbb', libraries: [] },
         })
         installFetch({
             settings: wired,
@@ -485,10 +486,12 @@ describe('Settings', () => {
         renderSettings()
         await enterToken(user)
 
-        const field = await waitFor(() =>
-            screen.getByLabelText('Account for “unwatched only”'),
+        // The field is a text input until the accounts arrive, so wait for the
+        // select rather than for mere presence.
+        await waitFor(() =>
+            expect(screen.getByLabelText('Account for “unwatched only”').tagName).toBe('SELECT'),
         )
-        expect(field.tagName).toBe('SELECT')
+        const field = screen.getByLabelText('Account for “unwatched only”')
         expect((field as HTMLSelectElement).value).toBe('bbb')
         expect(screen.getByRole('option', { name: 'Alex' })).toBeTruthy()
 
@@ -501,7 +504,7 @@ describe('Settings', () => {
     // it from the select would silently blank it on the next save.
     it('keeps a stored account id the server does not list', async () => {
         const wired = settingsFixture({
-            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: 'ghost' },
+            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: 'ghost', libraries: [] },
         })
         installFetch({ settings: wired, users: [{ id: 'aaa', name: 'Alex' }] })
         const user = userEvent.setup()
@@ -521,8 +524,8 @@ describe('Settings', () => {
     // points at the control that can populate it.
     it('does not offer the account field until the accounts are known', async () => {
         const wired = settingsFixture({
-            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: '' },
-            plex: { enabled: false, url: '', tokenSet: false, librarySection: '' },
+            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: '', libraries: [] },
+            plex: { enabled: false, url: '', tokenSet: false, librarySection: '', libraries: [] },
         })
         installFetch({ settings: wired })
         const user = userEvent.setup()
@@ -538,7 +541,7 @@ describe('Settings', () => {
     // or it could never be seen or cleared.
     it('still shows a stored account id when the accounts cannot be read', async () => {
         const wired = settingsFixture({
-            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: 'ghost' },
+            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: 'ghost', libraries: [] },
         })
         installFetch({ settings: wired })
         const user = userEvent.setup()
@@ -550,85 +553,76 @@ describe('Settings', () => {
         expect((field as HTMLInputElement).value).toBe('ghost')
     })
 
-    // Same rule for the Plex library: its value is an opaque numeric key with no
-    // way to discover it except by asking Plex, so it is offered as a list or not
-    // at all.
-    it('offers the Plex library as a list only after a check', async () => {
+    // A library identifier is opaque — a numeric key for Plex, a hexadecimal id for
+    // Jellyfin — so it is offered as a list or not at all. An empty picker would be
+    // an invitation to go and transcribe something.
+    it('offers the Plex libraries as chips only after a check', async () => {
         const noSection = settingsFixture({
-            plex: { enabled: true, url: 'http://plex:32400', tokenSet: true, librarySection: '' },
+            plex: {
+                enabled: true,
+                url: 'http://plex:32400',
+                tokenSet: true,
+                librarySection: '',
+                libraries: [],
+            },
         })
         installFetch({
             settings: noSection,
             plexCheck: {
                 valid: true,
-                message: 'Connected — using the "Films" library.',
-                sections: [
-                    { key: '1', title: 'Films' },
-                    { key: '3', title: 'Kids Films' },
+                message: 'Connected.',
+                libraries: [
+                    { id: '1', name: 'Films' },
+                    { id: '3', name: 'Kids Films' },
                 ],
             },
         })
+        // Choosing a library rebuilds the source set and ends every session, so the
+        // save is gated on the confirmation. Accept it and let the request through.
+        vi.spyOn(window, 'confirm').mockReturnValue(true)
         const user = userEvent.setup()
         renderSettings()
         await enterToken(user)
         await waitFor(() => expect(screen.getByLabelText('Token')).toBeTruthy())
 
-        expect(screen.queryByLabelText('Movie library (optional)')).toBeNull()
+        expect(screen.queryByRole('combobox')).toBeNull()
+        expect(screen.getByText(/Check the connection to choose which libraries/)).toBeTruthy()
 
         await user.click(screen.getByRole('button', { name: 'Check connection' }))
 
-        const field = await waitFor(() => screen.getByLabelText('Movie library (optional)'))
-        expect(field.tagName).toBe('SELECT')
-        expect(screen.getByRole('option', { name: 'Kids Films' })).toBeTruthy()
+        const picker = await waitFor(() => screen.getByRole('combobox'))
+        await user.type(picker, 'kids')
+        await waitFor(() => expect(screen.getByRole('option', { name: 'Kids Films' })).toBeTruthy())
+        await user.click(screen.getByRole('option', { name: 'Kids Films' }))
+
+        // Chosen libraries are sent as id and name pairs, so a later start has
+        // nothing to resolve.
+        await user.click(screen.getByRole('button', { name: 'Save settings' }))
+        await waitFor(() => expect(posted.some((p) => p.url === '/api/settings')).toBe(true))
+        const save = posted.find((p) => p.url === '/api/settings')
+        const body = save?.body as { plex: { libraries: unknown } } | undefined
+        expect(body?.plex.libraries).toEqual([{ id: '3', name: 'Kids Films' }])
     })
 
-    // The state a fresh deployment is in: nothing stored, a token typed into the
-    // form. The server cannot fall back to a stored credential that does not exist
-    // yet, so the provider list has to be fetched with the candidate. It was not:
-    // verifying flipped the picker on, which fired an effect that asked without
-    // one, and its 400 ("a TMDB read token is required to list providers") wiped
-    // the list. The result was an empty picker sitting beside "Token accepted."
-    it('lists the services for a token that is verified but not yet saved', async () => {
-        const fresh = settingsFixture({
-            jellyfin: { enabled: false, url: '', apiKeySet: false, userId: '' },
-            plex: { enabled: false, url: '', tokenSet: false, librarySection: '' },
-            streaming: {
+    // A stored library the server no longer lists still renders, so opening the
+    // screen cannot silently drop it on the next save.
+    it('keeps a stored library the server does not list', async () => {
+        const stored = settingsFixture({
+            plex: {
                 enabled: true,
-                tmdbReadTokenSet: false,
-                watchRegion: 'US',
-                providers: [],
+                url: 'http://plex:32400',
+                tokenSet: true,
+                librarySection: '',
+                libraries: [{ id: '9', name: 'Retired Films' }],
             },
         })
-        installFetch({
-            settings: fresh,
-            verifyValid: true,
-            providers: [{ id: 'netflix', name: 'Netflix' }],
-            // Any provider request without the candidate token is what the server
-            // rejects on a deployment with nothing stored.
-            requireCandidateToken: true,
-        })
+        installFetch({ settings: stored })
         const user = userEvent.setup()
         renderSettings()
         await enterToken(user)
-        await waitFor(() => expect(screen.getByLabelText('TMDB read token')).toBeTruthy())
 
-        await user.type(screen.getByLabelText('TMDB read token'), 'tmdb-v4-token')
-        await user.click(screen.getByRole('button', { name: 'Check token' }))
-
-        await waitFor(() => expect(screen.getByText('Token accepted.')).toBeTruthy())
-
-        // The picker is populated, and the contradiction is gone.
-        await user.type(screen.getByRole('combobox'), 'net')
-        await waitFor(() => expect(screen.getByRole('option', { name: 'Netflix' })).toBeTruthy())
-        expect(screen.queryByText(/a TMDB read token is required/)).toBeNull()
-
-        // Every provider request carried the candidate, because there is nothing
-        // stored for the server to fall back to.
-        const asked = posted.filter((p) => p.url === '/api/settings/providers')
-        expect(asked.length).toBeGreaterThan(0)
-        for (const req of asked) {
-            expect((req.body as { token?: string }).token).toBe('tmdb-v4-token')
-        }
+        await waitFor(() => expect(screen.getByText('Retired Films')).toBeTruthy())
+        expect(screen.getByRole('button', { name: 'Remove Retired Films' })).toBeTruthy()
     })
 
     // An empty picker reported an unreachable TMDB, a rejected token, and a region
@@ -773,6 +767,15 @@ describe('sourceAffecting', () => {
         const from = settingsFixture()
         const draft = draftFrom(from)
         draft.plex.token = 'rotated'
+        expect(sourceAffecting(draft, from)).toBe(true)
+    })
+
+    // A library change rebuilds the source set and ends every session, so the
+    // confirmation has to fire for it.
+    it('is true when a library selection changes', () => {
+        const from = settingsFixture()
+        const draft = draftFrom(from)
+        draft.plex.libraries = [{ id: '1', name: 'Films' }]
         expect(sourceAffecting(draft, from)).toBe(true)
     })
 

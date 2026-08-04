@@ -231,12 +231,14 @@ export interface Settings {
         url: string
         apiKeySet: boolean
         userId: string
+        libraries: LibraryOption[]
     }
     plex: {
         enabled: boolean
         url: string
         tokenSet: boolean
         librarySection: string
+        libraries: LibraryOption[]
     }
     streaming: {
         enabled: boolean
@@ -265,6 +267,11 @@ export interface SettingsUpdate {
         clearApiKey?: boolean
         userId?: string
         clearUserId?: boolean
+        // The chosen libraries, as id and name pairs. Both are sent because the
+        // screen has both — it enumerated them to render the picker — and storing
+        // the name means a later start has nothing to resolve. An empty list means
+        // every library, which is a choice; omitting the field means unchanged.
+        libraries?: LibraryOption[]
     }
     plex?: {
         enabled?: boolean
@@ -272,6 +279,7 @@ export interface SettingsUpdate {
         token?: string
         clearToken?: boolean
         librarySection?: string
+        libraries?: LibraryOption[]
     }
     streaming?: {
         enabled?: boolean
@@ -397,10 +405,12 @@ export interface SourceCheckRequest {
     librarySection?: string
 }
 
-// LibrarySection is one selectable Plex movie library.
-export interface LibrarySection {
-    key: string
-    title: string
+// LibraryOption is one selectable movie library, from either local service. The
+// identifier is opaque — a numeric key for Plex, a hexadecimal id for Jellyfin — so
+// it is only ever chosen from a list the server enumerated, never typed.
+export interface LibraryOption {
+    id: string
+    name: string
 }
 
 // SourceCheck mirrors server.verifySourceResponse. `message` is populated on
@@ -409,10 +419,11 @@ export interface LibrarySection {
 export interface SourceCheck {
     valid: boolean
     message?: string
-    // sections is present on a Plex check that reached the server. The section
-    // key is an opaque number, so this is the only way to offer it as a choice
-    // rather than something to be transcribed.
-    sections?: LibrarySection[]
+    // libraries is present on a check that reached the server. It is the only way
+    // to offer a library as a choice rather than something to be transcribed, and
+    // it arrives on a failing check too — an unknown configured library is exactly
+    // when the available ones are needed.
+    libraries?: LibraryOption[]
 }
 
 async function checkSource(

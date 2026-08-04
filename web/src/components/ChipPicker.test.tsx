@@ -1,10 +1,9 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import ProviderPicker from './ProviderPicker'
-import type { ProviderOption } from '../api'
+import ChipPicker, { type ChipOption } from './ChipPicker'
 
-const OPTIONS: ProviderOption[] = [
+const OPTIONS: ChipOption[] = [
     { id: 'netflix', name: 'Netflix' },
     { id: 'prime', name: 'Amazon Prime Video' },
     { id: 'disney', name: 'Disney Plus' },
@@ -13,11 +12,21 @@ const OPTIONS: ProviderOption[] = [
 
 function renderPicker(selected: string[] = [], options = OPTIONS) {
     const onChange = vi.fn()
-    render(<ProviderPicker options={options} selected={selected} onChange={onChange} />)
+    render(
+        <ChipPicker
+            options={options}
+            selected={selected}
+            onChange={onChange}
+            labelId="services"
+            placeholder="Type to find a service…"
+            emptyLabel="No services selected yet."
+            noneLabel="No services were returned for this region."
+        />,
+    )
     return onChange
 }
 
-describe('ProviderPicker', () => {
+describe('ChipPicker', () => {
     afterEach(cleanup)
 
     it('shows only the selection until the search is used', () => {
@@ -142,7 +151,7 @@ describe('ProviderPicker', () => {
     // that admits it.
     it('caps the results and reports how many are hidden', async () => {
         const user = userEvent.setup()
-        const many: ProviderOption[] = Array.from({ length: 9 }, (_, i) => ({
+        const many: ChipOption[] = Array.from({ length: 9 }, (_, i) => ({
             id: `channel-${i}`,
             name: `Channel ${i}`,
         }))

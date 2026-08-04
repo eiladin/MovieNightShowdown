@@ -11,12 +11,12 @@ import {
     verifyPlex,
     verifyTmdbToken,
     type JellyfinUser,
-    type LibrarySection,
+    type LibraryOption,
     type ProviderOption,
     type Settings as SettingsData,
     type SourceCheck,
 } from '../api'
-import ProviderPicker from '../components/ProviderPicker'
+import ChipPicker from '../components/ChipPicker'
 import SecretField from '../components/SecretField'
 import { getSetupToken, setSetupToken } from '../setupToken'
 import {
@@ -118,10 +118,14 @@ export default function Settings() {
     // for and Jellyfin did not answer, which is a different state: the account
     // field is not offered at all rather than offered empty.
     const [users, setUsers] = useState<JellyfinUser[] | null>(null)
-    // sections holds the Plex movie libraries a check found. Until one has run
-    // there is nothing to choose from, and the key is an opaque number nobody
-    // knows offhand, so the field is not shown.
-    const [sections, setSections] = useState<LibrarySection[] | null>(null)
+    // libraries holds the movie libraries a check enumerated, per service. Until a
+    // check has run there is nothing to choose from, and the identifier is opaque —
+    // a numeric key for Plex, a hexadecimal id for Jellyfin — so the picker is not
+    // shown rather than inviting somebody to type one.
+    const [libraries, setLibraries] = useState<Record<'jellyfin' | 'plex', LibraryOption[] | null>>({
+        jellyfin: null,
+        plex: null,
+    })
 
     // A stored token verified at some point, so the picker can be populated
     // without asking again.
@@ -259,6 +263,9 @@ export default function Settings() {
             secret: candidateSecret(draft.jellyfin.apiKey),
         }
         const result = await runCheck('jellyfin', () => verifyJellyfin(token, req))
+        if (result?.libraries) {
+            setLibraries((prev) => ({ ...prev, jellyfin: result.libraries ?? [] }))
+        }
         // A successful check may have used credentials that are not saved yet, so
         // the user list is re-read through the same ones. Without this, choosing
         // an account would need a save first.
@@ -280,9 +287,11 @@ export default function Settings() {
                 librarySection: draft.plex.librarySection,
             }),
         )
-        // Sections arrive on a failing result too — an unknown configured key is
+        // Libraries arrive on a failing result too — an unknown configured one is
         // exactly when the available ones are needed.
-        if (result?.sections) setSections(result.sections)
+        if (result?.libraries) {
+            setLibraries((prev) => ({ ...prev, plex: result.libraries ?? [] }))
+        }
     }
 
     async function handleVerify() {
@@ -393,14 +402,76 @@ export default function Settings() {
     // identifiers that have to be read off the source itself. An empty text box
     // asking for either is a request to go rummaging.
     const hasUsers = !!users && users.length > 0
-    const hasSections = !!sections && sections.length > 0
+    const jellyfinLibraries = libraries.jellyfin
+    const plexLibraries = libraries.plex
 
     // Whether the field is offered at all is decided by what the server holds,
     // never by the draft. Keying it on the draft made the field unmount the moment
     // its value was cleared — so an operator emptying it could not then retype,
     // and the control vanished out from under the cursor.
     const showUserField = hasUsers || settings.jellyfin.userId !== ''
-    const showSectionField = hasSections || settings.plex.librarySection !== ''
+
+    // libraryPicker is the same control in both sections. It is offered only once a
+    // check has enumerated the options, or when a library is already chosen — the
+    // identifier is opaque, so an empty picker would be an invitation to go
+    // rummaging. Whether it shows is decided by the loaded settings, never by the
+    // draft: keying it on the draft made the control unmount the moment its value
+    // was cleared, so it could not be re-populated.
+    const libraryPicker = (
+        key: 'jellyfin' | 'plex',
+        available: LibraryOption[] | null,
+        chosen: LibraryOption[],
+        // stored may be absent from an older server's response, so it is read
+        // defensively rather than assumed present.
+        stored: LibraryOption[] | undefined,
+        onChange: (next: LibraryOption[]) => void,
+    ) => {
+        const hasOptions = !!available && available.length > 0
+        if (!hasOptions && (stored ?? []).length === 0) {
+            return (
+                <p className="settings-hint">
+                    Check the connection to choose which libraries to deal from. With none
+                    chosen, every library is used.
+                </p>
+            )
+        }
+        // A stored library the server no longer lists still renders, by id, so
+        // opening this screen cannot silently drop it on the next save.
+        const options = [...(available ?? [])]
+        for (const lib of chosen) {
+            if (!options.some((o) => o.id === lib.id)) {
+                options.push({ id: lib.id, name: lib.name || lib.id })
+            }
+        }
+        const labelId = `${key}-library-picker`
+        return (
+            <>
+                <span className="settings-pseudo-label" id={labelId}>
+                    Libraries
+                </span>
+                <p className="settings-hint">
+                    Each library becomes its own source, so a host can deal from one alone.
+                    Choose none to use every library.
+                </p>
+                <ChipPicker
+                    options={options}
+                    selected={chosen.map((l) => l.id)}
+                    labelId={labelId}
+                    placeholder="Type to find a library…"
+                    emptyLabel="Every library."
+                    noneLabel="No movie libraries were found on this server."
+                    onChange={(ids) =>
+                        onChange(
+                            ids.map(
+                                (id) =>
+                                    options.find((o) => o.id === id) ?? { id, name: id },
+                            ),
+                        )
+                    }
+                />
+            </>
+        )
+    }
 
     // clearControl is the explicit way to remove a stored credential. Emptying
     // the field alone would also work, but nothing on screen would say so —
@@ -597,6 +668,19 @@ export default function Settings() {
                                 </>
                             )}
 
+                            {libraryPicker(
+                                'jellyfin',
+                                jellyfinLibraries,
+                                draft.jellyfin.libraries,
+                                settings.jellyfin.libraries,
+                                (next) =>
+                                    setDraft({
+                                        ...draft,
+                                        jellyfin: { ...draft.jellyfin, libraries: next },
+                                    }),
+                            )}
+                            {badge('jellyfin.libraries')}
+
                             {checkControl('jellyfin', 'Check connection', handleCheckJellyfin)}
                             {!hasUsers && (
                                 <p className="settings-hint">
@@ -652,80 +736,16 @@ export default function Settings() {
                             {badge('plex.token')}
                             {fieldError('plex.token')}
 
-                            {/* The library section appears only once a check has
-                                enumerated the libraries, or when one is already stored.
-
-                                Its value is an opaque numeric key with no way to
-                                discover it except by asking Plex, so an empty text box
-                                asking for it is a dead end. It is optional in any
-                                case: with nothing set, the first movie library is
-                                discovered on first use. */}
-                            {showSectionField && (
-                                <>
-                                    <label htmlFor="plex-section">Movie library (optional)</label>
-                                    {hasSections ? (
-                                        <select
-                                            id="plex-section"
-                                            value={draft.plex.librarySection}
-                                            onChange={(e) =>
-                                                setDraft({
-                                                    ...draft,
-                                                    plex: {
-                                                        ...draft.plex,
-                                                        librarySection: e.target.value,
-                                                    },
-                                                })
-                                            }
-                                        >
-                                            <option value="">
-                                                Discover automatically — uses the first one
-                                            </option>
-                                            {sections?.map((s) => (
-                                                <option key={s.key} value={s.key}>
-                                                    {s.title}
-                                                </option>
-                                            ))}
-                                            {/* A stored key this server does not list
-                                                still renders, so looking at the screen
-                                                cannot silently drop it. */}
-                                            {draft.plex.librarySection !== '' &&
-                                                !sections?.some(
-                                                    (s) => s.key === draft.plex.librarySection,
-                                                ) && (
-                                                    <option value={draft.plex.librarySection}>
-                                                        {draft.plex.librarySection} — not a library
-                                                        on this server
-                                                    </option>
-                                                )}
-                                        </select>
-                                    ) : (
-                                        <input
-                                            id="plex-section"
-                                            type="text"
-                                            value={draft.plex.librarySection}
-                                            onChange={(e) => {
-                                                setCheck('plex', NO_CHECK)
-                                                setDraft({
-                                                    ...draft,
-                                                    plex: {
-                                                        ...draft.plex,
-                                                        librarySection: e.target.value,
-                                                    },
-                                                })
-                                            }}
-                                        />
-                                    )}
-                                    {badge('plex.librarySection')}
-                                </>
+                            {libraryPicker(
+                                'plex',
+                                plexLibraries,
+                                draft.plex.libraries,
+                                settings.plex.libraries,
+                                (next) => setDraft({ ...draft, plex: { ...draft.plex, libraries: next } }),
                             )}
+                            {badge('plex.libraries')}
 
                             {checkControl('plex', 'Check connection', handleCheckPlex)}
-                            {!hasSections && (
-                                <p className="settings-hint">
-                                    Check the connection to choose which movie library to deal
-                                    from.
-                                </p>
-                            )}
                         </div>
                     )}
                 </section>
@@ -814,9 +834,13 @@ export default function Settings() {
                                             {providerError}
                                         </p>
                                     )}
-                                    <ProviderPicker
+                                    <ChipPicker
                                         options={providers}
                                         selected={draft.streaming.providers}
+                                        labelId="provider-picker-label"
+                                        placeholder="Type to find a service…"
+                                        emptyLabel="No services selected yet."
+                                        noneLabel="No services were returned for this region."
                                         onChange={(next) =>
                                             setDraft({
                                                 ...draft,

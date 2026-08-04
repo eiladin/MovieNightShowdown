@@ -288,8 +288,8 @@ func TestVerifyPlexRejectsAnUnknownLibrarySection(t *testing.T) {
 	}
 	// The list travels even on the failure. The section key is opaque, so an
 	// error that withholds it leaves nothing to correct the value to.
-	if len(got.Sections) != 1 || got.Sections[0].Key != "1" {
-		t.Errorf("sections = %+v, want the available library on a failing check", got.Sections)
+	if len(got.Libraries) != 1 || got.Libraries[0].ID != "1" {
+		t.Errorf("sections = %+v, want the available library on a failing check", got.Libraries)
 	}
 }
 
@@ -304,13 +304,13 @@ func TestVerifyPlexReturnsTheMovieLibraries(t *testing.T) {
 	got := decodeVerify(t, postJSON(t, s, "/api/settings/verify/plex", setup,
 		checkRequest{URL: stub.URL, Secret: "good-token"}))
 
-	want := []librarySection{{Key: "1", Title: "Films"}, {Key: "2", Title: "Kids Films"}}
-	if len(got.Sections) != len(want) {
-		t.Fatalf("sections = %+v, want %+v (the TV section must not be offered)", got.Sections, want)
+	want := []libraryOption{{ID: "1", Name: "Films"}, {ID: "2", Name: "Kids Films"}}
+	if len(got.Libraries) != len(want) {
+		t.Fatalf("libraries = %+v, want %+v (the TV section must not be offered)", got.Libraries, want)
 	}
 	for i, w := range want {
-		if got.Sections[i] != w {
-			t.Errorf("section %d = %+v, want %+v", i, got.Sections[i], w)
+		if got.Libraries[i] != w {
+			t.Errorf("library %d = %+v, want %+v", i, got.Libraries[i], w)
 		}
 	}
 }
@@ -324,8 +324,8 @@ func TestVerifyPlexReturnsNoSectionsWhenItCouldNotRead(t *testing.T) {
 	got := decodeVerify(t, postJSON(t, s, "/api/settings/verify/plex", setup,
 		checkRequest{URL: stub.URL, Secret: "wrong-token"}))
 
-	if len(got.Sections) != 0 {
-		t.Errorf("sections = %+v, want none from a rejected check", got.Sections)
+	if len(got.Libraries) != 0 {
+		t.Errorf("sections = %+v, want none from a rejected check", got.Libraries)
 	}
 }
 

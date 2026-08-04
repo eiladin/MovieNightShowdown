@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -50,10 +51,14 @@ func rejectedCredential(err error) bool {
 		(se.status == http.StatusUnauthorized || se.status == http.StatusForbidden)
 }
 
-// librarySection is one selectable Plex movie library.
-type librarySection struct {
-	Key   string `json:"key"`
-	Title string `json:"title"`
+// libraryOption is one selectable movie library, from either local service.
+//
+// The field names are service-neutral because both services now report through it.
+// A field called "sections" carrying Jellyfin libraries is a lie that costs the next
+// reader an hour.
+type libraryOption struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // verifySourceResponse is the answer to any of the check routes.
@@ -64,12 +69,13 @@ type librarySection struct {
 type verifySourceResponse struct {
 	Valid   bool   `json:"valid"`
 	Message string `json:"message,omitempty"`
-	// Sections lists the movie libraries a Plex check found. It travels with the
-	// result so the section can be chosen from a list rather than typed: the
-	// value the app needs is an opaque numeric key, and there is no way to know
-	// it without asking the server. It is attached to a failing result too — an
-	// unknown configured key is exactly when the available ones are needed.
-	Sections []librarySection `json:"sections,omitempty"`
+	// Libraries lists the movie libraries the check found. It travels with the
+	// result so a library can be chosen from a list rather than typed: the value
+	// the application needs is an opaque identifier — a numeric key for Plex, a
+	// hexadecimal id for Jellyfin — and there is no way to know it without asking
+	// the server. It is attached to a failing result too, since an unknown
+	// configured library is exactly when the available ones are needed.
+	Libraries []libraryOption `json:"libraries,omitempty"`
 }
 
 // checkRequest carries candidate connection details.
@@ -215,20 +221,51 @@ func (s *Server) handleVerifyJellyfin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The libraries travel with a successful check so the picker can offer them.
+	// A failure to enumerate is not a failure of the check: the credential has
+	// already proved itself against /Items, so this reports what it can and the
+	// library field simply stays a text input.
+	libraries := jellyfinLibraryOptions(ctx, cfg, base, key)
+
 	// Zero movies is not a wiring failure, so it is not reported as one — but it
 	// is worth saying, because a correctly wired server with an empty library
 	// deals an empty deck and the cause is not obvious from the swipe screen.
 	if items.TotalRecordCount == 0 {
 		writeJSON(w, http.StatusOK, verifySourceResponse{
-			Valid:   true,
-			Message: fmt.Sprintf("Connected to %s, but it reports no movies.", serverLabel(info)),
+			Valid:     true,
+			Message:   fmt.Sprintf("Connected to %s, but it reports no movies.", serverLabel(info)),
+			Libraries: libraries,
 		})
 		return
 	}
 	writeJSON(w, http.StatusOK, verifySourceResponse{
-		Valid:   true,
-		Message: fmt.Sprintf("Connected to %s — %d movies.", serverLabel(info), items.TotalRecordCount),
+		Valid:     true,
+		Message:   fmt.Sprintf("Connected to %s — %d movies.", serverLabel(info), items.TotalRecordCount),
+		Libraries: libraries,
 	})
+}
+
+// jellyfinLibraryOptions lists the movie libraries for the picker.
+//
+// It reuses JellyfinClient.Libraries rather than reading /Library/MediaFolders
+// again, so the settings screen and the name resolver cannot disagree about what
+// counts as a movie library. An error is logged and swallowed: the check itself has
+// already succeeded, and the operator gets a text field instead of a list rather
+// than a failure for something that is not one.
+func jellyfinLibraryOptions(ctx context.Context, cfg Config, base, key string) []libraryOption {
+	probe := cfg
+	probe.JellyfinURL = base
+	probe.JellyfinAPIKey = key
+	refs, err := NewJellyfinClient(probe, libraryRef{}).Libraries(ctx)
+	if err != nil {
+		log.Printf("settings: could not list Jellyfin libraries: %v", err)
+		return nil
+	}
+	out := make([]libraryOption, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, libraryOption{ID: ref.ID, Name: ref.Name})
+	}
+	return out
 }
 
 // serverLabel names a Jellyfin server for a message, falling back to a generic
@@ -373,9 +410,9 @@ func (s *Server) handleVerifyPlex(w http.ResponseWriter, r *http.Request) {
 	// The section key is an opaque number with no way to discover it except by
 	// asking Plex, so an error that withholds the list leaves the operator with
 	// nothing to correct it to.
-	sections := make([]librarySection, 0, len(movieSections))
+	sections := make([]libraryOption, 0, len(movieSections))
 	for _, d := range movieSections {
-		sections = append(sections, librarySection{Key: d.Key, Title: d.name()})
+		sections = append(sections, libraryOption{ID: d.Key, Name: d.name()})
 	}
 
 	// A configured section that does not exist is a misconfiguration the app
@@ -384,9 +421,9 @@ func (s *Server) handleVerifyPlex(w http.ResponseWriter, r *http.Request) {
 		for _, d := range movieSections {
 			if d.Key == section {
 				writeJSON(w, http.StatusOK, verifySourceResponse{
-					Valid:    true,
-					Message:  fmt.Sprintf("Connected — using the %q library.", d.name()),
-					Sections: sections,
+					Valid:     true,
+					Message:   fmt.Sprintf("Connected — using the %q library.", d.name()),
+					Libraries: sections,
 				})
 				return
 			}
@@ -394,7 +431,7 @@ func (s *Server) handleVerifyPlex(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, verifySourceResponse{
 			Message: fmt.Sprintf("Connected, but there is no movie library with key %q. Available: %s.",
 				section, describeSections(movieSections)),
-			Sections: sections,
+			Libraries: sections,
 		})
 		return
 	}
@@ -408,14 +445,14 @@ func (s *Server) handleVerifyPlex(w http.ResponseWriter, r *http.Request) {
 			Message: fmt.Sprintf("Connected. This server has several movie libraries (%s) — "+
 				"choose one below, or %q will be used.",
 				describeSections(movieSections), movieSections[0].name()),
-			Sections: sections,
+			Libraries: sections,
 		})
 		return
 	}
 	writeJSON(w, http.StatusOK, verifySourceResponse{
-		Valid:    true,
-		Message:  fmt.Sprintf("Connected — using the %q library.", movieSections[0].name()),
-		Sections: sections,
+		Valid:     true,
+		Message:   fmt.Sprintf("Connected — using the %q library.", movieSections[0].name()),
+		Libraries: sections,
 	})
 }
 

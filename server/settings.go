@@ -51,17 +51,19 @@ type runtimeSettings struct {
 }
 
 type jellyfinSettings struct {
-	Enabled   bool   `json:"enabled"`
-	URL       string `json:"url"`
-	APIKeySet bool   `json:"apiKeySet"`
-	UserID    string `json:"userId"`
+	Enabled   bool            `json:"enabled"`
+	URL       string          `json:"url"`
+	APIKeySet bool            `json:"apiKeySet"`
+	UserID    string          `json:"userId"`
+	Libraries []libraryOption `json:"libraries"`
 }
 
 type plexSettings struct {
-	Enabled        bool   `json:"enabled"`
-	URL            string `json:"url"`
-	TokenSet       bool   `json:"tokenSet"`
-	LibrarySection string `json:"librarySection"`
+	Enabled        bool            `json:"enabled"`
+	URL            string          `json:"url"`
+	TokenSet       bool            `json:"tokenSet"`
+	LibrarySection string          `json:"librarySection"`
+	Libraries      []libraryOption `json:"libraries"`
 }
 
 type streamingSettings struct {
@@ -104,6 +106,13 @@ type jellyfinRequest struct {
 	ClearAPIKey bool    `json:"clearApiKey"`
 	UserID      *string `json:"userId"`
 	ClearUserID bool    `json:"clearUserId"`
+	// Libraries is the chosen set, as identifier and name pairs. The screen has
+	// both because it enumerated them to render its picker, and writing both means
+	// a later start has no names to resolve.
+	//
+	// An empty list is a value and means "every library", the same as never having
+	// chosen. Omitted means unchanged, like every other field here.
+	Libraries *[]libraryOption `json:"libraries"`
 }
 
 type plexRequest struct {
@@ -112,6 +121,8 @@ type plexRequest struct {
 	Token          *string `json:"token"`
 	ClearToken     bool    `json:"clearToken"`
 	LibrarySection *string `json:"librarySection"`
+	// Libraries carries the same meaning as on jellyfinRequest.
+	Libraries *[]libraryOption `json:"libraries"`
 }
 
 type streamingRequest struct {
@@ -213,6 +224,7 @@ func applySettings(file *configFile, req settingsRequest) *configFile {
 		setString(&out.Jellyfin.URL, req.Jellyfin.URL, false)
 		setString(&out.Jellyfin.APIKey, req.Jellyfin.APIKey, req.Jellyfin.ClearAPIKey)
 		setString(&out.Jellyfin.UserID, req.Jellyfin.UserID, req.Jellyfin.ClearUserID)
+		setLibraries(&out.Jellyfin.Libraries, req.Jellyfin.Libraries)
 	}
 	if req.Plex != nil {
 		if out.Plex == nil {
@@ -222,6 +234,7 @@ func applySettings(file *configFile, req settingsRequest) *configFile {
 		setString(&out.Plex.URL, req.Plex.URL, false)
 		setString(&out.Plex.Token, req.Plex.Token, req.Plex.ClearToken)
 		setString(&out.Plex.LibrarySection, req.Plex.LibrarySection, false)
+		setLibraries(&out.Plex.Libraries, req.Plex.Libraries)
 	}
 	if req.Streaming != nil {
 		if out.Streaming == nil {
@@ -250,6 +263,29 @@ func setString(dst **string, val *string, clear bool) {
 		v := *val
 		*dst = &v
 	}
+}
+
+// setLibraries applies an optional library list. An omitted list leaves the stored
+// one alone; a supplied one replaces it, including when it is empty — an empty list
+// means "every library", which is a choice and not an absence.
+//
+// An entry with no identifier is dropped: the screen only ever sends pairs it read
+// from the server, so one without an id is a malformed request rather than a
+// meaningful selection.
+func setLibraries(dst **[]fileLibrary, val *[]libraryOption) {
+	if val == nil {
+		return
+	}
+	out := make([]fileLibrary, 0, len(*val))
+	for _, l := range *val {
+		id := strings.TrimSpace(l.ID)
+		if id == "" {
+			continue
+		}
+		name := strings.TrimSpace(l.Name)
+		out = append(out, fileLibrary{ID: &id, Name: &name})
+	}
+	*dst = &out
 }
 
 func setBool(dst **bool, val *bool) {
@@ -360,6 +396,7 @@ func (s *Server) settingsView(cfg Config, outcome reloadOutcome) settingsRespons
 			URL:       cfg.JellyfinURL,
 			APIKeySet: cfg.JellyfinAPIKey != "",
 			UserID:    cfg.JellyfinUserID,
+			Libraries: libraryOptions(cfg.JellyfinLibraries),
 		},
 		Plex: plexSettings{
 			Enabled: sourceEnabled(cfg.PlexDisabled,
@@ -367,6 +404,7 @@ func (s *Server) settingsView(cfg Config, outcome reloadOutcome) settingsRespons
 			URL:            cfg.PlexURL,
 			TokenSet:       cfg.PlexToken != "",
 			LibrarySection: cfg.PlexLibrarySection,
+			Libraries:      libraryOptions(cfg.PlexLibraries),
 		},
 		Streaming: streamingSettings{
 			Enabled:          sourceEnabled(cfg.StreamingDisabled, cfg.TMDBReadToken != ""),
@@ -378,6 +416,16 @@ func (s *Server) settingsView(cfg Config, outcome reloadOutcome) settingsRespons
 		Outcome:         string(outcome),
 		RestartRequired: outcome == reloadRestartRequired,
 	}
+}
+
+// libraryOptions renders a resolved library list for the client. It is never nil,
+// so the screen can tell "none chosen" from a missing field without a null check.
+func libraryOptions(refs []libraryRef) []libraryOption {
+	out := make([]libraryOption, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, libraryOption{ID: ref.ID, Name: ref.Name})
+	}
+	return out
 }
 
 // sourceEnabled decides what the screen's toggle shows for one source.
