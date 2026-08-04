@@ -111,11 +111,12 @@ type plexItem struct {
 	// being complete. Filling it in would cost one detail request per movie —
 	// 151 requests to deal a 150-card shoe — to decorate a poster card.
 	Genre []plexDirect `json:"Genre"`
-	Guid  []plexGUID   `json:"Guid"`
+	GUID  []plexGUID   `json:"Guid"`
 	// LegacyGUID is Plex's own "plex://movie/..." identifier. It exists here
 	// only so it has an exact match to land in: encoding/json falls back to a
 	// case-insensitive match, so without this field the string "guid" is
-	// decoded into Guid ("[]plexGUID") and the whole response fails.
+	// decoded into the GUID slice and the whole response fails. The two json
+	// tags differ only in case, which is exactly the collision being avoided.
 	LegacyGUID string `json:"guid"`
 }
 
@@ -288,7 +289,7 @@ func (it plexItem) toMovie() Movie {
 	// source collapse into one deck entry, exactly as the Jellyfin mapper does.
 	// Items without one fall back to a Plex-namespaced id and never merge.
 	id := "plex:" + it.RatingKey
-	if tmdb := plexTMDBID(it.Guid); tmdb != "" {
+	if tmdb := plexTMDBID(it.GUID); tmdb != "" {
 		id = "tmdb:" + tmdb
 	}
 	genres := make([]string, 0, len(it.Genre))

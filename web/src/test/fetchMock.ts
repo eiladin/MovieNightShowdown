@@ -18,6 +18,7 @@ export function jsonResponse(body: unknown, init: { ok?: boolean; status?: numbe
 export const configuredSetup: SetupStatus = {
     configured: true,
     jellyfin: true,
+    plex: false,
     streaming: true,
     sources: [
         { id: 'jellyfin', label: 'Jellyfin', supportsUnwatched: true },
@@ -28,6 +29,7 @@ export const configuredSetup: SetupStatus = {
 export const unconfiguredSetup: SetupStatus = {
     configured: false,
     jellyfin: false,
+    plex: false,
     streaming: false,
     sources: [],
 }
