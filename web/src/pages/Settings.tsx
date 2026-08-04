@@ -2,13 +2,18 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import {
     getSettings,
+    listJellyfinUsers,
     listProviders,
     saveSettings,
     SettingsAuthError,
     ValidationError,
+    verifyJellyfin,
+    verifyPlex,
     verifyTmdbToken,
+    type JellyfinUser,
     type ProviderOption,
     type Settings as SettingsData,
+    type SourceCheck,
 } from '../api'
 import ProviderPicker from '../components/ProviderPicker'
 import { getSetupToken, setSetupToken } from '../setupToken'
@@ -44,6 +49,28 @@ const OUTCOME_TEXT: Record<string, string> = {
     restart_required: 'Saved, but a restart is needed before it takes effect.',
 }
 
+// SourceKey names the three checkable sections. The state for a check is the
+// same shape in each, so it is held in one map rather than three sets of
+// near-identical variables.
+type SourceKey = 'jellyfin' | 'plex' | 'streaming'
+
+interface CheckState {
+    checking: boolean
+    valid: boolean
+    message: string
+}
+
+const NO_CHECK: CheckState = { checking: false, valid: false, message: '' }
+
+// candidateSecret turns a secret field into what a check should submit.
+//
+// The placeholder means "unchanged", and the server reads an empty secret as
+// "use the stored one" — the same thing. Submitting the placeholder itself would
+// have the server check a credential made of bullet characters.
+function candidateSecret(value: string): string {
+    return value === SECRET_PLACEHOLDER ? '' : value
+}
+
 export default function Settings() {
     const [token, setToken] = useState(getSetupToken())
     const [tokenInput, setTokenInput] = useState('')
@@ -55,30 +82,45 @@ export default function Settings() {
     const [needsToken, setNeedsToken] = useState(!getSetupToken())
     const [saving, setSaving] = useState(false)
 
-    const [tmdbVerified, setTmdbVerified] = useState(false)
-    const [verifying, setVerifying] = useState(false)
-    const [verifyMessage, setVerifyMessage] = useState('')
+    const [checks, setChecks] = useState<Record<SourceKey, CheckState>>({
+        jellyfin: NO_CHECK,
+        plex: NO_CHECK,
+        streaming: NO_CHECK,
+    })
     const [providers, setProviders] = useState<ProviderOption[]>([])
+    // users is null until the list has been asked for. Empty means it was asked
+    // for and Jellyfin did not answer, which is a different state: the field
+    // falls back to accepting a typed id rather than offering an empty select.
+    const [users, setUsers] = useState<JellyfinUser[] | null>(null)
 
-    const load = useCallback(async (value: string) => {
-        try {
-            const data = await getSettings(value)
-            setSettings(data)
-            setDraft(draftFrom(data))
-            setNeedsToken(false)
-            setFailure('')
-            // A token already stored means it verified at some point; the
-            // picker can be populated without asking again.
-            setTmdbVerified(data.streaming.tmdbReadTokenSet)
-        } catch (err) {
-            if (err instanceof SettingsAuthError) {
-                setNeedsToken(true)
-                setFailure('That setup token was not accepted.')
-                return
-            }
-            setFailure('Could not load the current settings.')
-        }
+    // A stored token verified at some point, so the picker can be populated
+    // without asking again.
+    const tmdbVerified = checks.streaming.valid
+
+    const setCheck = useCallback((key: SourceKey, state: CheckState) => {
+        setChecks((prev) => ({ ...prev, [key]: state }))
     }, [])
+
+    const load = useCallback(
+        async (value: string) => {
+            try {
+                const data = await getSettings(value)
+                setSettings(data)
+                setDraft(draftFrom(data))
+                setNeedsToken(false)
+                setFailure('')
+                setCheck('streaming', { ...NO_CHECK, valid: data.streaming.tmdbReadTokenSet })
+            } catch (err) {
+                if (err instanceof SettingsAuthError) {
+                    setNeedsToken(true)
+                    setFailure('That setup token was not accepted.')
+                    return
+                }
+                setFailure('Could not load the current settings.')
+            }
+        },
+        [setCheck],
+    )
 
     useEffect(() => {
         if (token) void load(token)
@@ -87,10 +129,15 @@ export default function Settings() {
     // Populate the picker once a token is known to work. Without a verified
     // token the list cannot be fetched, so an empty picker would appear with no
     // explanation.
+    //
+    // The dependency is the region string, not the draft object. Depending on the
+    // draft fired this request on every keystroke anywhere in the form, because
+    // every edit produces a new object.
+    const region = draft?.streaming.watchRegion
     useEffect(() => {
-        if (!token || !tmdbVerified || !draft) return
+        if (!token || !tmdbVerified || region === undefined) return
         let cancelled = false
-        listProviders(token, draft.streaming.watchRegion)
+        listProviders(token, region)
             .then((list) => {
                 if (!cancelled) setProviders(list.providers)
             })
@@ -100,7 +147,32 @@ export default function Settings() {
         return () => {
             cancelled = true
         }
-    }, [token, tmdbVerified, draft?.streaming.watchRegion, draft])
+    }, [token, tmdbVerified, region])
+
+    // Read the Jellyfin accounts so the user id can be chosen rather than
+    // transcribed. Same rule as above: the dependencies are the stored values
+    // this needs, not the settings object they arrived in.
+    const jellyfinReady =
+        !!settings?.jellyfin.enabled && !!settings.jellyfin.url && settings.jellyfin.apiKeySet
+    useEffect(() => {
+        if (!token || !jellyfinReady) {
+            setUsers(null)
+            return
+        }
+        let cancelled = false
+        // An empty request means "use the stored URL and key", which is exactly
+        // what is wanted on load.
+        listJellyfinUsers(token, {})
+            .then((list) => {
+                if (!cancelled) setUsers(list)
+            })
+            .catch(() => {
+                if (!cancelled) setUsers([])
+            })
+        return () => {
+            cancelled = true
+        }
+    }, [token, jellyfinReady])
 
     function submitToken(e: React.FormEvent) {
         e.preventDefault()
@@ -108,27 +180,74 @@ export default function Settings() {
         setToken(tokenInput.trim())
     }
 
+    // runCheck wraps the three checks in one state transition, so a section can
+    // never be left showing a stale result next to a spinner.
+    async function runCheck(key: SourceKey, check: () => Promise<SourceCheck>) {
+        setCheck(key, { checking: true, valid: false, message: '' })
+        try {
+            const result = await check()
+            setCheck(key, {
+                checking: false,
+                valid: result.valid,
+                message: result.message ?? (result.valid ? 'Connected.' : 'That did not work.'),
+            })
+            return result
+        } catch {
+            setCheck(key, {
+                checking: false,
+                valid: false,
+                message: 'The check could not be run.',
+            })
+            return null
+        }
+    }
+
+    async function handleCheckJellyfin() {
+        if (!draft || !token) return
+        const req = {
+            url: draft.jellyfin.url,
+            secret: candidateSecret(draft.jellyfin.apiKey),
+        }
+        const result = await runCheck('jellyfin', () => verifyJellyfin(token, req))
+        // A successful check may have used credentials that are not saved yet, so
+        // the user list is re-read through the same ones. Without this, choosing
+        // an account would need a save first.
+        if (result?.valid) {
+            try {
+                setUsers(await listJellyfinUsers(token, req))
+            } catch {
+                setUsers([])
+            }
+        }
+    }
+
+    async function handleCheckPlex() {
+        if (!draft || !token) return
+        void runCheck('plex', () =>
+            verifyPlex(token, {
+                url: draft.plex.url,
+                secret: candidateSecret(draft.plex.token),
+                librarySection: draft.plex.librarySection,
+            }),
+        )
+    }
+
     async function handleVerify() {
         if (!draft || !token) return
-        setVerifying(true)
-        setVerifyMessage('')
-        try {
-            const candidate =
-                draft.streaming.tmdbReadToken === SECRET_PLACEHOLDER
-                    ? ''
-                    : draft.streaming.tmdbReadToken
-            const result = await verifyTmdbToken(token, candidate, draft.streaming.watchRegion)
-            setTmdbVerified(result.valid)
-            setVerifyMessage(result.valid ? 'Token accepted.' : (result.message ?? 'Token rejected.'))
-            if (result.valid && candidate) {
+        const candidate = candidateSecret(draft.streaming.tmdbReadToken)
+        const result = await runCheck('streaming', () =>
+            verifyTmdbToken(token, candidate, draft.streaming.watchRegion).then((v) => ({
+                valid: v.valid,
+                message: v.valid ? 'Token accepted.' : (v.message ?? 'Token rejected.'),
+            })),
+        )
+        if (result?.valid && candidate) {
+            try {
                 const list = await listProviders(token, draft.streaming.watchRegion, candidate)
                 setProviders(list.providers)
+            } catch {
+                setProviders([])
             }
-        } catch {
-            setTmdbVerified(false)
-            setVerifyMessage('Could not check the token.')
-        } finally {
-            setVerifying(false)
         }
     }
 
@@ -238,6 +357,35 @@ export default function Settings() {
         )
     }
 
+    // checkControl is the "does this actually work" button for one section.
+    //
+    // It exists because the alternative diagnostic is a movie night: a URL typo
+    // or a stale credential otherwise surfaces as an empty deck with four people
+    // already holding their phones.
+    const checkControl = (key: SourceKey, label: string, onRun: () => void) => {
+        const state = checks[key]
+        return (
+            <div className="settings-check">
+                <button
+                    type="button"
+                    className="settings-check-button"
+                    onClick={onRun}
+                    disabled={state.checking}
+                >
+                    {state.checking ? 'Checking…' : label}
+                </button>
+                {state.message && (
+                    <p
+                        className={state.valid ? 'settings-check-ok' : 'settings-check-bad'}
+                        role="status"
+                    >
+                        {state.message}
+                    </p>
+                )}
+            </div>
+        )
+    }
+
     return (
         <div className="settings-page">
             <h1>Settings</h1>
@@ -268,15 +416,19 @@ export default function Settings() {
                     {draft.jellyfin.enabled && (
                         <div className="settings-fields">
                             <label htmlFor="jf-url">Server URL</label>
+                            {/* Editing an input a check was run against discards the
+                                result. A green "Connected" sitting beside a URL that
+                                has since been retyped is worse than no result. */}
                             <input
                                 id="jf-url"
                                 value={draft.jellyfin.url}
-                                onChange={(e) =>
+                                onChange={(e) => {
+                                    setCheck('jellyfin', NO_CHECK)
                                     setDraft({
                                         ...draft,
                                         jellyfin: { ...draft.jellyfin, url: e.target.value },
                                     })
-                                }
+                                }}
                             />
                             {badge('jellyfin.url')}
                             {fieldError('jellyfin.url')}
@@ -286,12 +438,13 @@ export default function Settings() {
                                 id="jf-key"
                                 type="password"
                                 value={draft.jellyfin.apiKey}
-                                onChange={(e) =>
+                                onChange={(e) => {
+                                    setCheck('jellyfin', NO_CHECK)
                                     setDraft({
                                         ...draft,
                                         jellyfin: { ...draft.jellyfin, apiKey: e.target.value },
                                     })
-                                }
+                                }}
                                 {...noAutofill}
                             />
                             {clearControl(settings.jellyfin.apiKeySet, draft.jellyfin.apiKey, () =>
@@ -300,18 +453,67 @@ export default function Settings() {
                             {badge('jellyfin.apiKey')}
                             {fieldError('jellyfin.apiKey')}
 
-                            <label htmlFor="jf-user">User ID (optional)</label>
-                            <input
-                                id="jf-user"
-                                value={draft.jellyfin.userId}
-                                onChange={(e) =>
-                                    setDraft({
-                                        ...draft,
-                                        jellyfin: { ...draft.jellyfin, userId: e.target.value },
-                                    })
-                                }
-                            />
+                            <label htmlFor="jf-user">Account for &ldquo;unwatched only&rdquo;</label>
+                            <p className="settings-hint" id="jf-user-hint">
+                                Optional. Filtering a deck to unwatched films needs an account to
+                                judge watched state against. Without one, the host cannot use that
+                                filter.
+                            </p>
+                            {/* A select once the accounts are known, a text field
+                                when they are not. A Jellyfin user id is a 32-character
+                                hex string from the admin dashboard's URL bar, and a
+                                mistyped one is never rejected — the unwatched filter
+                                just quietly returns nothing. */}
+                            {users && users.length > 0 ? (
+                                <select
+                                    id="jf-user"
+                                    aria-describedby="jf-user-hint"
+                                    value={draft.jellyfin.userId}
+                                    onChange={(e) =>
+                                        setDraft({
+                                            ...draft,
+                                            jellyfin: { ...draft.jellyfin, userId: e.target.value },
+                                        })
+                                    }
+                                >
+                                    <option value="">Not set — no unwatched filtering</option>
+                                    {users.map((u) => (
+                                        <option key={u.id} value={u.id}>
+                                            {u.name}
+                                        </option>
+                                    ))}
+                                    {/* A stored id this server does not list still
+                                        renders, so opening the screen cannot silently
+                                        drop it on the next save. */}
+                                    {draft.jellyfin.userId !== '' &&
+                                        !users.some((u) => u.id === draft.jellyfin.userId) && (
+                                            <option value={draft.jellyfin.userId}>
+                                                {draft.jellyfin.userId} — not an account on this
+                                                server
+                                            </option>
+                                        )}
+                                </select>
+                            ) : (
+                                <input
+                                    id="jf-user"
+                                    aria-describedby="jf-user-hint"
+                                    value={draft.jellyfin.userId}
+                                    placeholder={
+                                        users
+                                            ? 'Check the connection to list accounts'
+                                            : 'Jellyfin user id'
+                                    }
+                                    onChange={(e) =>
+                                        setDraft({
+                                            ...draft,
+                                            jellyfin: { ...draft.jellyfin, userId: e.target.value },
+                                        })
+                                    }
+                                />
+                            )}
                             {badge('jellyfin.userId')}
+
+                            {checkControl('jellyfin', 'Check connection', handleCheckJellyfin)}
                         </div>
                     )}
                 </section>
@@ -334,9 +536,10 @@ export default function Settings() {
                             <input
                                 id="plex-url"
                                 value={draft.plex.url}
-                                onChange={(e) =>
+                                onChange={(e) => {
+                                    setCheck('plex', NO_CHECK)
                                     setDraft({ ...draft, plex: { ...draft.plex, url: e.target.value } })
-                                }
+                                }}
                             />
                             {badge('plex.url')}
                             {fieldError('plex.url')}
@@ -346,9 +549,10 @@ export default function Settings() {
                                 id="plex-token"
                                 type="password"
                                 value={draft.plex.token}
-                                onChange={(e) =>
+                                onChange={(e) => {
+                                    setCheck('plex', NO_CHECK)
                                     setDraft({ ...draft, plex: { ...draft.plex, token: e.target.value } })
-                                }
+                                }}
                                 {...noAutofill}
                             />
                             {clearControl(settings.plex.tokenSet, draft.plex.token, () =>
@@ -361,14 +565,17 @@ export default function Settings() {
                             <input
                                 id="plex-section"
                                 value={draft.plex.librarySection}
-                                onChange={(e) =>
+                                onChange={(e) => {
+                                    setCheck('plex', NO_CHECK)
                                     setDraft({
                                         ...draft,
                                         plex: { ...draft.plex, librarySection: e.target.value },
                                     })
-                                }
+                                }}
                             />
                             {badge('plex.librarySection')}
+
+                            {checkControl('plex', 'Check connection', handleCheckPlex)}
                         </div>
                     )}
                 </section>
@@ -396,8 +603,7 @@ export default function Settings() {
                                 type="password"
                                 value={draft.streaming.tmdbReadToken}
                                 onChange={(e) => {
-                                    setTmdbVerified(false)
-                                    setVerifyMessage('')
+                                    setCheck('streaming', NO_CHECK)
                                     setDraft({
                                         ...draft,
                                         streaming: {
@@ -412,8 +618,7 @@ export default function Settings() {
                                 settings.streaming.tmdbReadTokenSet,
                                 draft.streaming.tmdbReadToken,
                                 () => {
-                                    setTmdbVerified(false)
-                                    setVerifyMessage('')
+                                    setCheck('streaming', NO_CHECK)
                                     setDraft({
                                         ...draft,
                                         streaming: { ...draft.streaming, tmdbReadToken: '' },
@@ -436,10 +641,7 @@ export default function Settings() {
                             />
                             {badge('streaming.watchRegion')}
 
-                            <button type="button" onClick={handleVerify} disabled={verifying}>
-                                {verifying ? 'Checking…' : 'Check token'}
-                            </button>
-                            {verifyMessage && <p className="settings-verify">{verifyMessage}</p>}
+                            {checkControl('streaming', 'Check token', handleVerify)}
 
                             {/* The picker appears only once a token works: without
                                 one the list cannot be fetched, and an empty picker

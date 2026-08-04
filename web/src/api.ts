@@ -379,3 +379,68 @@ export async function listProviders(
     if (!res.ok) throw new Error(`provider list failed: ${res.status} ${res.statusText}`)
     return res.json() as Promise<ProviderList>
 }
+
+// SourceCheckRequest mirrors server.checkRequest. Every field is optional and
+// falls back to what the server has stored, because the settings screen never
+// receives a stored credential and so cannot submit one for a source that is
+// already saved — which is the case most worth checking.
+export interface SourceCheckRequest {
+    url?: string
+    secret?: string
+    librarySection?: string
+}
+
+// SourceCheck mirrors server.verifySourceResponse. `message` is populated on
+// success as well as failure: the movie count or the library name is the
+// confirmation the button exists to give.
+export interface SourceCheck {
+    valid: boolean
+    message?: string
+}
+
+async function checkSource(
+    token: string,
+    path: string,
+    req: SourceCheckRequest,
+): Promise<SourceCheck> {
+    const res = await fetch(path, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify(req),
+    })
+    if (res.status === 401) throw new SettingsAuthError()
+    if (!res.ok) throw new Error(`check failed: ${res.status} ${res.statusText}`)
+    return res.json() as Promise<SourceCheck>
+}
+
+export function verifyJellyfin(token: string, req: SourceCheckRequest): Promise<SourceCheck> {
+    return checkSource(token, '/api/settings/verify/jellyfin', req)
+}
+
+export function verifyPlex(token: string, req: SourceCheckRequest): Promise<SourceCheck> {
+    return checkSource(token, '/api/settings/verify/plex', req)
+}
+
+// JellyfinUser is one selectable Jellyfin account.
+export interface JellyfinUser {
+    id: string
+    name: string
+}
+
+// listJellyfinUsers reads the accounts on a Jellyfin server so the user id
+// behind the "unwatched only" filter can be chosen rather than transcribed. A
+// mistyped id is never rejected at query time — it just returns nothing.
+export async function listJellyfinUsers(
+    token: string,
+    req: SourceCheckRequest,
+): Promise<JellyfinUser[]> {
+    const res = await fetch('/api/settings/jellyfin/users', {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify(req),
+    })
+    if (res.status === 401) throw new SettingsAuthError()
+    if (!res.ok) throw new Error(`user list failed: ${res.status} ${res.statusText}`)
+    const body = (await res.json()) as { users?: JellyfinUser[] }
+    return body.users ?? []
+}

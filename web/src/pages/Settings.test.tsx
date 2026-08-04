@@ -42,6 +42,11 @@ interface MockOptions {
     verifyValid?: boolean
     providers?: { id: string; name: string }[]
     getStatus?: number
+    jellyfinCheck?: { valid: boolean; message?: string }
+    plexCheck?: { valid: boolean; message?: string }
+    // users undefined means the list endpoint fails, which is the state of a
+    // Jellyfin the server could not read accounts from.
+    users?: { id: string; name: string }[]
 }
 
 let posted: { url: string; body: unknown }[] = []
@@ -71,6 +76,18 @@ function installFetch(opts: MockOptions = {}) {
         }
         if (url === '/api/settings/providers') {
             return jsonResponse({ region: 'US', providers: opts.providers ?? [] })
+        }
+        if (url === '/api/settings/verify/jellyfin') {
+            return jsonResponse(opts.jellyfinCheck ?? { valid: false, message: 'no' })
+        }
+        if (url === '/api/settings/verify/plex') {
+            return jsonResponse(opts.plexCheck ?? { valid: false, message: 'no' })
+        }
+        if (url === '/api/settings/jellyfin/users') {
+            if (!opts.users) {
+                return jsonResponse({}, { ok: false, status: 502 })
+            }
+            return jsonResponse({ users: opts.users })
         }
         throw new Error(`unexpected fetch: ${url}`)
     })
@@ -369,6 +386,186 @@ describe('Settings', () => {
         expect(screen.getAllByRole('button', { name: 'Remove stored value' })).toHaveLength(1)
     })
 
+    // Without this, the diagnostic for a URL typo is a movie night: the failure
+    // otherwise surfaces as an empty deck with everyone already swiping.
+    it('reports what a Jellyfin check found', async () => {
+        // Plex is switched off so "Server URL" and "Check connection" name exactly
+        // one control each; both sections render the same labels.
+        const wired = settingsFixture({
+            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: '' },
+            plex: { enabled: false, url: '', tokenSet: false, librarySection: '' },
+        })
+        installFetch({
+            settings: wired,
+            users: [],
+            jellyfinCheck: { valid: true, message: 'Connected to Anton — 1284 movies.' },
+        })
+        const user = userEvent.setup()
+        renderSettings()
+        await enterToken(user)
+        await waitFor(() => expect(screen.getByLabelText('Server URL')).toBeTruthy())
+
+        await user.click(screen.getByRole('button', { name: 'Check connection' }))
+
+        await waitFor(() =>
+            expect(screen.getByText('Connected to Anton — 1284 movies.')).toBeTruthy(),
+        )
+    })
+
+    // A green "Connected" sitting beside a URL that has since been retyped is a
+    // claim about a configuration that no longer exists.
+    it('discards a check result when the field it checked is edited', async () => {
+        const wired = settingsFixture({
+            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: '' },
+            plex: { enabled: false, url: '', tokenSet: false, librarySection: '' },
+        })
+        installFetch({ settings: wired, users: [], jellyfinCheck: { valid: true, message: 'Connected.' } })
+        const user = userEvent.setup()
+        renderSettings()
+        await enterToken(user)
+        await waitFor(() => expect(screen.getByLabelText('Server URL')).toBeTruthy())
+
+        await user.click(screen.getByRole('button', { name: 'Check connection' }))
+        await waitFor(() => expect(screen.getByText('Connected.')).toBeTruthy())
+
+        await user.type(screen.getByLabelText('Server URL'), 'x')
+
+        expect(screen.queryByText('Connected.')).toBeNull()
+    })
+
+    // A Jellyfin user id is a 32-character hex string out of the admin
+    // dashboard's URL bar. Transcribing it is how the unwatched filter ends up
+    // pointed at nothing: a wrong id is never rejected, it just returns no films.
+    it('offers the Jellyfin accounts as a list', async () => {
+        const wired = settingsFixture({
+            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: 'bbb' },
+        })
+        installFetch({
+            settings: wired,
+            users: [
+                { id: 'aaa', name: 'Alex' },
+                { id: 'bbb', name: 'Sami' },
+            ],
+        })
+        const user = userEvent.setup()
+        renderSettings()
+        await enterToken(user)
+
+        const field = await waitFor(() =>
+            screen.getByLabelText('Account for “unwatched only”'),
+        )
+        expect(field.tagName).toBe('SELECT')
+        expect((field as HTMLSelectElement).value).toBe('bbb')
+        expect(screen.getByRole('option', { name: 'Alex' })).toBeTruthy()
+
+        // The field has to say what it is for. "User ID (optional)" gave no clue
+        // that it is the only thing enabling the unwatched filter.
+        expect(screen.getByText(/unwatched films needs an account/)).toBeTruthy()
+    })
+
+    // A saved id this server does not list must survive being looked at. Dropping
+    // it from the select would silently blank it on the next save.
+    it('keeps a stored account id the server does not list', async () => {
+        const wired = settingsFixture({
+            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: 'ghost' },
+        })
+        installFetch({ settings: wired, users: [{ id: 'aaa', name: 'Alex' }] })
+        const user = userEvent.setup()
+        renderSettings()
+        await enterToken(user)
+
+        const field = await waitFor(() =>
+            screen.getByLabelText('Account for “unwatched only”'),
+        )
+        expect((field as HTMLSelectElement).value).toBe('ghost')
+        expect(screen.getByText(/ghost — not an account on this server/)).toBeTruthy()
+    })
+
+    // A server whose accounts could not be read still has to be configurable, so
+    // the field falls back to accepting a typed id rather than an empty select.
+    it('falls back to a text field when the accounts cannot be read', async () => {
+        const wired = settingsFixture({
+            jellyfin: { enabled: true, url: 'http://nas:8096', apiKeySet: true, userId: '' },
+        })
+        installFetch({ settings: wired })
+        const user = userEvent.setup()
+        renderSettings()
+        await enterToken(user)
+
+        const field = await waitFor(() =>
+            screen.getByLabelText('Account for “unwatched only”'),
+        )
+        expect(field.tagName).toBe('INPUT')
+    })
+
+    it('checks Plex against the candidate library section', async () => {
+        installFetch({ plexCheck: { valid: true, message: 'Connected — using the "Films" library.' } })
+        const user = userEvent.setup()
+        renderSettings()
+        await enterToken(user)
+        await waitFor(() => expect(screen.getByLabelText('Token')).toBeTruthy())
+
+        await user.click(screen.getByRole('button', { name: 'Check connection' }))
+
+        await waitFor(() =>
+            expect(screen.getByText('Connected — using the "Films" library.')).toBeTruthy(),
+        )
+        const check = posted.find((p) => p.url === '/api/settings/verify/plex')
+        // The stored token is not on this page, so the check has to send an empty
+        // secret and let the server fall back to what it has.
+        expect(check?.body).toEqual({ url: 'http://plex.local:32400', secret: '', librarySection: '2' })
+    })
+
+    // Checking a stored TMDB token has to submit an empty token, because the
+    // screen never receives the stored one. Sending the placeholder would have the
+    // server check a credential made of bullet characters, and reporting "no token
+    // was supplied" made the screen hide the provider picker for a working token.
+    it('checks a stored TMDB token without inventing a value for it', async () => {
+        const streaming = settingsFixture({
+            streaming: {
+                enabled: true,
+                tmdbReadTokenSet: true,
+                watchRegion: 'US',
+                providers: ['netflix'],
+            },
+        })
+        installFetch({ settings: streaming, verifyValid: true, providers: [] })
+        const user = userEvent.setup()
+        renderSettings()
+        await enterToken(user)
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Check token' })).toBeTruthy())
+
+        await user.click(screen.getByRole('button', { name: 'Check token' }))
+
+        await waitFor(() => expect(screen.getByText('Token accepted.')).toBeTruthy())
+        const check = posted.find((p) => p.url === '/api/settings/verify/tmdb')
+        expect(check?.body).toEqual({ token: '', region: 'US' })
+    })
+
+    // The provider list was re-requested on every keystroke anywhere in the form,
+    // because the effect depended on the whole draft object and every edit
+    // produces a new one.
+    it('does not re-request the provider list when an unrelated field changes', async () => {
+        const streaming = settingsFixture({
+            streaming: {
+                enabled: true,
+                tmdbReadTokenSet: true,
+                watchRegion: 'US',
+                providers: [],
+            },
+        })
+        installFetch({ settings: streaming, providers: [{ id: 'netflix', name: 'Netflix' }] })
+        const user = userEvent.setup()
+        renderSettings()
+        await enterToken(user)
+        await waitFor(() =>
+            expect(posted.filter((p) => p.url === '/api/settings/providers')).toHaveLength(1),
+        )
+
+        await user.type(screen.getByLabelText('Public URL'), 'abcdef')
+
+        expect(posted.filter((p) => p.url === '/api/settings/providers')).toHaveLength(1)
+    })
 })
 
 describe('buildUpdate', () => {
