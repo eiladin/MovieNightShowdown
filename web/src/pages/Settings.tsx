@@ -453,11 +453,16 @@ export default function Settings() {
                     Each library becomes its own source, so a host can deal from one alone.
                     Choose none to use every library.
                 </p>
+                {/* The list variant, not the search one. A media server has three
+                    or four movie libraries; asking somebody to guess at a name to
+                    reveal the things they already own is a search box solving a
+                    problem nobody had. Streaming keeps the search variant because
+                    TMDB returns several hundred services for a region. */}
                 <ChipPicker
+                    variant="list"
                     options={options}
                     selected={chosen.map((l) => l.id)}
                     labelId={labelId}
-                    placeholder="Type to find a library…"
                     emptyLabel="Every library."
                     noneLabel="No movie libraries were found on this server."
                     onChange={(ids) =>

@@ -554,9 +554,10 @@ describe('Settings', () => {
     })
 
     // A library identifier is opaque — a numeric key for Plex, a hexadecimal id for
-    // Jellyfin — so it is offered as a list or not at all. An empty picker would be
-    // an invitation to go and transcribe something.
-    it('offers the Plex libraries as chips only after a check', async () => {
+    // Jellyfin — so it is offered as a list or not at all. A media server has a
+    // handful of libraries, so they are all enumerated rather than hidden behind a
+    // search box.
+    it('enumerates the Plex libraries once a check has run', async () => {
         const noSection = settingsFixture({
             plex: {
                 enabled: true,
@@ -585,15 +586,22 @@ describe('Settings', () => {
         await enterToken(user)
         await waitFor(() => expect(screen.getByLabelText('Token')).toBeTruthy())
 
-        expect(screen.queryByRole('combobox')).toBeNull()
+        expect(screen.queryByRole('button', { name: 'Films' })).toBeNull()
         expect(screen.getByText(/Check the connection to choose which libraries/)).toBeTruthy()
 
         await user.click(screen.getByRole('button', { name: 'Check connection' }))
 
-        const picker = await waitFor(() => screen.getByRole('combobox'))
-        await user.type(picker, 'kids')
-        await waitFor(() => expect(screen.getByRole('option', { name: 'Kids Films' })).toBeTruthy())
-        await user.click(screen.getByRole('option', { name: 'Kids Films' }))
+        // Every library is on screen with nothing typed.
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Films' })).toBeTruthy())
+        expect(screen.getByRole('button', { name: 'Kids Films' })).toBeTruthy()
+
+        await user.click(screen.getByRole('button', { name: 'Kids Films' }))
+
+        // Selecting it moves it out of the available list and into a chip, so it
+        // cannot be chosen twice.
+        expect(screen.queryByRole('button', { name: 'Kids Films' })).toBeNull()
+        expect(screen.getByRole('button', { name: 'Remove Kids Films' })).toBeTruthy()
+        expect(screen.getByRole('button', { name: 'Films' })).toBeTruthy()
 
         // Chosen libraries are sent as id and name pairs, so a later start has
         // nothing to resolve.
