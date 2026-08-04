@@ -21,7 +21,8 @@ type libraryPreviewResponse struct {
 func (s *Server) handleLibraryPreview(w http.ResponseWriter, r *http.Request) {
 	filters := ParseFilters(r.URL.Query())
 
-	sources := selectSources(s.sources, filters.Sources, s.order)
+	set := s.currentSources()
+	sources := selectSources(set.sources, filters.Sources, set.order)
 	movies, failed, err := gatherShoe(r.Context(), sources, filters)
 	if err != nil {
 		log.Printf("library preview: %v", err)
@@ -75,7 +76,8 @@ type libraryFiltersResponse struct {
 // picker.
 func (s *Server) handleLibraryFilters(w http.ResponseWriter, r *http.Request) {
 	requested := ParseFilters(r.URL.Query()).Sources
-	sources := selectSources(s.sources, requested, s.order)
+	set := s.currentSources()
+	sources := selectSources(set.sources, requested, set.order)
 
 	filters, failed, err := gatherVocabulary(r.Context(), sources)
 	if err != nil {
@@ -90,9 +92,9 @@ func (s *Server) handleLibraryFilters(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(libraryFiltersResponse{
 		AvailableFilters: filters,
-		Sources:          configuredSources(s.sources, s.order),
+		Sources:          configuredSources(set.sources, set.order),
 		Unavailable:      failed,
-		Streaming:        s.cfg.StreamingConfigured(),
+		Streaming:        s.config().StreamingConfigured(),
 	})
 }
 
@@ -102,7 +104,8 @@ func (s *Server) handleLibraryFilters(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLibraryWarm(w http.ResponseWriter, r *http.Request) {
 	filters := ParseFilters(r.URL.Query())
 
-	sources := selectSources(s.sources, filters.Sources, s.order)
+	set := s.currentSources()
+	sources := selectSources(set.sources, filters.Sources, set.order)
 	movies, _, err := gatherShoe(r.Context(), sources, filters)
 	if err != nil {
 		log.Printf("library warm: %v", err)
@@ -111,7 +114,7 @@ func (s *Server) handleLibraryWarm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.cache.enabled() {
-		go s.cache.warm(movies, s.fetchers)
+		go s.cache.warm(movies, set.fetchers)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

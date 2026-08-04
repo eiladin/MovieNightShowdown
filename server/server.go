@@ -4,9 +4,10 @@
 package server
 
 import (
-	"context"
 	"log"
 	"net/http"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,15 +22,15 @@ type Server struct {
 	// Jellyfin is deliberately not a field: it is reachable only through the
 	// sources and fetchers maps, like every other source, so no handler can
 	// depend on it existing.
-	store    *Store
-	cache    *posterCache
-	fetchers map[SourceID]PosterFetcher
-	sources  map[SourceID]MovieSource
-	// order is this deployment's canonical source order: Jellyfin first when
-	// present, then the streaming services in the order they were configured.
-	// It is per-deployment rather than a fixed list because which streaming
-	// services exist is resolved at startup from STREAMING_PROVIDERS.
-	order []SourceID
+	store *Store
+	cache *posterCache
+	// sources is the live source set, replaced wholesale on a configuration
+	// change. It is an atomic pointer rather than three mutex-guarded fields so
+	// a request loads one consistent view and never straddles a reload.
+	sources atomic.Pointer[sourceSet]
+	// cfgMu guards cfg, which a configuration save replaces. Readers of cfg
+	// take it; the source set has its own atomic pointer.
+	cfgMu sync.RWMutex
 	// setupToken authorizes configuration changes. It is generated on first
 	// start and printed to the log, which is the only delivery channel an
 	// application without accounts has.
@@ -53,52 +54,7 @@ func New(cfg Config) *Server {
 	}
 	s.setupToken = ensureSetupToken(cfg.ConfigPath)
 	logSetupToken(s.setupToken)
-	// Jellyfin is gated on its credentials exactly like the streaming sources.
-	// Registering it unconditionally would advertise a source every query fails
-	// against, which is what a streaming-only deployment would otherwise show.
-	s.fetchers = map[SourceID]PosterFetcher{}
-	s.sources = map[SourceID]MovieSource{}
-	if cfg.JellyfinConfigured() {
-		jellyfin := NewJellyfinClient(cfg)
-		s.fetchers[SourceJellyfin] = jellyfin
-		s.sources[SourceJellyfin] = jellyfin
-		s.order = append(s.order, SourceJellyfin)
-	}
-	// Plex is gated and ordered exactly like Jellyfin, and sits after it: the
-	// canonical order decides whose genre names win in the merged vocabulary
-	// (see gatherVocabulary), and Jellyfin's stay canonical so adding Plex
-	// cannot relabel an existing deployment's picker.
-	if cfg.PlexConfigured() {
-		plex := NewPlexClient(cfg)
-		s.fetchers[SourcePlex] = plex
-		s.sources[SourcePlex] = plex
-		s.order = append(s.order, SourcePlex)
-	}
-	// Resolution needs the network for anything outside the built-in table, so
-	// it is bounded and non-fatal: whatever resolves is offered, and the rest
-	// is logged. It is skipped entirely without a read token, so an unset
-	// TMDB_READ_TOKEN never advertises a streaming source at all.
-	ctx, cancel := context.WithTimeout(context.Background(), providerResolveTimeout)
-	defer cancel()
-	for _, p := range resolveStreamingProviders(ctx, cfg, cfg.StreamingProviders) {
-		src := NewTMDBSource(cfg, p)
-		if src == nil {
-			continue
-		}
-		if _, clash := s.sources[p.ID]; clash {
-			log.Printf("server: skipping duplicate source %q", p.ID)
-			continue
-		}
-		s.sources[p.ID] = src
-		s.fetchers[p.ID] = src
-		s.order = append(s.order, p.ID)
-	}
-	if len(s.sources) == 0 {
-		log.Print("server: no movie source is configured — set JELLYFIN_URL and " +
-			"JELLYFIN_API_KEY or PLEX_URL and PLEX_TOKEN for a local library, " +
-			"and/or TMDB_READ_TOKEN for streaming services. Open the app for " +
-			"setup instructions.")
-	}
+	s.sources.Store(buildSourceSet(cfg))
 
 	s.routes()
 	return s

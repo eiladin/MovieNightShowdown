@@ -110,6 +110,17 @@ func (st *Store) Create(hostName string) *Session {
 	return session
 }
 
+// SetTTL replaces the session expiry the sweeper enforces.
+//
+// It exists because SESSION_TTL is settable at runtime: storing the new value
+// on the config without propagating it here would report a change as applied
+// while the sweeper kept using the value it was constructed with.
+func (st *Store) SetTTL(ttl time.Duration) {
+	st.mu.Lock()
+	st.ttl = ttl
+	st.mu.Unlock()
+}
+
 // Get looks up a Session by its join code.
 func (st *Store) Get(code string) (*Session, bool) {
 	st.mu.Lock()
@@ -190,7 +201,7 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 
 	resp := createSessionResponse{
 		Code:          session.Code,
-		JoinURL:       strings.TrimRight(s.cfg.PublicURL, "/") + "/join/" + session.Code,
+		JoinURL:       strings.TrimRight(s.config().PublicURL, "/") + "/join/" + session.Code,
 		ParticipantID: host.ID,
 		Token:         host.Token,
 	}
@@ -198,4 +209,52 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	log.Printf("session created: code=%s host=%s", session.Code, req.HostName)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// EndAll ends every session that is not already finished, broadcasting the
+// leaderboard built from the votes cast so far along with the reason.
+//
+// It exists because a configuration change replaces the source set, and a
+// session dealt from sources that no longer exist is not recoverable: its deck
+// references movies whose posters can no longer be fetched. Ending the session
+// with a leaderboard is the honest outcome — the votes cast were real, so the
+// standings are still worth showing.
+//
+// The broadcast happens outside the lock, matching Session.broadcast's contract
+// and keeping a slow client from stalling every other session's shutdown.
+func (st *Store) EndAll(reason EndReason) int {
+	st.mu.Lock()
+	sessions := make([]*Session, 0, len(st.sessions))
+	for _, s := range st.sessions {
+		sessions = append(sessions, s)
+	}
+	st.mu.Unlock()
+
+	type ending struct {
+		session     *Session
+		leaderboard []LeaderboardEntry
+	}
+	pending := make([]ending, 0, len(sessions))
+	for _, s := range sessions {
+		s.mu.Lock()
+		if s.Status == StatusEnded || s.Status == StatusMatched {
+			s.mu.Unlock()
+			continue
+		}
+		s.Status = StatusEnded
+		// A lobby session has no votes, so this is an empty leaderboard rather
+		// than a nil-pointer hazard: buildLeaderboardLocked iterates the deck,
+		// which is also empty before host:start.
+		lb := s.buildLeaderboardLocked()
+		s.mu.Unlock()
+		pending = append(pending, ending{session: s, leaderboard: lb})
+	}
+
+	for _, e := range pending {
+		e.session.broadcast("session_ended", SessionEndedPayload{
+			Leaderboard: e.leaderboard,
+			Reason:      reason,
+		})
+	}
+	return len(pending)
 }

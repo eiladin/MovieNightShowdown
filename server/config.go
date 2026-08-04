@@ -112,6 +112,14 @@ func parseStreamingProviders(raw string) []string {
 // it saves settings for the first time.
 func LoadConfig() (Config, error) {
 	path, explicit := resolveConfigPath()
+	return resolveConfigAt(path, explicit)
+}
+
+// resolveConfigAt performs the resolution LoadConfig describes against an
+// explicit path. It is separate so a configuration save can re-resolve the file
+// it just wrote without consulting CONFIG_FILE again, which a running process
+// must not re-read: the path it started with is the path it owns.
+func resolveConfigAt(path string, explicit bool) (Config, error) {
 	file, err := loadConfigFile(path)
 	if err != nil {
 		return Config{}, err

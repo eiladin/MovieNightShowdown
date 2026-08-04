@@ -23,7 +23,16 @@ func newSettingsServer(t *testing.T, body string) (*Server, string, string) {
 			t.Fatalf("write config: %v", err)
 		}
 	}
-	s := New(Config{ConfigPath: path, SessionTTL: "1h", CacheDir: t.TempDir()})
+	// Resolve through the real path rather than hand-building a Config: a save
+	// re-resolves from the file, and a hand-built baseline would differ from
+	// the resolved result in settings the request never touched.
+	t.Setenv("CACHE_DIR", t.TempDir())
+	t.Setenv("SESSION_TTL", "1h")
+	cfg, err := resolveConfigAt(path, false)
+	if err != nil {
+		t.Fatalf("resolve config: %v", err)
+	}
+	s := New(cfg)
 	return s, path, s.setupToken
 }
 

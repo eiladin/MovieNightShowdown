@@ -27,8 +27,12 @@ type settingsResponse struct {
 	// can flag one the operator may believe is in effect when it is not.
 	Provenance map[string]provenanceView `json:"provenance"`
 
-	// RestartRequired reports that the saved values are not yet live. Applying
-	// them without a restart arrives in a later phase.
+	// Outcome reports what a save did to the running server: nothing changed,
+	// it was applied live, or it is persisted but needs a restart. It is empty
+	// on a read.
+	Outcome string `json:"outcome,omitempty"`
+
+	// RestartRequired reports that the saved values are not yet live.
 	RestartRequired bool `json:"restartRequired"`
 }
 
@@ -115,12 +119,12 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		unauthorized(w)
 		return
 	}
-	file, err := loadConfigFile(s.cfg.ConfigPath)
+	file, err := loadConfigFile(s.config().ConfigPath)
 	if err != nil {
 		http.Error(w, "config file unreadable", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.settingsView(file, false))
+	writeJSON(w, http.StatusOK, s.settingsView(file, ""))
 }
 
 // handleSetSettings validates and persists a configuration change.
@@ -138,7 +142,8 @@ func (s *Server) handleSetSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := loadConfigFile(s.cfg.ConfigPath)
+	path := s.config().ConfigPath
+	file, err := loadConfigFile(path)
 	if err != nil {
 		http.Error(w, "config file unreadable", http.StatusInternalServerError)
 		return
@@ -156,11 +161,21 @@ func (s *Server) handleSetSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := writeConfigFile(s.cfg.ConfigPath, merged); err != nil {
+	if err := writeConfigFile(path, merged); err != nil {
 		http.Error(w, "could not write the config file", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.settingsView(merged, true))
+
+	// Re-resolve from the file just written rather than from the request: the
+	// environment still contributes every key the file does not set, so the
+	// request alone does not describe what the server will actually run with.
+	next, err := resolveConfigAt(path, true)
+	if err != nil {
+		http.Error(w, "the saved configuration could not be reloaded", http.StatusInternalServerError)
+		return
+	}
+	outcome := s.applyConfig(next)
+	writeJSON(w, http.StatusOK, s.settingsView(merged, outcome))
 }
 
 // applySettings merges a request onto the stored config file, returning the
@@ -310,7 +325,7 @@ func plexURL(s *plexSection) *string {
 
 // settingsView renders the stored configuration for a client, reporting each
 // secret as set or unset and never as a value.
-func (s *Server) settingsView(file *configFile, restartRequired bool) settingsResponse {
+func (s *Server) settingsView(file *configFile, outcome reloadOutcome) settingsResponse {
 	var top configFile
 	var jf jellyfinSection
 	var px plexSection
@@ -328,8 +343,9 @@ func (s *Server) settingsView(file *configFile, restartRequired bool) settingsRe
 		}
 	}
 
-	prov := make(map[string]provenanceView, len(s.cfg.Provenance))
-	for k, p := range s.cfg.Provenance {
+	live := s.config()
+	prov := make(map[string]provenanceView, len(live.Provenance))
+	for k, p := range live.Provenance {
 		prov[k] = provenanceView{Source: string(p.Source), EnvVar: p.EnvVar, EnvIgnored: p.EnvIgnored}
 	}
 
@@ -361,7 +377,8 @@ func (s *Server) settingsView(file *configFile, restartRequired bool) settingsRe
 			Providers:        providers,
 		},
 		Provenance:      prov,
-		RestartRequired: restartRequired,
+		Outcome:         string(outcome),
+		RestartRequired: outcome == reloadRestartRequired,
 	}
 }
 

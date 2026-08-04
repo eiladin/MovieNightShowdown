@@ -202,7 +202,8 @@ func TestServerEnumeratesJellyfinOnlyWithoutTMDBToken(t *testing.T) {
 	cfg.CacheDir = t.TempDir()
 
 	srv := New(cfg)
-	got := sourceIDs(configuredSources(srv.sources, srv.order))
+	set := srv.currentSources()
+	got := sourceIDs(configuredSources(set.sources, set.order))
 
 	if len(got) != 1 || got[0] != SourceJellyfin {
 		t.Fatalf("got %v, want [jellyfin]", got)
@@ -216,7 +217,8 @@ func TestServerEnumeratesConfiguredProvidersWithTMDBToken(t *testing.T) {
 	cfg.TMDBReadToken = "token"
 
 	srv := New(cfg)
-	got := sourceIDs(configuredSources(srv.sources, srv.order))
+	set := srv.currentSources()
+	got := sourceIDs(configuredSources(set.sources, set.order))
 
 	want := []SourceID{SourceJellyfin, SourceNetflix, SourcePrime, SourceDisney}
 	if len(got) != len(want) {
@@ -237,7 +239,8 @@ func TestServerEnumerationHonoursStreamingProviders(t *testing.T) {
 	cfg.StreamingProviders = []string{"disney"}
 
 	srv := New(cfg)
-	got := sourceIDs(configuredSources(srv.sources, srv.order))
+	set := srv.currentSources()
+	got := sourceIDs(configuredSources(set.sources, set.order))
 
 	want := []SourceID{SourceJellyfin, SourceDisney}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
@@ -290,7 +293,8 @@ func TestServerRegistersNoSourcesWhenNothingConfigured(t *testing.T) {
 		StreamingProviders: defaultStreamingProviders}
 
 	srv := New(cfg)
-	got := sourceIDs(configuredSources(srv.sources, srv.order))
+	set := srv.currentSources()
+	got := sourceIDs(configuredSources(set.sources, set.order))
 
 	if len(got) != 0 {
 		t.Fatalf("got %v, want none", got)
