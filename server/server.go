@@ -28,6 +28,9 @@ type Server struct {
 	// change. It is an atomic pointer rather than three mutex-guarded fields so
 	// a request loads one consistent view and never straddles a reload.
 	sources atomic.Pointer[sourceSet]
+	// providers caches TMDB's per-region provider list for the settings
+	// screen's picker.
+	providers *providerCache
 	// cfgMu guards cfg, which a configuration save replaces. Readers of cfg
 	// take it; the source set has its own atomic pointer.
 	cfgMu sync.RWMutex
@@ -47,10 +50,11 @@ func New(cfg Config) *Server {
 	}
 
 	s := &Server{
-		mux:   http.NewServeMux(),
-		cfg:   cfg,
-		store: NewStore(ttl),
-		cache: newPosterCache(cfg.CacheDir),
+		mux:       http.NewServeMux(),
+		cfg:       cfg,
+		store:     NewStore(ttl),
+		cache:     newPosterCache(cfg.CacheDir),
+		providers: newProviderCache(),
 	}
 	s.setupToken = ensureSetupToken(cfg.ConfigPath)
 	logSetupToken(s.setupToken)
@@ -73,6 +77,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/setup", s.handleSetup)
 	s.mux.HandleFunc("GET /api/settings", s.handleGetSettings)
 	s.mux.HandleFunc("POST /api/settings", s.handleSetSettings)
+	s.mux.HandleFunc("POST /api/settings/verify/tmdb", s.handleVerifyTMDB)
+	s.mux.HandleFunc("POST /api/settings/providers", s.handleProviderList)
 	s.mux.HandleFunc("GET /api/library/preview", s.handleLibraryPreview)
 	s.mux.HandleFunc("GET /api/library/filters", s.handleLibraryFilters)
 	s.mux.HandleFunc("POST /api/library/warm", s.handleLibraryWarm)

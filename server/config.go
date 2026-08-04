@@ -181,7 +181,11 @@ func resolveConfigAt(path string, explicit bool) (Config, error) {
 		Port:        os.Getenv("PORT"),
 		tmdbBaseURL: tmdbAPIBase,
 	}
-	cfg.StreamingProviders = r.providers("streaming.providers", "STREAMING_PROVIDERS", st.Providers)
+	// A streaming section in the file means the deployment manages streaming
+	// through the settings screen, which changes what an absent provider list
+	// means; see resolver.providers.
+	streamingManaged := file != nil && file.Streaming != nil
+	cfg.StreamingProviders = r.providers("streaming.providers", "STREAMING_PROVIDERS", st.Providers, streamingManaged)
 	// A source the operator switched off must not be queryable, so its
 	// credentials are dropped here rather than checked at every use. The
 	// values stay in the config file; only this resolved view forgets them.
@@ -194,7 +198,7 @@ func resolveConfigAt(path string, explicit bool) (Config, error) {
 	if !cfg.StreamingEnabled {
 		cfg.TMDBReadToken = ""
 	}
-	cfg.TMDBWatchRegion = strings.ToUpper(cfg.TMDBWatchRegion)
+	cfg.TMDBWatchRegion = normalizeRegion(cfg.TMDBWatchRegion)
 	if cfg.Port == "" {
 		cfg.Port = "8080"
 	}
@@ -209,6 +213,13 @@ func resolveConfigAt(path string, explicit bool) (Config, error) {
 		"streaming.watchRegion": cfg.TMDBWatchRegion, "streaming.providers": strings.Join(cfg.StreamingProviders, ","),
 	})
 	return cfg, nil
+}
+
+// normalizeRegion puts a watch region into the form TMDB expects. It is a
+// function rather than an inline ToUpper so resolution and the settings
+// endpoints cannot disagree about what "us" means.
+func normalizeRegion(region string) string {
+	return strings.ToUpper(strings.TrimSpace(region))
 }
 
 // JellyfinConfigured reports whether this deployment can query Jellyfin. Both

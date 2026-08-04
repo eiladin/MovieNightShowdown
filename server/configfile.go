@@ -166,10 +166,19 @@ func (r *resolver) enabled(key string, fileVal *bool) bool {
 	return true
 }
 
-// providers resolves the streaming provider list. The file's list wins when
-// present — including an empty list, which means "offer none" rather than
-// "fall back to the defaults".
-func (r *resolver) providers(key, envVar string, fileVal *[]string) []string {
+// providers resolves the streaming provider list.
+//
+// The file's list wins when present — including an empty list, which means
+// "offer none" rather than "fall back to the defaults".
+//
+// fileManaged reports whether the config file has a streaming section at all.
+// It decides what an absent list means, and the two answers are deliberately
+// different. A deployment configured only by environment variables keeps the
+// three defaults it has always had, so no existing install loses its streaming
+// sources on upgrade. A deployment whose streaming section is managed by the
+// file has a settings screen and must choose explicitly; defaulting there would
+// silently add services nobody selected.
+func (r *resolver) providers(key, envVar string, fileVal *[]string, fileManaged bool) []string {
 	env, envSet := os.LookupEnv(envVar)
 	p := settingProvenance{EnvVar: envVar}
 	if fileVal != nil {
@@ -177,6 +186,12 @@ func (r *resolver) providers(key, envVar string, fileVal *[]string) []string {
 		p.EnvIgnored = envSet
 		r.prov[key] = p
 		return normalizeProviders(*fileVal)
+	}
+	if fileManaged {
+		p.Source = sourceFile
+		p.EnvIgnored = envSet
+		r.prov[key] = p
+		return []string{}
 	}
 	if envSet && env != "" {
 		p.Source = sourceEnv
