@@ -17,6 +17,7 @@ import {
     type SourceCheck,
 } from '../api'
 import ChipPicker from '../components/ChipPicker'
+import ChipToggleGroup from '../components/ChipToggleGroup'
 import SecretField from '../components/SecretField'
 import { getSetupToken, setSetupToken } from '../setupToken'
 import {
@@ -413,12 +414,16 @@ export default function Settings() {
 
     // libraryPicker is the same control in both sections. It is offered only once a
     // check has enumerated the options, or when a library is already chosen — the
-    // identifier is opaque, so an empty picker would be an invitation to go
+    // identifier is opaque, so an empty control would be an invitation to go
     // rummaging. Whether it shows is decided by the loaded settings, never by the
     // draft: keying it on the draft made the control unmount the moment its value
     // was cleared, so it could not be re-populated.
+    //
+    // It is a toggle group, not a search-and-chips picker. A media server has three
+    // or four movie libraries, so all of them fit on screen; and the picker read as a
+    // search control because its unselected options looked exactly like the selection
+    // chips of the search-based service picker further down the same page.
     const libraryPicker = (
-        key: 'jellyfin' | 'plex',
         available: LibraryOption[] | null,
         chosen: LibraryOption[],
         // stored may be absent from an older server's response, so it is read
@@ -435,36 +440,18 @@ export default function Settings() {
                 </p>
             )
         }
-        // A stored library the server no longer lists still renders, by id, so
-        // opening this screen cannot silently drop it on the next save.
-        const options = [...(available ?? [])]
-        for (const lib of chosen) {
-            if (!options.some((o) => o.id === lib.id)) {
-                options.push({ id: lib.id, name: lib.name || lib.id })
-            }
-        }
-        const labelId = `${key}-library-picker`
+        const options = available ?? []
         return (
             <>
-                <span className="settings-pseudo-label" id={labelId}>
-                    Libraries
-                </span>
                 <p className="settings-hint">
                     Each library becomes its own source, so a host can deal from one alone.
-                    Choose none to use every library.
                 </p>
-                {/* The list variant, not the search one. A media server has three
-                    or four movie libraries; asking somebody to guess at a name to
-                    reveal the things they already own is a search box solving a
-                    problem nobody had. Streaming keeps the search variant because
-                    TMDB returns several hundred services for a region. */}
-                <ChipPicker
-                    variant="list"
+                <ChipToggleGroup
+                    legend="Libraries"
                     options={options}
                     selected={chosen.map((l) => l.id)}
-                    labelId={labelId}
-                    emptyLabel="Every library."
-                    noneLabel="No movie libraries were found on this server."
+                    emptyNote="None chosen, so every library is used."
+                    noneNote="No movie libraries were found on this server."
                     onChange={(ids) =>
                         onChange(
                             ids.map(
@@ -674,7 +661,6 @@ export default function Settings() {
                             )}
 
                             {libraryPicker(
-                                'jellyfin',
                                 jellyfinLibraries,
                                 draft.jellyfin.libraries,
                                 settings.jellyfin.libraries,
@@ -742,7 +728,6 @@ export default function Settings() {
                             {fieldError('plex.token')}
 
                             {libraryPicker(
-                                'plex',
                                 plexLibraries,
                                 draft.plex.libraries,
                                 settings.plex.libraries,

@@ -586,22 +586,25 @@ describe('Settings', () => {
         await enterToken(user)
         await waitFor(() => expect(screen.getByLabelText('Token')).toBeTruthy())
 
-        expect(screen.queryByRole('button', { name: 'Films' })).toBeNull()
+        expect(screen.queryByRole('checkbox', { name: 'Films' })).toBeNull()
         expect(screen.getByText(/Check the connection to choose which libraries/)).toBeTruthy()
 
         await user.click(screen.getByRole('button', { name: 'Check connection' }))
 
-        // Every library is on screen with nothing typed.
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Films' })).toBeTruthy())
-        expect(screen.getByRole('button', { name: 'Kids Films' })).toBeTruthy()
+        // Every library is on screen as a toggle, with nothing typed and no search
+        // field anywhere near it.
+        await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Films' })).toBeTruthy())
+        expect(screen.getByRole('checkbox', { name: 'Kids Films' })).toBeTruthy()
 
-        await user.click(screen.getByRole('button', { name: 'Kids Films' }))
+        await user.click(screen.getByRole('checkbox', { name: 'Kids Films' }))
 
-        // Selecting it moves it out of the available list and into a chip, so it
-        // cannot be chosen twice.
-        expect(screen.queryByRole('button', { name: 'Kids Films' })).toBeNull()
-        expect(screen.getByRole('button', { name: 'Remove Kids Films' })).toBeTruthy()
-        expect(screen.getByRole('button', { name: 'Films' })).toBeTruthy()
+        // Checked and unchecked, not a chip and a pill: one control in two states.
+        expect(
+            (screen.getByRole('checkbox', { name: 'Kids Films' }) as HTMLInputElement).checked,
+        ).toBe(true)
+        expect(
+            (screen.getByRole('checkbox', { name: 'Films' }) as HTMLInputElement).checked,
+        ).toBe(false)
 
         // Chosen libraries are sent as id and name pairs, so a later start has
         // nothing to resolve.
@@ -629,8 +632,10 @@ describe('Settings', () => {
         renderSettings()
         await enterToken(user)
 
-        await waitFor(() => expect(screen.getByText('Retired Films')).toBeTruthy())
-        expect(screen.getByRole('button', { name: 'Remove Retired Films' })).toBeTruthy()
+        // Rendered by id and marked, because the server no longer offers it. It has
+        // to stay switchable or it persists through every later save.
+        await waitFor(() => expect(screen.getByText(/9 — not on this server/)).toBeTruthy())
+        expect((screen.getByRole('checkbox', { name: /9/ }) as HTMLInputElement).checked).toBe(true)
     })
 
     // An empty picker reported an unreachable TMDB, a rejected token, and a region

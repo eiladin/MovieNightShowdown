@@ -227,16 +227,22 @@ hand-curated and is not touched by this pipeline.
 - **A capability is still declared, never inferred.** Nothing may branch on a
   `SourceID` to decide what a source supports. Composite ids make that easier to get
   wrong, which is why it is restated here.
-- **The chip picker is generic, and its variant is chosen by cardinality.**
-  `web/src/components/ChipPicker.tsx` takes an id-and-name list and knows nothing
-  about providers or libraries. Both callers use it; do not fork it for a third.
-  - `variant="search"` is for a list too long to render — TMDB returns several
-    hundred watch providers for a region, and a search box is the only usable
-    control there.
-  - `variant="list"` is for a handful, which is what libraries are. A media server
-    has three or four movie libraries, and hiding those behind a query only hides
-    them. Every unselected option is rendered; selecting one moves it into a chip
-    and out of the available list, so nothing can be chosen twice.
+- **Two multi-select controls, chosen by cardinality.**
+  - `ChipToggleGroup` is a fieldset of checkboxes styled as chips — the idiom the
+    host screen already uses for sources and genres. Use it when every option fits
+    on screen, which is what libraries are. Checked and unchecked are one control in
+    two states, so it cannot be misread.
+  - `ChipPicker` hides several hundred options behind a query and shows results in an
+    overlay. Use it only when there are that many: TMDB's watch providers for a
+    region.
+  - Libraries had the picker first, and it read as a search control even after the
+    search box was removed — its unselected pills looked exactly like the selection
+    chips of the service picker further down the same page. Do not reach for chips
+    plus a list of pills again; the toggle group is the answer.
+  - `.chip` and `.chip-group` live in `web/src/styles/chip-group.css`, shared by both
+    screens. Two copies is how they come to disagree about what a chip looks like.
+    `.settings-fields > label` is a **child** selector for the same reason: as a
+    descendant selector it restyled every chip label nested inside a group.
 - **The search variant renders no results for an empty query.** Not on focus
   either. TMDB returns several hundred services for a region, and that list is
   what the search box exists to avoid; showing it on focus buried the rest of the

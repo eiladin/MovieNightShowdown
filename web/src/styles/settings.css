@@ -69,21 +69,26 @@
   border-top: 1px solid var(--border);
 }
 
-/* 16px matches the font-size the global input rule sets, so a label is not
-   larger than the value it names. The page's 18px base makes it so otherwise. */
-.settings-fields label {
+/* A direct child, so this reaches the form's own field labels and not a label
+   nested inside a control. The chip toggles in a library group are labels too, and
+   this rule was overriding their type size and adding a top margin to each one —
+   making the same chip look different here than on the host screen.
+
+   16px matches the font-size the global input rule sets, so a label is not larger
+   than the value it names. The page's 18px base makes it so otherwise. */
+.settings-fields > label {
   color: var(--text-h);
   font-size: 16px;
   font-weight: 600;
   margin-top: 0.9rem;
 }
 
-.settings-fields label:first-child {
+.settings-fields > label:first-child {
   margin-top: 0;
 }
 
 /* A hint belongs to the label above it, not to the gap between fields. */
-.settings-fields label + .settings-hint {
+.settings-fields > label + .settings-hint {
   margin-top: -0.15rem;
 }
 
