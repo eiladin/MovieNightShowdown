@@ -27,6 +27,11 @@ APP_LOG="${LOG_DIR}/app.log"
 # would serve stale art after the fixtures change, so point it at this run's
 # throwaway directory to keep captures faithful to the current fixtures.
 CACHE_DIR="${LOG_DIR}/poster-cache"
+# The app writes its config file (and its setup token) here. Without this it
+# would default to ./config/config.yaml relative to the working directory,
+# leaving a credential-bearing file in the repository and carrying state between
+# runs, which a deterministic pipeline cannot have.
+CONFIG_FILE="${LOG_DIR}/config.yaml"
 
 MOCK_PID=""
 APP_PID=""
@@ -107,6 +112,7 @@ JELLYFIN_API_KEY="dev" \
 PUBLIC_URL="$PUBLIC_URL" \
 PORT="$PORT" \
 CACHE_DIR="$CACHE_DIR" \
+CONFIG_FILE="$CONFIG_FILE" \
 "$APP_BIN" >"$APP_LOG" 2>&1 &
 APP_PID=$!
 

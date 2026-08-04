@@ -102,14 +102,19 @@ func parseStreamingProviders(raw string) []string {
 // settings screen writes it, and an environment variable that outranked it
 // would make saving a setting silently ineffective. Environment variables
 // therefore seed a deployment that has no file yet and are reported as ignored
-// once the file sets the same key. PORT and CONFIG_FILE are excluded and remain
-// environment-only — the listener cannot be rebound live, and the config path
-// is how the file is found at all.
+// once the file sets the same key.
 //
-// An error is returned only for a config file that cannot be used: malformed
-// YAML, or a missing file at a path the operator named explicitly. A missing
-// file at the default path is not an error, since no deployment has one until
-// it saves settings for the first time.
+// PORT, CACHE_DIR and CONFIG_FILE are excluded and remain environment-only.
+// Each names something established before the process starts: the listener is
+// already bound and cannot be rebound live, the cache directory is a path that
+// has to be mounted before it can be used, and the config path is how the file
+// is found at all.
+//
+// A missing config file is never an error. A deployment has none until it saves
+// settings for the first time, and the application creates it on its first
+// write. What is an error is a file that cannot be used: malformed YAML, or an
+// explicitly named path whose directory cannot be created — every later save
+// would fail against it, so it fails at startup instead.
 func LoadConfig() (Config, error) {
 	path, explicit := resolveConfigPath()
 	return resolveConfigAt(path, explicit)
@@ -125,15 +130,25 @@ func resolveConfigAt(path string, explicit bool) (Config, error) {
 		return Config{}, err
 	}
 	if file == nil && explicit {
-		// A typo in CONFIG_FILE must not start the application with none of
-		// its settings, silently, looking healthy.
-		return Config{}, fmt.Errorf("config file %s: does not exist (set by CONFIG_FILE)", path)
+		// A missing file at an explicitly configured path is the normal first
+		// boot: a fresh deployment has saved nothing yet, and the application
+		// creates the file itself when it first writes. Refusing to start here
+		// would crash-loop every new install that sets CONFIG_FILE.
+		//
+		// What is worth catching is a path that cannot be used at all, since
+		// every later save would fail against it. Creating the directory now
+		// turns that into one clear startup error instead of a settings screen
+		// that reports success and persists nothing.
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			return Config{}, fmt.Errorf("config file %s: its directory cannot be created: %w", path, err)
+		}
 	}
 	if file != nil {
 		checkConfigFilePermissions(path)
 		log.Printf("config: loaded %s", path)
 	} else {
-		log.Printf("config: no config file at %s; using environment and defaults", path)
+		log.Printf("config: no config file at %s yet; using environment and defaults, "+
+			"and saving settings will create it", path)
 	}
 
 	// Dereference the file's optional sections once. An absent section is an

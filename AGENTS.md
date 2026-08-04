@@ -29,6 +29,8 @@ docs/
   INSTALL.md         How to deploy and configure it (Docker Compose, env vars).
   screenshots/       Screenshots used by the README.
 main.go              Go entrypoint.
+config/              Written at runtime: the config file the settings screen
+                     saves. Not committed; see the Configuration section.
 server/              Go backend: sessions, WebSocket hub, Jellyfin client,
                      poster image proxy + on-disk cache, static file serving.
 web/                 React + Vite (TypeScript) frontend, embedded into the binary.
@@ -115,10 +117,62 @@ hand-curated and is not touched by this pipeline.
   when its credentials are set. Code must not assume it exists: filter options
   fall back to `defaultAvailableFilters()` without it, and `selectSources` falls
   back to the first configured source rather than to Jellyfin.
+- **The settings screen is the primary configuration path.** `web/src/pages/Settings.tsx`
+  writes the config file; `web/src/pages/Setup.tsx` remains the guide for a
+  deployment being configured by environment variables and points at it. The
+  setup token is held in memory only (`web/src/setupToken.ts`) — `store.ts`
+  persists exactly one thing and a credential is not it.
+- **`sourceAffecting` in `web/src/settingsDraft.ts` mirrors the server's
+  source-affecting tier.** The server remains authoritative; the client copy only
+  decides whether to confirm before saving. A new setting joining that tier needs
+  updating in both, and only the server has a test that would notice.
 - The docs (`AGENTS.md`, `README.md`, `docs/*`) are written in a neutral,
   professional voice, since they are read by other agents and humans.
 
-## Configuration (environment variables)
+## Configuration
+
+**The application owns its config file.** `CONFIG_FILE` (default
+`./config/config.yaml`) is written by the settings screen and is authoritative.
+Environment variables seed a deployment that has not saved a value for a setting
+yet, and are ignored once the file sets the same key. This follows the model of
+this application's peers — Jellyfin, Plex, and the \*arr stack — whose operators
+are the same people; a settings screen that an environment variable silently
+overrode would be worse than no settings screen.
+
+Rules that follow from it, all load-bearing:
+
+- **Resolution is per key, never per source.** A file setting `plex.url` and an
+  environment setting `PLEX_TOKEN` must yield both. See `resolver` in
+  `server/configfile.go`; every scalar in `configFile` is a pointer so "absent"
+  and "explicitly blanked" stay distinguishable.
+- **Provenance is reported, not inferred.** `Config.Provenance` records where
+  each setting came from and whether an environment variable is being ignored.
+  The startup log states it per setting and the settings screen badges it. These
+  are the mitigation the whole model depends on — do not remove either.
+- **`PORT`, `CACHE_DIR` and `CONFIG_FILE` are environment-only, permanently.**
+  Each names something established before the process starts. They are reported
+  read-only on `settingsResponse.Runtime` and have no counterpart on
+  `settingsRequest`; the absence from the request type is the boundary, not the
+  disabled input.
+- **Config writes require the setup token** (`server/setuptoken.go`), generated
+  on first start and printed to the log. Without it the write endpoint is an
+  SSRF vector and a way to have the server deliver its stored credentials to an
+  attacker's host. The token is deliberately logged; that is its only delivery
+  channel.
+- **No stored secret may appear in a response.** `settingsResponse` reports each
+  credential as a boolean. An omitted secret in a request means unchanged, never
+  cleared — the screen never receives one, so it cannot send one back.
+- **Reload is tiered** (`server/sourceset.go`). Source-affecting changes rebuild
+  the source set and end active sessions; harmless ones apply live; the listen
+  port needs a restart. Sessions are ended *before* the pointer swap, and the new
+  set is built *before* anything is ended. A setting whose owner is not `Config`
+  itself must be pushed to that owner in `setConfig`, or the server reports a
+  change it did not make.
+- **Streaming defaults are conditional.** `defaultStreamingProviders` applies
+  only to a deployment with no `streaming` section in its config file. Once the
+  file manages streaming, services are selected explicitly or not at all.
+
+### Environment variables
 
 | Var | Required | Purpose |
 |---|---|---|
@@ -129,9 +183,10 @@ hand-curated and is not touched by this pipeline.
 | `PLEX_TOKEN` | one of¹ | Plex authentication token (stays server-side, never sent to clients) |
 | `PLEX_LIBRARY_SECTION` | optional | Key of the movie library section. Discovered on first use (first section of type `movie`) when unset; required only on a server with several movie libraries |
 | `PUBLIC_URL` | yes | Base URL used to build QR/join links |
-| `PORT` | optional | Listen port (default 8080) |
+| `PORT` | optional | Listen port (default 8080). Environment-only |
 | `SESSION_TTL` | optional | Session expiry (default a few hours) |
-| `CACHE_DIR` | optional | Directory for the on-disk poster cache (default a temp dir); mount a volume in Docker to persist it across restarts |
+| `CACHE_DIR` | optional | Directory for the on-disk poster cache (default a temp dir); mount a volume in Docker to persist it across restarts. Environment-only |
+| `CONFIG_FILE` | optional | Path to the config file the settings screen writes (default `./config/config.yaml`). A missing file is never fatal — the application creates it on its first write — but a path whose directory cannot be created is fatal at startup, since every later save would fail against it. Environment-only |
 | `TMDB_READ_TOKEN` | one of¹ | TMDB v4 API Read Access Token. Enables streaming services as sources. When unset, the server registers no streaming source, so the API does not advertise them and the UI does not render them. Stays server-side, never sent to clients. |
 | `STREAMING_PROVIDERS` | optional | Comma-separated streaming services to offer, by provider name **or numeric TMDB provider id**. Any TMDB watch provider is accepted, not a fixed set. Normalized in `LoadConfig` (trimmed, lowercased, de-duplicated) and resolved in `New` via `resolveStreamingProviders`. Defaults to `netflix,prime,disney`; inert without `TMDB_READ_TOKEN`. |
 | `TMDB_WATCH_REGION` | optional | ISO 3166-1 region for provider resolution and every Discover query. Defaults to `US`. |
@@ -139,6 +194,8 @@ hand-curated and is not touched by this pipeline.
 ¹ At least one movie source is required: Jellyfin (`JELLYFIN_URL` **and**
 `JELLYFIN_API_KEY`), Plex (`PLEX_URL` **and** `PLEX_TOKEN`), streaming
 (`TMDB_READ_TOKEN`), or any combination. `Config.JellyfinConfigured`,
-`Config.PlexConfigured` and `Config.StreamingConfigured` are the predicates. With neither set, `New`
+`Config.PlexConfigured` and `Config.StreamingConfigured` are the predicates.
+Any of them can equally be satisfied from the config file rather than the
+environment. With neither set, `New`
 registers no source, logs what is missing, and every client route redirects to
 the in-app `/setup` guide (`server/setup.go`, `web/src/pages/Setup.tsx`).

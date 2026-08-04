@@ -3,6 +3,10 @@
 .env.local
 *.local
 
+# The config file the app writes at runtime. It holds credentials in plaintext
+# and the setup token, and a local `go run .` creates it here by default.
+/config/
+
 # Go
 /movie-night-showdown
 *.exe

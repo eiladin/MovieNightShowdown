@@ -211,16 +211,46 @@ func TestLoadConfigMissingDefaultPathIsNotAnError(t *testing.T) {
 	}
 }
 
-func TestLoadConfigMissingExplicitPathIsFatal(t *testing.T) {
+// TestLoadConfigMissingExplicitPathStarts is the first-boot case: a deployment
+// that sets CONFIG_FILE and has saved nothing yet must start, since the
+// application creates the file itself on its first write.
+func TestLoadConfigMissingExplicitPathStarts(t *testing.T) {
 	clearConfigEnv(t)
-	missing := filepath.Join(t.TempDir(), "nope.yaml")
+	dir := filepath.Join(t.TempDir(), "config")
+	missing := filepath.Join(dir, "config.yaml")
 	t.Setenv("CONFIG_FILE", missing)
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v, want a fresh deployment to start", err)
+	}
+	if cfg.ConfigPath != missing {
+		t.Errorf("ConfigPath = %q, want %q", cfg.ConfigPath, missing)
+	}
+	// The directory is created now so a later save has somewhere to land.
+	if _, err := os.Stat(dir); err != nil {
+		t.Errorf("config directory was not created: %v", err)
+	}
+}
+
+// TestLoadConfigUnusableExplicitPathIsFatal is what the missing-file rule was
+// actually protecting against: a path no save could ever be written to, which
+// must fail at startup rather than at the first save.
+func TestLoadConfigUnusableExplicitPathIsFatal(t *testing.T) {
+	clearConfigEnv(t)
+	// A regular file cannot be a parent directory.
+	blocker := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	unusable := filepath.Join(blocker, "config.yaml")
+	t.Setenv("CONFIG_FILE", unusable)
 
 	_, err := LoadConfig()
 	if err == nil {
-		t.Fatal("want an error: a typo in CONFIG_FILE must not start with no settings")
+		t.Fatal("want an error for a config path that cannot be written to")
 	}
-	if !strings.Contains(err.Error(), missing) {
+	if !strings.Contains(err.Error(), unusable) {
 		t.Errorf("error = %q, want it to name the path", err)
 	}
 }

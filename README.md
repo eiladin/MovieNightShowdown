@@ -100,21 +100,23 @@ Without a token the app is Jellyfin-only, and nothing about streaming appears in
 the UI. A token on its own works too, if you want a showdown with no local
 library at all. See [docs/INSTALL.md](docs/INSTALL.md#streaming-services).
 
-Start it with nothing configured and it won't leave you guessing: it points you
-at a built-in setup page that spells out the environment variables for each of
-those three ways to run it.
+Start it with nothing configured and it won't leave you guessing. It points you
+at a built-in settings screen where you add your sources, test your credentials,
+and pick which streaming services to include — no config file to hand-edit, no
+container to restart. Most changes take effect immediately.
 
 ## Get it running
 
-If you already run Jellyfin with Docker, you're a compose file and two
-environment variables away from your first showdown. The full walkthrough —
-example `docker-compose.yml`, how to get a Jellyfin API key, and reverse-proxy
-notes — lives in **[docs/INSTALL.md](docs/INSTALL.md)**.
+Bring it up with a compose file and nothing else, read the setup token out of the
+log, and configure it from the browser. The full walkthrough — example
+`docker-compose.yml`, how to get a Jellyfin API key or a Plex token, and
+reverse-proxy notes — lives in **[docs/INSTALL.md](docs/INSTALL.md)**.
 
 ## Under the hood
 
-The backend is a single Go binary: it manages sessions, talks to Jellyfin, keeps
-every device in sync over WebSockets, and proxies (and caches) poster images so
-your Jellyfin key stays server-side. The frontend is a React app that's embedded
-right into that binary, so there's nothing else to deploy. Configuration is a
-handful of environment variables, all documented in the install guide.
+The backend is a single Go binary: it manages sessions, talks to your libraries,
+keeps every device in sync over WebSockets, and proxies (and caches) poster
+images so your credentials stay server-side. The frontend is a React app that's
+embedded right into that binary, so there's nothing else to deploy. Settings live
+in a small YAML file the app writes itself; environment variables seed a fresh
+deployment. Both are documented in the install guide.
