@@ -283,3 +283,43 @@
     margin-bottom: 0.6rem;
   }
 }
+
+/* The confirmation before a source-affecting save. A native <dialog>, so the
+   browser owns the modality, focus trap and Esc. Colours come from the tokens
+   in index.css, which carry both a light and a dark definition. */
+.settings-confirm {
+  width: min(28rem, calc(100vw - 2rem));
+  margin: auto;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.settings-confirm::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.settings-confirm h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.15rem;
+}
+
+.settings-confirm p {
+  margin: 0 0 1.25rem;
+}
+
+/* No padding here: the global button rules already size these. */
+.settings-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.settings-confirm-actions button {
+  flex: 1 1 8rem;
+  min-height: 44px;
+}

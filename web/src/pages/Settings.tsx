@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import {
     getSettings,
@@ -98,6 +98,8 @@ export default function Settings() {
     const [failure, setFailure] = useState('')
     const [needsToken, setNeedsToken] = useState(!getSetupToken())
     const [saving, setSaving] = useState(false)
+    const [confirming, setConfirming] = useState(false)
+    const confirmRef = useRef<HTMLDialogElement>(null)
 
     const [checks, setChecks] = useState<Record<SourceKey, CheckState>>({
         jellyfin: NO_CHECK,
@@ -309,18 +311,30 @@ export default function Settings() {
         setCheckedToken(result?.valid ? candidate : '')
     }
 
-    async function handleSave(e: React.FormEvent) {
+    // The dialog is driven by state rather than imperative opens so the two
+    // cannot disagree: Esc and the backdrop close it on their own, and the
+    // close event puts the state back.
+    useEffect(() => {
+        const dialog = confirmRef.current
+        if (!dialog) return
+        if (confirming && !dialog.open) dialog.showModal()
+        if (!confirming && dialog.open) dialog.close()
+    }, [confirming])
+
+    function handleSave(e: React.FormEvent) {
         e.preventDefault()
         if (!draft || !settings || !token) return
 
         if (sourceAffecting(draft, settings)) {
-            const ok = window.confirm(
-                'Changing a movie source rebuilds the deck sources. Any session currently in ' +
-                    'progress will end, and everyone swiping will be sent to the leaderboard. Continue?',
-            )
-            if (!ok) return
+            setConfirming(true)
+            return
         }
+        void performSave()
+    }
 
+    async function performSave() {
+        if (!draft || !settings || !token) return
+        setConfirming(false)
         setSaving(true)
         setErrors({})
         setMessage('')
@@ -911,6 +925,28 @@ export default function Settings() {
                     {saving ? 'Saving…' : 'Save settings'}
                 </button>
             </form>
+
+            <dialog
+                ref={confirmRef}
+                className="settings-confirm"
+                aria-labelledby="settings-confirm-title"
+                onCancel={() => setConfirming(false)}
+                onClose={() => setConfirming(false)}
+            >
+                <h2 id="settings-confirm-title">End the session in progress?</h2>
+                <p>
+                    Changing a movie source rebuilds the deck sources. Any session currently in
+                    progress will end, and everyone swiping will be sent to the leaderboard.
+                </p>
+                <div className="settings-confirm-actions">
+                    <button type="button" onClick={() => setConfirming(false)}>
+                        Cancel
+                    </button>
+                    <button type="button" className="btn-primary" onClick={() => void performSave()}>
+                        Continue
+                    </button>
+                </div>
+            </dialog>
 
             <p className="settings-footnote">
                 <Link to="/setup">Configuring with environment variables instead?</Link>
