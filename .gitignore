@@ -3,6 +3,10 @@
 .env.local
 *.local
 
+# The config file the app writes at runtime. It holds credentials in plaintext
+# and the setup token, and a local `go run .` creates it here by default.
+/config/
+
 # Go
 /movie-night-showdown
 *.exe
@@ -22,3 +26,6 @@ scripts/screenshots/node_modules/
 .DS_Store
 .idea/
 .vscode/
+
+# Working directory for the screenshot pipeline (scripts/screenshots/run.sh).
+.screenshots-run/

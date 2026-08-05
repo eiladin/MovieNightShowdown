@@ -78,8 +78,8 @@ export default function Lobby() {
             setWinner(movie)
         })
         const offEnded = socket.on('session_ended', (payload) => {
-            const { leaderboard } = payload as SessionEndedPayload
-            setLeaderboard(leaderboard)
+            const { leaderboard, reason } = payload as SessionEndedPayload
+            setLeaderboard(leaderboard, reason)
         })
 
         socket.connect()

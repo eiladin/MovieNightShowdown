@@ -28,8 +28,10 @@ func main() {
 		healthcheck()
 	}
 
-	cfg := server.LoadConfig()
-	log.Printf("config: %s", cfg)
+	cfg, err := server.LoadConfig()
+	if err != nil {
+		log.Fatalf("config: %v", err)
+	}
 	log.Printf("movie-night-showdown %s (commit %s)", version, commit)
 
 	dist, err := fs.Sub(webDist, "web/dist")

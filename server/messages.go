@@ -99,9 +99,27 @@ type LeaderboardEntry struct {
 	YesCount int   `json:"yesCount"`
 }
 
-// SessionEndedPayload is sent when the deck is exhausted with no match.
+// EndReason says why a session ended. It is a machine-readable value, not
+// display text: the client owns the wording, exactly as it owns source labels.
+type EndReason string
+
+const (
+	// EndReasonDeckExhausted means every participant swiped the whole deck
+	// without a movie collecting enough yes votes.
+	EndReasonDeckExhausted EndReason = "deck_exhausted"
+	// EndReasonHostEnded means the host stopped the session early.
+	EndReasonHostEnded EndReason = "host_ended"
+	// EndReasonReconfigured means the server's sources changed underneath the
+	// session, so the deck it was dealt no longer reflects what this
+	// deployment offers.
+	EndReasonReconfigured EndReason = "reconfigured"
+)
+
+// SessionEndedPayload is sent when a session ends without a match, whatever
+// ended it.
 type SessionEndedPayload struct {
 	Leaderboard []LeaderboardEntry `json:"leaderboard"`
+	Reason      EndReason          `json:"reason"`
 }
 
 // ErrorPayload reports a rejected action (e.g. joining a started session)

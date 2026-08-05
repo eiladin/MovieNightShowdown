@@ -26,10 +26,12 @@ func (f *fakeFetcher) fetchPoster(ctx context.Context, id, tag string) ([]byte, 
 // newImageTestServer builds a Server with exactly one registered fetcher and a
 // disabled cache, so handleImage's dispatch is what the test observes.
 func newImageTestServer(source SourceID, f PosterFetcher) *Server {
-	return &Server{
-		cache:    newPosterCache(""),
+	s := &Server{cache: newPosterCache("")}
+	s.sources.Store(&sourceSet{
+		sources:  map[SourceID]MovieSource{},
 		fetchers: map[SourceID]PosterFetcher{source: f},
-	}
+	})
+	return s
 }
 
 func doImageRequest(s *Server, source, id, query string) *httptest.ResponseRecorder {

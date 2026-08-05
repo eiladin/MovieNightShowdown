@@ -4,6 +4,11 @@
 // server.JellyfinClient calls (see server/jellyfin.go), backed by a
 // hardcoded list of fictional movies and placeholder poster art. No real
 // Jellyfin server, network access, or personal data is involved.
+//
+// It also implements the endpoints the settings screen's connection check reads,
+// so that screen can be captured showing what it looks like when a server answers:
+// /System/Info/Public, /Users and /Library/MediaFolders. The accounts and libraries
+// it reports are invented, like everything else here.
 package main
 
 import (
@@ -249,6 +254,50 @@ func writeJSON(w http.ResponseWriter, v interface{}) {
 	}
 }
 
+// handleSystemInfo answers the unauthenticated probe the settings screen makes to
+// tell "this URL is not a Jellyfin server" from "that API key is wrong".
+func handleSystemInfo(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]string{
+		"ServerName": "Movie Closet",
+		"Version":    "10.9.0",
+	})
+}
+
+// handleUsers answers the account list the settings screen offers for the
+// "unwatched only" filter. The identifiers are 32 hex characters, matching the shape
+// of a real Jellyfin user id, because the screen's own display depends on it.
+func handleUsers(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, []map[string]string{
+		{"Id": "7c1f4a90e2b34d5689a0c3d1e4f52b68", "Name": "Alex"},
+		{"Id": "b93d20e5a7c14f8290d6b1c4e7a3f9d2", "Name": "Sam"},
+	})
+}
+
+// handleMediaFolders answers the library list the settings screen offers as
+// selectable sources. Only folders whose CollectionType is "movies" are eligible, so
+// one of each is served to prove the filtering.
+func handleMediaFolders(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{
+		"Items": []map[string]string{
+			{
+				"Id":             "3f8c1d6b09a24e7fb5c8203d4e1a97f6",
+				"Name":           "Movies",
+				"CollectionType": "movies",
+			},
+			{
+				"Id":             "a15e7c294bd8460fa93e6c07d251b8f4",
+				"Name":           "Family Movies",
+				"CollectionType": "movies",
+			},
+			{
+				"Id":             "cd420f7a1e6b48939c05a8d7b3e21f6c",
+				"Name":           "Series",
+				"CollectionType": "tvshows",
+			},
+		},
+	})
+}
+
 func main() {
 	port := os.Getenv("MOCK_PORT")
 	if port == "" {
@@ -259,6 +308,9 @@ func main() {
 	mux.HandleFunc("GET /Items", handleItems)
 	mux.HandleFunc("GET /Items/Filters", handleFilters)
 	mux.HandleFunc("GET /Items/{id}/Images/Primary", handlePosterImage)
+	mux.HandleFunc("GET /System/Info/Public", handleSystemInfo)
+	mux.HandleFunc("GET /Users", handleUsers)
+	mux.HandleFunc("GET /Library/MediaFolders", handleMediaFolders)
 
 	log.Printf("mock-jellyfin: %d fictional movies, posters from %s", len(fixtureMovies), postersDir())
 	log.Printf("mock-jellyfin: listening on :%s", port)

@@ -4,21 +4,43 @@ services:
     ports:
       - "8080:8080"
     volumes:
+      # The config volume holds the settings the app writes, including its setup
+      # token and your credentials. Without it, every restart forgets them.
+      - config:/config
       - poster-cache:/var/cache/mns
     environment:
-      # At least one source is required: Jellyfin, TMDB, or both. With none set
-      # the app serves its /setup guide and explains what is missing.
+      # Deployment-level. These cannot be changed from the settings screen —
+      # it reports them, since a new value only takes effect when this file
+      # changes and the container is recreated.
+      PORT: "8080"
+      CACHE_DIR: /var/cache/mns
+      CONFIG_FILE: /config/config.yaml
+
+      # Everything below seeds a deployment that has no saved configuration
+      # yet. Once the settings screen saves a value, the file wins and the
+      # variable here is ignored — the startup log says so for each one.
+      #
+      # Leave them all unset to configure entirely through the settings screen:
+      # start the app, read the setup token from the log, and open /settings.
+      #
+      # Note the ${VAR:-} form: with nothing set on the host, every variable below
+      # still exists inside the container as an empty string. That is why the app
+      # treats "present but empty" as supplying nothing, and reports a variable as
+      # overridden only when it actually holds a value.
       JELLYFIN_URL: ${JELLYFIN_URL:-}
       JELLYFIN_API_KEY: ${JELLYFIN_API_KEY:-}
       JELLYFIN_USER_ID: ${JELLYFIN_USER_ID:-}
+      JELLYFIN_LIBRARIES: ${JELLYFIN_LIBRARIES:-}
+      PLEX_URL: ${PLEX_URL:-}
+      PLEX_TOKEN: ${PLEX_TOKEN:-}
+      PLEX_LIBRARY_SECTIONS: ${PLEX_LIBRARY_SECTIONS:-}
       TMDB_READ_TOKEN: ${TMDB_READ_TOKEN:-}
       STREAMING_PROVIDERS: ${STREAMING_PROVIDERS:-}
       TMDB_WATCH_REGION: ${TMDB_WATCH_REGION:-}
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
-      PORT: "8080"
       SESSION_TTL: ${SESSION_TTL:-4h}
-      CACHE_DIR: /var/cache/mns
     restart: unless-stopped
 
 volumes:
+  config:
   poster-cache:

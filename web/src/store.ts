@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Movie, PreviewFilters } from './api'
-import type { LeaderboardEntry } from './ws'
+import type { EndReason, LeaderboardEntry } from './ws'
 
 // MAX_REMEMBERED_FILTERS caps how many sessions' filter picks are kept. This is
 // persisted storage, so without a cap it would grow one entry for every session
@@ -62,6 +62,9 @@ interface SessionStore {
     filtersByCode: Record<string, RememberedFilters>
     winner: Movie | null
     leaderboard: LeaderboardEntry[] | null
+    // endReason is why the session ended, so the result screen can explain an
+    // ending the participants did not cause.
+    endReason: EndReason | null
 
     applySessionState: (snapshot: SessionSnapshot) => void
     setParticipants: (participants: Participant[]) => void
@@ -71,7 +74,7 @@ interface SessionStore {
     clearVote: (movieId: string) => void
     setFilters: (code: string, filters: PreviewFilters) => void
     setWinner: (movie: Movie) => void
-    setLeaderboard: (lb: LeaderboardEntry[]) => void
+    setLeaderboard: (lb: LeaderboardEntry[], reason?: EndReason) => void
     reset: () => void
 }
 
@@ -85,6 +88,7 @@ const initialState = {
     myVoteState: {},
     winner: null,
     leaderboard: null,
+    endReason: null,
 }
 
 // filtersKey normalizes a session code before it is used as a storage key.
@@ -146,7 +150,8 @@ export const useSessionStore = create<SessionStore>()(
                 })),
 
             setWinner: (winner) => set({ winner, status: 'matched' }),
-            setLeaderboard: (leaderboard) => set({ leaderboard, status: 'ended' }),
+            setLeaderboard: (leaderboard, endReason) =>
+                set({ leaderboard, endReason: endReason ?? null, status: 'ended' }),
 
             // Everything in initialState is server-derived and must not survive
             // a move to a different session. filtersByCode is deliberately left

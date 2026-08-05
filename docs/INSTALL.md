@@ -18,10 +18,11 @@ assumes a machine that can run Docker, and at least one place to get movies from
     instead of (or alongside) a local library. See
     [Streaming services](#streaming-services).
 
-If you start the app with neither configured, it says so: the log prints what is
-missing, and the app itself redirects to a `/setup` page listing the environment
-variables for each option. Nothing else works until one is set, since there
-would be no movies to deal.
+You do not need any of these in hand before starting. Bring the app up with
+nothing configured, then add sources from the settings screen — see
+[The quickest path](#the-quickest-path). Until at least one source exists, the
+app redirects to a `/setup` page explaining what is missing, since there would
+be no movies to deal.
 
 ### Getting a Jellyfin API key
 
@@ -29,10 +30,12 @@ In Jellyfin, open **Dashboard → API Keys** and create a new key. Give it a nam
 you'll recognize (for example, `movie-night-showdown`) and copy the value — this
 becomes `JELLYFIN_API_KEY` below.
 
-If you want the "unwatched only" filter to work, you also need a user ID. Open
-**Dashboard → Users**, click the user whose watch state should count, and copy
-the ID out of the browser's address bar (`.../useredit.html?userId=<this part>`).
-That value becomes `JELLYFIN_USER_ID`.
+If you want the "unwatched only" filter to work, you also need to say whose watch
+state counts. The settings screen lists your Jellyfin accounts and lets you pick
+one, so you only need to find the raw ID when configuring by environment variable:
+open **Dashboard → Users**, click the user, and copy the ID out of the browser's
+address bar (`.../useredit.html?userId=<this part>`). That value becomes
+`JELLYFIN_USER_ID`.
 
 ### Getting a Plex token
 
@@ -60,14 +63,32 @@ and never sends it to a browser.
 Unlike Jellyfin, no extra user ID is needed for the "unwatched only" filter — a
 Plex token already identifies one user, so play state is always available.
 
-#### Finding your movie library section
+#### Choosing which movie libraries to use
 
-A Plex server can hold several libraries, so the app needs to know which one
-holds movies. It discovers this automatically on first use by picking the first
-section of type `movie`, which is correct for most servers.
+Both Jellyfin and Plex can hold several libraries, and each library you name becomes
+its own movie source — so a host can run a session against your children's library
+alone. Name none and every library is used, which is what an untouched deployment
+does.
 
-If you have more than one movie library, set `PLEX_LIBRARY_SECTION` explicitly.
-List your sections with:
+The easiest way to choose is the settings screen: check the connection and it lists
+what your server actually has.
+
+By environment variable, name them however you like — the display name or the
+identifier:
+
+```
+JELLYFIN_LIBRARIES=Films,Kids Films
+PLEX_LIBRARY_SECTIONS=Films,Kids Films
+```
+
+Names are what you know. Identifiers are what works when the app starts *before*
+your media server does: a name has to be looked up on the server first, so on a cold
+start the app comes up without those libraries and adds them once the server answers,
+whereas an identifier needs no lookup and is registered immediately. If your app and
+your media server start together and you want the sources present from the first
+second, use identifiers.
+
+To find Plex's section keys by hand:
 
 ```bash
 curl -sS -H "Accept: application/json" \
@@ -79,23 +100,8 @@ The `key` of the section whose `type` is `"movie"` is the value to use.
 
 ## The quickest path
 
-Create a folder for the deployment with two files in it.
-
-**`.env`** — your configuration. Fill in your own values:
-
-```bash
-JELLYFIN_URL=http://jellyfin.local:8096
-JELLYFIN_API_KEY=your-jellyfin-api-key
-JELLYFIN_USER_ID=your-jellyfin-user-id   # optional; needed for "unwatched only"
-PLEX_URL=http://plex.local:32400         # optional; a Plex library as a source
-PLEX_TOKEN=your-plex-token               # required with PLEX_URL
-PLEX_LIBRARY_SECTION=2                   # optional; only if you have several movie libraries
-TMDB_READ_TOKEN=your-tmdb-v4-read-token  # optional; enables streaming sources
-STREAMING_PROVIDERS=netflix,prime,disney # optional; any TMDB watch provider, by name or id
-TMDB_WATCH_REGION=US                     # optional; defaults to US
-PUBLIC_URL=http://your-server-ip:8080
-SESSION_TTL=4h
-```
+Start the app with nothing configured, then fill everything in from the settings
+screen. You do not need any credentials in a file to begin.
 
 **`docker-compose.yml`** — pull the pre-built image:
 
@@ -105,19 +111,26 @@ services:
     image: registry.eiladin.xyz/movie-night-showdown:latest
     ports:
       - "8080:8080"
-    env_file: .env
     environment:
       PORT: "8080"
       CACHE_DIR: /var/cache/mns
+      CONFIG_FILE: /config/config.yaml
+      PUBLIC_URL: http://your-server-ip:8080
     volumes:
+      - config:/config
       - poster-cache:/var/cache/mns
     restart: unless-stopped
 
 volumes:
+  config:
   poster-cache:
 ```
 
-Then bring it up:
+The `config` volume matters. It holds the settings the app writes, including
+your credentials and its setup token. Without it, every restart forgets
+everything you configured.
+
+Bring it up:
 
 ```bash
 docker compose up -d
@@ -130,8 +143,68 @@ curl -fsS localhost:8080/healthz
 # {"commit":"...","status":"ok","version":"..."}
 ```
 
+### Getting the setup token
+
+Changing this server's configuration needs a token, which the app generates the
+first time it starts and prints to its log:
+
+```bash
+docker compose logs showdown | grep "setup: token"
+# setup: token for configuration changes: 9f2c...
+```
+
+There is no account system, so the log is the only place this appears. Whoever
+can read the log is whoever deployed the app, which is the correct audience.
+Keep the token to yourself: it authorizes changes to where this server points,
+and a server pointed at somewhere else will send your stored credentials there.
+
+If you lose it, stop the container, delete the `setupToken` line from
+`config.yaml` in the config volume, and start it again — a new one is generated
+and printed.
+
+### Configuring it
+
+Open `/settings` on the app, paste the setup token, and fill in whichever
+sources you have. Each section has a toggle; only the sources you enable are
+offered to hosts.
+
+Credentials are stored on the server and are never sent back to the browser — a
+saved one shows as a placeholder, and you replace it by typing a new value or
+remove it with the button beside it.
+
+Each section has a **Check** button. Use it. It makes the server query that source
+for real and tells you what came back — the number of movies Jellyfin can see, the
+name of the Plex library that will be used, or which part is wrong: an unreachable
+URL and a rejected credential are reported differently, because the fix differs.
+You do not have to save first, and if a credential is already stored you can leave
+the field alone and check what is saved.
+
+Checking also fills in the settings you would otherwise have to go and look up.
+Jellyfin's accounts appear as a dropdown for the "unwatched only" filter, and each
+service's movie libraries appear as chips you pick from. All of them are opaque
+identifiers — a 32-character user id, a hexadecimal library id, a numeric section key
+— so none of those fields is shown until a check has fetched the options. There is
+nothing to type.
+
+**Choosing several libraries changes what a host sees.** Each library you pick becomes
+its own source, so the host's picker lists "Jellyfin — Kids Movies" beside "Netflix"
+rather than one entry called "Jellyfin". That is the point: a session can be dealt
+from one library alone. Pick none and every library is used, which is what a
+deployment that has never touched this setting already does.
+
+Most changes take effect immediately. Changing a movie source rebuilds the deck
+sources, which ends any session in progress, so the screen asks first.
+
 Now open `PUBLIC_URL` in a browser, start a showdown, and share the code or QR
 with everyone else on the network.
+
+### Configuring with environment variables instead
+
+Every setting can also be supplied as an environment variable, which is how a
+deployment that has never opened the settings screen is configured. See
+[Configuration reference](#configuration-reference) for the full list, and read
+[How settings are resolved](#how-settings-are-resolved) first — the two are not
+interchangeable, and the difference will otherwise surprise you later.
 
 ## Building from source instead
 
@@ -142,13 +215,82 @@ for exactly this:
 ```bash
 git clone <this-repo> movie-night-showdown
 cd movie-night-showdown
-cp .env.example .env      # then edit it with your Jellyfin details
 docker compose up --build -d
 ```
 
+Configure it the same way as the pre-built image: read the setup token from the
+log and open `/settings`. If you would rather seed it from a file first, copy
+`.env.example` to `.env` and fill in what you have — the shipped
+`docker-compose.yml` reads it if present.
+
+## How settings are resolved
+
+The app owns its configuration file. The settings screen writes it, and what it
+writes is what the app runs with.
+
+Environment variables **seed** a deployment that has not saved a value for a
+setting yet. Once the file sets one, the variable for it is ignored. This is the
+same model Jellyfin, Plex, and the \*arr applications use, and it exists so that
+saving a setting is never silently undone by a variable in a compose file.
+
+Resolution is per key, not per source. If your file sets `plex.url` and your
+environment sets `PLEX_TOKEN`, you get both.
+
+Three things are deliberately never file-managed, because each names something
+established before the process starts:
+
+| Variable | Why |
+|---|---|
+| `PORT` | The listener is already bound and cannot be rebound under live connections. |
+| `CACHE_DIR` | It names a path inside the container, which has to be mounted before it can be used. |
+| `CONFIG_FILE` | It is how the file is found in the first place. |
+
+The settings screen shows all three, read-only, so you can see what is in effect.
+Changing one means editing your deployment and recreating the container.
+
+### When a variable is being ignored
+
+This is the one thing about this model that will confuse you six months from
+now, so it is reported in two places.
+
+The startup log states where every setting came from, and names any variable it
+is ignoring:
+
+```
+config: plex.url = http://plex.local:32400 (config file; PLEX_URL present, ignored)
+config: plex.token = *** (config file; PLEX_TOKEN present, ignored)
+config: publicUrl = http://nas:8080 (environment)
+config: sessionTtl = 4h (default)
+```
+
+The settings screen badges the same fields, so the conflict is visible at the
+moment you are editing one.
+
+If you want a variable to take effect again, remove the setting from the config
+file — clearing the field in the settings screen does exactly that.
+
+### Where the config file lives
+
+`CONFIG_FILE` names it, defaulting to `./config/config.yaml`. A missing file is
+not an error — a fresh deployment has saved nothing yet, and the app creates the
+file the first time it writes, which is on its first start when it generates the
+setup token.
+
+What does stop the app is a path it cannot use: if the directory cannot be
+created, every save would fail later, so it fails at startup instead with one
+clear message naming the path.
+
+The file is written with mode `0600` and holds your credentials in plaintext,
+along with the setup token. It is not encrypted — an app that decrypts its own
+configuration unattended has to keep the key where it can read it, which is
+obfuscation with the cost of encryption. Do not commit it, do not paste it into
+an issue, and be aware that it lands in any backup of its volume.
+
 ## Configuration reference
 
-Everything is configured through environment variables.
+Every setting below can be supplied as an environment variable. Everything except
+`PORT`, `CACHE_DIR` and `CONFIG_FILE` can also be set from the settings screen,
+which takes precedence — see [How settings are resolved](#how-settings-are-resolved).
 
 | Variable | Required | Purpose |
 |---|---|---|
@@ -157,20 +299,24 @@ Everything is configured through environment variables.
 | `JELLYFIN_USER_ID` | no | Needed for the "unwatched only" filter. |
 | `PLEX_URL` | one of¹ | Base URL of your Plex Media Server, including the port (usually `32400`). |
 | `PLEX_TOKEN` | one of¹ | Plex authentication token. Stays server-side; never sent to clients. See [Getting a Plex token](#getting-a-plex-token). |
-| `PLEX_LIBRARY_SECTION` | no | Key of the Plex library section holding movies. Discovered automatically when unset; set it only if your server has more than one movie library. See [Finding your movie library section](#finding-your-movie-library-section). |
+| `PLEX_LIBRARY_SECTIONS` | no | Comma-separated movie libraries to draw from, by name or by section key. Each becomes its own source. Unset means every library. See [Choosing which movie libraries to use](#choosing-which-movie-libraries-to-use). |
+| `PLEX_LIBRARY_SECTION` | no | Deprecated singular form, still read when the plural is unset so existing deployments keep working. Use the plural. |
+| `JELLYFIN_LIBRARIES` | no | Comma-separated movie libraries to draw from, by name or by library id. Each becomes its own source. Unset means every library. |
 | `TMDB_READ_TOKEN` | one of¹ | TMDB v4 API Read Access Token. Unlocks streaming services as sources; without it only Jellyfin is offered. Stays server-side; never sent to clients. See [Streaming services](#streaming-services). |
-| `STREAMING_PROVIDERS` | no | Comma-separated list of streaming services to offer, by name or numeric TMDB provider id. Any provider TMDB tracks is accepted. Defaults to `netflix,prime,disney`. Ignored when `TMDB_READ_TOKEN` is unset. See [Choosing which services to offer](#choosing-which-services-to-offer). |
+| `STREAMING_PROVIDERS` | no | Comma-separated list of streaming services to offer, by name or numeric TMDB provider id. Any provider TMDB tracks is accepted. Defaults to `netflix,prime,disney` **only for a deployment that has not saved streaming settings** — once the settings screen manages them, services are chosen explicitly or not at all. Ignored when `TMDB_READ_TOKEN` is unset. See [Choosing which services to offer](#choosing-which-services-to-offer). |
 | `TMDB_WATCH_REGION` | no | ISO 3166-1 country code deciding which streaming services exist and what they carry. Defaults to `US`. See [Setting the region](#setting-the-region). |
 | `PUBLIC_URL` | yes | The URL people use to reach the app. Used to build the join links and QR codes, so it must be reachable from their devices. |
-| `PORT` | no | Port the app listens on. Defaults to `8080`. |
 | `SESSION_TTL` | no | How long an idle session survives. Defaults to a few hours (`4h`). |
-| `CACHE_DIR` | no | Where posters are cached on disk. Mount a volume here to keep the cache across restarts. |
+| `PORT` | no | Port the app listens on. Defaults to `8080`. Deployment-level: not settable from the settings screen. |
+| `CACHE_DIR` | no | Where posters are cached on disk. Mount a volume here to keep the cache across restarts. Deployment-level: not settable from the settings screen. |
+| `CONFIG_FILE` | no | Where the settings the app writes are stored. Defaults to `./config/config.yaml`. Deployment-level: not settable from the settings screen. |
 
-¹ The app needs at least one movie source. Set `JELLYFIN_URL` **and**
-`JELLYFIN_API_KEY` for a Jellyfin library, `PLEX_URL` **and** `PLEX_TOKEN` for a
-Plex library, or `TMDB_READ_TOKEN` for streaming services. Any combination works,
-and every configured source appears in the host's source picker. With none of
-them set, the app serves only its `/setup` page.
+¹ The app needs at least one movie source, configured either from the settings
+screen or through these variables: `JELLYFIN_URL` **and** `JELLYFIN_API_KEY` for
+a Jellyfin library, `PLEX_URL` **and** `PLEX_TOKEN` for a Plex library, or
+`TMDB_READ_TOKEN` for streaming services. Any combination works, and every
+configured source appears in the host's source picker. With none of them set, the
+app serves only its `/setup` page, which points at the settings screen.
 
 A movie present in more than one source appears once, carrying a badge for each:
 the same film in your Plex library and on Netflix is one card, not two. Sources
@@ -312,7 +458,7 @@ things to get right:
 ## Keeping the poster cache
 
 The app caches poster images on disk so repeated showdowns don't re-fetch every
-image from Jellyfin. Mount a volume at `CACHE_DIR` (as the examples above do) and
+image from your library. Mount a volume at `CACHE_DIR` (as the examples above do) and
 that cache survives restarts and upgrades. It's purely a performance nicety —
 delete it any time and it simply rebuilds.
 
@@ -338,9 +484,36 @@ docker compose up --build -d
 set to something the phones can't reach (like `localhost`). Set it to the
 server's actual address on the network.
 
-**No movies show up when filtering.** Double-check `JELLYFIN_URL` and
-`JELLYFIN_API_KEY`. The health check at `/healthz` tells you the app is running,
-but library queries need a valid key with access to your movie library.
+**No movies show up when filtering.** Check the source's URL and credential on
+the settings screen. The health check at `/healthz` tells you the app is running,
+but library queries need a credential with access to your movie library.
+
+**I changed a variable in `docker-compose.yml` and nothing happened.** The
+config file wins for any setting it has saved. The startup log says so per
+setting — look for `present, ignored`:
+
+```bash
+docker compose logs showdown | grep ignored
+```
+
+Either change the setting on the settings screen instead, or clear it there so
+the variable takes effect again. See
+[How settings are resolved](#how-settings-are-resolved).
+
+**My settings vanished after recreating the container.** The config volume is
+not mounted, so the file the app writes went with the container. Add
+`config:/config` and `CONFIG_FILE=/config/config.yaml`, as in
+[The quickest path](#the-quickest-path). This also means the setup token changes
+on every start.
+
+**I lost the setup token.** Stop the container, remove the `setupToken` line from
+`config.yaml` in the config volume, and start it again. A new one is generated
+and printed to the log.
+
+**Streaming services disappeared after I saved settings.** Once the settings
+screen manages streaming, services are selected explicitly — the old
+`netflix,prime,disney` default no longer applies. Enable streaming on the
+settings screen, check the token, and tick the services you want.
 
 **The lobby never updates or matches never fire.** That's the WebSocket
 connection being dropped — check that your reverse proxy is forwarding `/ws`.

@@ -1,0 +1,148 @@
+/* The chip picker: selected things as chips, plus a way to add another.
+ *
+ * Two ways, decided by cardinality. The search variant hides several hundred
+ * options behind a query and shows results in an overlay. The list variant renders
+ * the handful that are left inline, because hiding four things behind a search box
+ * only hides them.
+ *
+ * Colours come from the tokens in index.css so this reads the same in light and
+ * dark. An earlier version hardcoded a dark palette, which put near-white text on a
+ * white page in light mode.
+ */
+.chip-picker {
+  /* The search overlay is absolutely positioned against this, so opening it
+     overlays the form rather than pushing everything below it down the page. */
+  position: relative;
+}
+
+.chip-picker-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.6rem;
+}
+
+.chip-picker-empty {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+/* Selected things use the accent fill, matching the filter chips on the host setup
+   screen — they mean the same thing in both places. */
+.chip-picker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.5rem 0.4rem 0.9rem;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-size: 0.95rem;
+}
+
+.chip-picker-chip button {
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+}
+
+.chip-picker-chip button:hover {
+  color: #d92d20;
+}
+
+@media (prefers-color-scheme: dark) {
+  .chip-picker-chip button:hover {
+    color: #ff8a80;
+  }
+}
+
+.chip-picker > input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* The list variant's remaining options. Outlined rather than filled, so at a glance
+   a chip above reads as chosen and one of these reads as available. */
+.chip-picker-available {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.chip-picker-add {
+  padding: 0.4rem 0.9rem;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-h);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.chip-picker-add:hover {
+  border-style: solid;
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+/* No max-height and no scroll: the search list is capped at MAX_VISIBLE options, so
+   it cannot outgrow the overlay. A scrollbar here would only ever appear if that cap
+   were removed. */
+.chip-picker-options {
+  position: absolute;
+  z-index: 10;
+  left: 0;
+  right: 0;
+  overflow: hidden;
+  margin: 0.35rem 0 0;
+  padding: 0.35rem;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+.chip-picker-options li[role='option'] {
+  padding: 0.65rem 0.8rem;
+  border-radius: 6px;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.chip-picker-options li[role='option'].active,
+.chip-picker-options li[role='option']:hover {
+  background: var(--accent-bg);
+}
+
+.chip-picker-none {
+  padding: 0.5rem 0;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.chip-picker-options .chip-picker-none {
+  padding: 0.65rem 0.8rem;
+}
+
+/* How many matches were not rendered. The list is capped, and a capped list that
+   looks complete is worse than a short one that admits it is short. */
+.chip-picker-more {
+  padding: 0.5rem 0.8rem 0.35rem;
+  margin-top: 0.35rem;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.85rem;
+}

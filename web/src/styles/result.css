@@ -81,6 +81,18 @@
   color: #ccc;
 }
 
+/* Explains an ending nobody in the room caused, so it needs more weight than
+   the instruction line below it. */
+.leaderboard-notice {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid #e5a00d;
+  background: rgba(229, 160, 13, 0.08);
+  color: #eee;
+  text-align: left;
+  max-width: 32rem;
+}
+
 .leaderboard {
   list-style: none;
   padding: 0;

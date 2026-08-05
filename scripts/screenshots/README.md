@@ -1,7 +1,7 @@
 # Screenshot pipeline
 
-Regenerates the five app screenshots in `docs/screenshots/` (`01-landing.png`
-through `05-result.png`) deterministically, with no dependency on a real
+Regenerates the seven app screenshots in `docs/screenshots/` (`01-landing.png`
+through `07-settings.png`) deterministically, with no dependency on a real
 Jellyfin server or any real/personal data.
 
 ## What it does
@@ -9,12 +9,16 @@ Jellyfin server or any real/personal data.
 The pipeline runs the actual app (Go server + built React frontend) against
 a small, self-contained mock Jellyfin server, then drives it with Playwright
 through the real user flow — landing, start a session, lobby, swipe, match —
-and screenshots each screen. Nothing here calls out to a real Jellyfin
+and screenshots each screen. It then captures the two operator screens: the
+setup guide and the settings screen. Nothing here calls out to a real Jellyfin
 instance or the network.
 
 - **Mock Jellyfin** (`mock-jellyfin/main.go`): a stdlib-only Go HTTP server
-  implementing just the three endpoints the app's Jellyfin client calls
-  (`GET /Items`, `GET /Items/Filters`, `GET /Items/{id}/Images/Primary`). It
+  implementing the endpoints the app's Jellyfin client calls (`GET /Items`,
+  `GET /Items/Filters`, `GET /Items/{id}/Images/Primary`) plus the three the
+  settings screen's connection check reads (`GET /System/Info/Public`,
+  `GET /Users`, `GET /Library/MediaFolders`), so that check can be captured
+  succeeding. The accounts and libraries it reports are invented too. It
   serves a hardcoded catalog of **15 fictional movies** (invented titles,
   genres, years, ratings — none of them real films) and placeholder poster
   art from `fixtures/posters/`.
@@ -82,12 +86,37 @@ fixture catalog hardcoded in `mock-jellyfin/main.go`.
 | `03-lobby.png` | 390×844 | 3x | viewport | Lobby with QR code and the host roster entry |
 | `04-swipe.png` | 390×844 | 3x | viewport | Swipe deck, first card |
 | `05-result.png` | 390×844 | 3x | viewport | Match screen after a single "Yes" swipe (`requiredCount=1`) |
+| `06-setup.png` | 1100×900 | 2x | full page | The setup guide, captured from a second app started with **no** sources |
+| `07-settings.png` | 1100×900 | 2x | full page | Settings, past the token gate, after a connection check and one library selected |
 
-All contexts use `colorScheme: 'dark'` and an iPhone-class mobile user
-agent/touch profile (Playwright's `devices['iPhone 12 Pro']`). Pass 1
-(01/03/04/05) captures at 3x device scale; pass 2 (02) captures at 2x with a
-full-page screenshot, since the filtered poster grid is taller than one
-viewport.
+Every context uses `colorScheme: 'dark'`. Passes 1 and 2 use an iPhone-class
+mobile user agent and touch profile (Playwright's `devices['iPhone 12 Pro']`),
+because that is what participants use: pass 1 (01/03/04/05) captures at 3x device
+scale, and pass 2 (02) at 2x full-page, since the filtered poster grid is taller
+than one viewport.
+
+Pass 3 (06/07) is desktop, and deliberately so. Nobody configures a server from a
+phone, the settings screen is `48rem` wide, and at 390px it renders as a very tall
+column with its read-only Container list collapsed to one field per row.
+
+Three things pass 3 needs that the others do not:
+
+- **A second app with no sources**, on `BARE_PORT` (default `8081`). The setup guide
+  describes the state of a deployment that has nothing configured; capturing it from
+  the configured instance would show every source already available, which is the
+  opposite of what the page is for. `run.sh` starts that instance with every source
+  variable explicitly cleared via `env -u` — the pipeline inherits the caller's
+  environment, and a developer with `TMDB_READ_TOKEN` exported would otherwise hand
+  the "unconfigured" app a working streaming source.
+- **The setup token**, which the server generates on first start and prints to its
+  log. `run.sh` reads it from there and passes it in as `CAPTURE_SETUP_TOKEN`; the
+  capture types it into the gate and screenshots the screen behind it, so no token
+  appears in an image.
+- **Relative paths for `CACHE_DIR` and `CONFIG_FILE`**, under a `.screenshots-run/`
+  directory that is deleted before and after each run. The settings screen prints
+  both values back verbatim in its Container section, so an absolute path would embed
+  whoever ran the pipeline — their home directory, in a committed public screenshot —
+  and would differ on every machine, making the PNG impossible to reproduce.
 
 ## Troubleshooting
 
