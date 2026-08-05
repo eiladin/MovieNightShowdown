@@ -26,3 +26,6 @@ scripts/screenshots/node_modules/
 .DS_Store
 .idea/
 .vscode/
+
+# Working directory for the screenshot pipeline (scripts/screenshots/run.sh).
+.screenshots-run/

@@ -112,6 +112,30 @@ log, and configure it from the browser. The full walkthrough — example
 `docker-compose.yml`, how to get a Jellyfin API key or a Plex token, and
 reverse-proxy notes — lives in **[docs/INSTALL.md](docs/INSTALL.md)**.
 
+With nothing configured yet it doesn't just fail at you. It says which sources it
+can't see and what each one needs, whichever way you'd rather set it up.
+
+<div align="center">
+<img src="docs/screenshots/06-setup.png" alt="The setup guide shown when no movie source is configured" width="700" />
+</div>
+
+After that it's one screen. Paste the setup token, fill in whichever server you
+actually have, and press **Check connection** — it queries that server for real and
+tells you what came back, whether that's how many movies it can see or which half of
+the credentials is wrong. You find out now rather than when four people are already
+holding their phones.
+
+Checking also fills in the parts you'd otherwise have to go hunting for. Your Jellyfin
+accounts turn into a dropdown for the "unwatched only" filter, and your libraries turn
+into a row you tick. Each library you pick becomes its own source, so a host can run a
+night off the kids' shelf alone; tick none and the deck draws from all of them.
+Credentials never come back to the browser — a saved one shows as dots, and nothing on
+this page can read it.
+
+<div align="center">
+<img src="docs/screenshots/07-settings.png" alt="The settings screen with a Jellyfin connection checked and libraries selected" width="700" />
+</div>
+
 ## Under the hood
 
 The backend is a single Go binary: it manages sessions, talks to your libraries,

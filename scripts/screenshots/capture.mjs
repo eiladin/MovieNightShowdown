@@ -17,6 +17,12 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..')
 const OUT_DIR = path.join(REPO_ROOT, 'docs', 'screenshots')
 
 const BASE_URL = process.env.CAPTURE_BASE_URL || 'http://localhost:8080'
+// BARE_URL serves an app with no sources configured, which is the only state the
+// /setup guide describes; see run.sh.
+const BARE_URL = process.env.CAPTURE_BARE_URL || 'http://localhost:8081'
+// The settings screen is behind the setup token, which the server prints to its log
+// on first start. run.sh reads it from there and passes it in.
+const SETUP_TOKEN = process.env.CAPTURE_SETUP_TOKEN || ''
 const STEP_TIMEOUT = 15_000
 const HOST_NAME = 'Alex'
 
@@ -71,6 +77,7 @@ async function main() {
     try {
         await runPass1(browser)
         await runPass2(browser)
+        await runPass3(browser)
     } finally {
         await browser.close()
     }
@@ -176,6 +183,75 @@ async function runPass2(browser) {
 
         await step('capture 02-host (full page)', async () => {
             await page.screenshot({ path: outPath('02-host.png'), fullPage: true })
+        })
+    } finally {
+        await context.close()
+    }
+}
+
+// --- Pass 3: 06-setup, 07-settings (operator screens, desktop) ---
+//
+// Desktop rather than the mobile viewport the other passes use, and deliberately so:
+// these two are configured from a laptop, the settings screen is 48rem wide, and at
+// 390px it renders as a very tall column with its read-only Container list collapsed
+// to one field per row. Nobody sets this up from a phone.
+async function runPass3(browser) {
+    const context = await browser.newContext({
+        viewport: { width: 1100, height: 900 },
+        deviceScaleFactor: 2,
+        colorScheme: 'dark',
+    })
+    const page = await context.newPage()
+    page.setDefaultTimeout(STEP_TIMEOUT)
+
+    try {
+        await step('capture 06-setup (unconfigured app, full page)', async () => {
+            await page.goto(BARE_URL + '/setup', { waitUntil: 'domcontentloaded' })
+            await page.waitForSelector('.setup-page', { timeout: STEP_TIMEOUT })
+            // The status list is fetched, so wait for it rather than for the shell.
+            await page.locator('.setup-status').waitFor({ timeout: STEP_TIMEOUT })
+            await page.screenshot({ path: outPath('06-setup.png'), fullPage: true })
+        })
+
+        await step('unlock the settings screen', async () => {
+            if (!SETUP_TOKEN) {
+                throw new Error('CAPTURE_SETUP_TOKEN is empty; run.sh reads it from the app log')
+            }
+            await page.goto(BASE_URL + '/settings', { waitUntil: 'domcontentloaded' })
+            await page.getByLabel('Setup token').fill(SETUP_TOKEN)
+            await page.getByRole('button', { name: 'Continue' }).click()
+            // Past the gate. Waiting for the save button rather than a heading, since
+            // the gate has headings of its own.
+            await page.getByRole('button', { name: 'Save settings' }).waitFor({
+                timeout: STEP_TIMEOUT,
+            })
+        })
+
+        await step('check the connection so the discovered fields appear', async () => {
+            // The account and library pickers are not rendered until a check has
+            // enumerated the options — the identifiers are opaque, so the screen never
+            // invites anyone to type one. Capturing before the check would document a
+            // screen with half its controls missing.
+            await page.getByRole('button', { name: 'Check connection' }).first().click()
+            await page.getByText(/Connected to Movie Closet/).waitFor({ timeout: STEP_TIMEOUT })
+            await page.locator('fieldset.chip-group').first().waitFor({ timeout: STEP_TIMEOUT })
+        })
+
+        await step('choose a library so the control shows both states', async () => {
+            // One checked and one not, so the screenshot shows what a selection looks
+            // like rather than an untouched group.
+            await page
+                .locator('fieldset.chip-group .chip', { hasText: 'Family Movies' })
+                .first()
+                .click()
+        })
+
+        await step('capture 07-settings (full page)', async () => {
+            // The chip fill transitions over 0.2s. Reading the page before it settles
+            // captures the unchecked colour, which is the state the shot exists to
+            // contrast against.
+            await page.waitForTimeout(500)
+            await page.screenshot({ path: outPath('07-settings.png'), fullPage: true })
         })
     } finally {
         await context.close()
