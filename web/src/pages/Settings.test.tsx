@@ -615,9 +615,40 @@ describe('Settings', () => {
         expect(body?.plex.libraries).toEqual([{ id: '3', name: 'Kids Films' }])
     })
 
-    // A stored library the server no longer lists still renders, so opening the
-    // screen cannot silently drop it on the next save.
-    it('keeps a stored library the server does not list', async () => {
+    // The state after a restart: libraries are saved, no check has run yet. They have
+    // to render under their own names and unmarked. Before the merge they rendered as
+    // bare identifiers labelled "not on this server", which was a lie — nothing had
+    // been fetched to judge them against.
+    it('shows saved libraries by name on load, before any check', async () => {
+        const stored = settingsFixture({
+            plex: {
+                enabled: true,
+                url: 'http://plex:32400',
+                tokenSet: true,
+                librarySection: '',
+                libraries: [
+                    { id: '1', name: 'Films' },
+                    { id: '3', name: 'Kids Films' },
+                ],
+            },
+        })
+        installFetch({ settings: stored })
+        const user = userEvent.setup()
+        renderSettings()
+        await enterToken(user)
+
+        await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Films' })).toBeTruthy())
+        for (const name of ['Films', 'Kids Films']) {
+            const box = screen.getByRole('checkbox', { name }) as HTMLInputElement
+            expect(box.checked).toBe(true)
+        }
+        // No check has run, so nothing may be claimed missing.
+        expect(screen.queryByText(/not on this server/)).toBeNull()
+    })
+
+    // Once a check has enumerated the libraries, a saved one absent from that list
+    // genuinely is gone, and saying so is the point.
+    it('marks a saved library the server no longer lists, after a check', async () => {
         const stored = settingsFixture({
             plex: {
                 enabled: true,
@@ -627,15 +658,31 @@ describe('Settings', () => {
                 libraries: [{ id: '9', name: 'Retired Films' }],
             },
         })
-        installFetch({ settings: stored })
+        installFetch({
+            settings: stored,
+            plexCheck: {
+                valid: true,
+                message: 'Connected.',
+                libraries: [{ id: '1', name: 'Films' }],
+            },
+        })
         const user = userEvent.setup()
         renderSettings()
         await enterToken(user)
+        await waitFor(() =>
+            expect(screen.getByRole('checkbox', { name: 'Retired Films' })).toBeTruthy(),
+        )
+        expect(screen.queryByText(/not on this server/)).toBeNull()
 
-        // Rendered by id and marked, because the server no longer offers it. It has
-        // to stay switchable or it persists through every later save.
-        await waitFor(() => expect(screen.getByText(/9 — not on this server/)).toBeTruthy())
-        expect((screen.getByRole('checkbox', { name: /9/ }) as HTMLInputElement).checked).toBe(true)
+        await user.click(screen.getByRole('button', { name: 'Check connection' }))
+
+        await waitFor(() =>
+            expect(screen.getByText(/Retired Films — not on this server/)).toBeTruthy(),
+        )
+        // Still checked, so it can be switched off rather than persisting silently.
+        expect(
+            (screen.getByRole('checkbox', { name: /Retired Films/ }) as HTMLInputElement).checked,
+        ).toBe(true)
     })
 
     // An empty picker reported an unreachable TMDB, a rejected token, and a region

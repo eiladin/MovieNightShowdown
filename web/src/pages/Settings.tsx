@@ -440,7 +440,24 @@ export default function Settings() {
                 </p>
             )
         }
-        const options = available ?? []
+        // The options are the server's list plus anything already saved, so a library
+        // chosen on an earlier visit renders under its own name the moment the screen
+        // loads. Without the merge the screen opened showing every saved library as a
+        // bare identifier marked "not on this server", which was a lie: nothing had
+        // been fetched to judge them against yet.
+        const options = [...(available ?? [])]
+        for (const lib of [...chosen, ...(stored ?? [])]) {
+            if (!options.some((o) => o.id === lib.id)) {
+                options.push({ id: lib.id, name: lib.name || lib.id })
+            }
+        }
+
+        // Only claim a library is gone when there is a fetched list to say so. Before
+        // a check has run, "absent from the options" means "not asked about".
+        const missingIds = available
+            ? options.filter((o) => !available.some((a) => a.id === o.id)).map((o) => o.id)
+            : []
+
         return (
             <>
                 <p className="settings-hint">
@@ -450,6 +467,7 @@ export default function Settings() {
                     legend="Libraries"
                     options={options}
                     selected={chosen.map((l) => l.id)}
+                    missingIds={missingIds}
                     emptyNote="None chosen, so every library is used."
                     noneNote="No movie libraries were found on this server."
                     onChange={(ids) =>

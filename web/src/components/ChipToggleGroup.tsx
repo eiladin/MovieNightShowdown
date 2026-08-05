@@ -18,6 +18,14 @@ interface ChipToggleGroupProps {
     // noneNote is shown when there are no options at all — a different situation with
     // a different fix.
     noneNote: string
+    // missingIds are options the source no longer offers, rendered marked so they can
+    // be switched off rather than persisting silently.
+    //
+    // The caller decides, because only the caller knows whether its option list is
+    // authoritative. Deriving this here — "selected but not in options" — claimed
+    // every saved value was missing whenever the list had simply not been fetched
+    // yet, which is the state the screen loads in.
+    missingIds?: string[]
 }
 
 // ChipToggleGroup is the multi-select control for a handful of options.
@@ -38,50 +46,37 @@ export default function ChipToggleGroup({
     onChange,
     emptyNote,
     noneNote,
+    missingIds = [],
 }: ChipToggleGroupProps) {
     function toggle(id: string) {
         onChange(selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id])
     }
 
-    // A selected id the option list does not contain still renders, so a library
-    // removed on the server — or one saved before this screen could enumerate them —
-    // can be seen and switched off instead of silently persisting.
-    const orphaned = selected.filter((id) => !options.some((o) => o.id === id))
-
     return (
         <fieldset className="chip-group">
             <legend>{legend}</legend>
 
-            {options.length === 0 && orphaned.length === 0 && (
-                <p className="chip-group-note">{noneNote}</p>
-            )}
+            {options.length === 0 && <p className="chip-group-note">{noneNote}</p>}
 
-            {options.map((o) => (
-                <label
-                    key={o.id}
-                    className={`chip ${selected.includes(o.id) ? 'checked' : ''}`}
-                >
-                    <input
-                        type="checkbox"
-                        className="sr-only"
-                        checked={selected.includes(o.id)}
-                        onChange={() => toggle(o.id)}
-                    />
-                    {o.name}
-                </label>
-            ))}
-
-            {orphaned.map((id) => (
-                <label key={id} className="chip checked orphaned">
-                    <input
-                        type="checkbox"
-                        className="sr-only"
-                        checked
-                        onChange={() => toggle(id)}
-                    />
-                    {id} — not on this server
-                </label>
-            ))}
+            {options.map((o) => {
+                const missing = missingIds.includes(o.id)
+                return (
+                    <label
+                        key={o.id}
+                        className={`chip ${selected.includes(o.id) ? 'checked' : ''} ${
+                            missing ? 'orphaned' : ''
+                        }`}
+                    >
+                        <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={selected.includes(o.id)}
+                            onChange={() => toggle(o.id)}
+                        />
+                        {missing ? `${o.name} — not on this server` : o.name}
+                    </label>
+                )
+            })}
 
             {emptyNote && selected.length === 0 && (
                 <p className="chip-group-note">{emptyNote}</p>

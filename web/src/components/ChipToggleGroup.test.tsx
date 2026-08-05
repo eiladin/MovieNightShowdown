@@ -8,7 +8,7 @@ const LIBRARIES: ChipToggleOption[] = [
     { id: 'bbb', name: 'Kids Movies' },
 ]
 
-function renderGroup(selected: string[] = [], options = LIBRARIES) {
+function renderGroup(selected: string[] = [], options = LIBRARIES, missingIds: string[] = []) {
     const onChange = vi.fn()
     render(
         <ChipToggleGroup
@@ -16,6 +16,7 @@ function renderGroup(selected: string[] = [], options = LIBRARIES) {
             options={options}
             selected={selected}
             onChange={onChange}
+            missingIds={missingIds}
             emptyNote="None chosen, so every library is used."
             noneNote="No movie libraries were found on this server."
         />,
@@ -89,18 +90,32 @@ describe('ChipToggleGroup', () => {
         expect(screen.getByText('No movie libraries were found on this server.')).toBeTruthy()
     })
 
-    // A library removed on the server, or saved before this screen could enumerate
-    // them, has to stay visible so it can be switched off — otherwise it persists
-    // through every later save with nothing on screen admitting it exists.
-    it('keeps a selection the option list does not contain, and marks it', async () => {
+    // A library the source no longer offers is marked, so it can be switched off
+    // rather than persisting through every later save with nothing admitting it
+    // exists. The caller says which — this component never guesses.
+    it('marks an option the caller reported missing', async () => {
         const user = userEvent.setup()
-        const onChange = renderGroup(['retired'], LIBRARIES)
+        const onChange = renderGroup(
+            ['retired'],
+            [...LIBRARIES, { id: 'retired', name: 'Retired Films' }],
+            ['retired'],
+        )
 
-        const orphan = screen.getByRole('checkbox', { name: /retired/ })
+        const orphan = screen.getByRole('checkbox', { name: /Retired Films/ })
         expect((orphan as HTMLInputElement).checked).toBe(true)
-        expect(screen.getByText(/retired — not on this server/)).toBeTruthy()
+        expect(screen.getByText(/Retired Films — not on this server/)).toBeTruthy()
 
         await user.click(orphan)
         expect(onChange).toHaveBeenCalledWith([])
+    })
+
+    // Nothing is marked unless the caller says so. Deriving it here from "selected but
+    // not in options" claimed every saved value was missing while the option list had
+    // simply not been fetched — which is the state the settings screen loads in.
+    it('marks nothing when the caller reports nothing missing', () => {
+        renderGroup(['aaa', 'bbb'])
+
+        expect(screen.queryByText(/not on this server/)).toBeNull()
+        expect(document.querySelectorAll('.chip.orphaned')).toHaveLength(0)
     })
 })
