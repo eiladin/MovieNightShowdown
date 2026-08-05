@@ -24,9 +24,10 @@ export default function Setup() {
             <h1>Finish setting up</h1>
 
             <p className="setup-lede">
-                Movie Night Showdown needs at least one place to get movies from. Pick whichever
-                of these fits your setup, add the environment variables to your{' '}
-                <code>.env</code> or <code>docker-compose.yml</code>, and restart the container.
+                Movie Night Showdown needs at least one place to get movies from. The quickest
+                way is the <Link to="/settings">settings screen</Link>, which needs the setup
+                token the server prints to its log at startup. The environment variables below
+                still work, and seed a deployment that has no saved configuration yet.
             </p>
 
             {status && (
@@ -57,12 +58,15 @@ export default function Setup() {
                     <code>
                         {'JELLYFIN_URL=http://jellyfin.local:8096\n'}
                         {'JELLYFIN_API_KEY=your-jellyfin-api-key\n'}
-                        {'JELLYFIN_USER_ID=your-user-id   # optional, for "unwatched only"'}
+                        {'JELLYFIN_USER_ID=your-user-id   # optional, for "unwatched only"\n'}
+                        {'JELLYFIN_LIBRARIES=Movies,Kids Movies   # optional, defaults to all'}
                     </code>
                 </pre>
                 <p className="setup-note">
                     Create the API key in Jellyfin under Dashboard → API Keys. It stays on this
-                    server and is never sent to browsers.
+                    server and is never sent to browsers. Naming libraries is optional — leave it
+                    out and every one is used; name several and each becomes its own source, so a
+                    host can deal from one alone.
                 </p>
             </section>
 
@@ -73,7 +77,7 @@ export default function Setup() {
                     <code>
                         {'PLEX_URL=http://plex.local:32400\n'}
                         {'PLEX_TOKEN=your-plex-token\n'}
-                        {'PLEX_LIBRARY_SECTION=2   # optional, only with several movie libraries'}
+                        {'PLEX_LIBRARY_SECTIONS=Films,Kids Films   # optional, defaults to all'}
                     </code>
                 </pre>
                 <p className="setup-note">

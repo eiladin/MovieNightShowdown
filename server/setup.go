@@ -26,13 +26,15 @@ type setupResponse struct {
 // handleSetup reports what this deployment is able to do, so a fresh install
 // can explain itself instead of failing at the first query.
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
-	sources := configuredSources(s.sources, s.order)
+	set := s.currentSources()
+	sources := configuredSources(set.sources, set.order)
+	cfg := s.config()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(setupResponse{
 		Configured: len(sources) > 0,
-		Jellyfin:   s.cfg.JellyfinConfigured(),
-		Plex:       s.cfg.PlexConfigured(),
-		Streaming:  s.cfg.StreamingConfigured(),
+		Jellyfin:   cfg.JellyfinConfigured(),
+		Plex:       cfg.PlexConfigured(),
+		Streaming:  cfg.StreamingConfigured(),
 		Sources:    sources,
 	})
 }

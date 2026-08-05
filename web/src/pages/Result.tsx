@@ -13,6 +13,7 @@ export default function Result({ socket }: ResultProps) {
     const status = useSessionStore((s) => s.status)
     const winner = useSessionStore((s) => s.winner)
     const leaderboard = useSessionStore((s) => s.leaderboard)
+    const endReason = useSessionStore((s) => s.endReason)
     const participants = useSessionStore((s) => s.participants)
     const myParticipantId = useSessionStore((s) => s.myParticipantId)
     const navigate = useNavigate()
@@ -49,7 +50,15 @@ export default function Result({ socket }: ResultProps) {
     if (status === 'ended' && leaderboard) {
         return (
             <div className="result-screen">
-                <h1>No match</h1>
+                <h1>{endReason === 'reconfigured' ? 'Session ended' : 'No match'}</h1>
+                {/* An ending nobody in the room caused needs explaining, or the
+                    leaderboard reads as though the deck ran out. */}
+                {endReason === 'reconfigured' && (
+                    <p className="leaderboard-notice">
+                        The server was reconfigured, so this session ended. Here is where the
+                        voting stood.
+                    </p>
+                )}
                 <p className="leaderboard-desc">
                     {isHost ? 'Tap a movie to declare it the winner' : 'Waiting for the host to choose'}
                 </p>

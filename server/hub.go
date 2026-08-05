@@ -56,6 +56,10 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Load the source set once, before the upgrade: the client keeps this
+	// snapshot for its lifetime, and a reload ends its session anyway.
+	set := s.currentSources()
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("ws: upgrade failed: %v", err)
@@ -67,8 +71,8 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		send:    make(chan []byte, sendBufferSize),
 		done:    make(chan struct{}),
 		session: session,
-		sources: s.sources,
-		order:   s.order,
+		sources: set.sources,
+		order:   set.order,
 		token:   token,
 	}
 
@@ -279,7 +283,7 @@ func (c *Client) handleJoin(raw json.RawMessage) {
 		c.sendJSON("match", MatchPayload{Movie: *match})
 	}
 	if lb != nil {
-		c.sendJSON("session_ended", SessionEndedPayload{Leaderboard: lb})
+		c.sendJSON("session_ended", SessionEndedPayload{Leaderboard: lb, Reason: EndReasonDeckExhausted})
 	}
 	session.broadcastParticipants()
 }
@@ -422,7 +426,7 @@ func (c *Client) handleSwipe(raw json.RawMessage) {
 		return
 	}
 	if lb != nil {
-		session.broadcast("session_ended", SessionEndedPayload{Leaderboard: lb})
+		session.broadcast("session_ended", SessionEndedPayload{Leaderboard: lb, Reason: EndReasonDeckExhausted})
 		return
 	}
 	session.broadcast("progress", progress)
@@ -506,7 +510,7 @@ func (c *Client) handleHostEnd(raw json.RawMessage) {
 	lb := session.buildLeaderboardLocked()
 	session.mu.Unlock()
 
-	session.broadcast("session_ended", SessionEndedPayload{Leaderboard: lb})
+	session.broadcast("session_ended", SessionEndedPayload{Leaderboard: lb, Reason: EndReasonHostEnded})
 }
 
 // findParticipantByTokenLocked returns the participant whose Token matches,

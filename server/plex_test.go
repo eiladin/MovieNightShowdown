@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // plexTestServer stands in for a Plex Media Server, serving canned JSON per
@@ -53,10 +54,9 @@ const plexTwoMovies = `{"MediaContainer":{"totalSize":42,"Metadata":[
 
 func plexClientFor(ts *plexTestServer, section string) *PlexClient {
 	return NewPlexClient(Config{
-		PlexURL:            ts.URL,
-		PlexToken:          "test-token",
-		PlexLibrarySection: section,
-	})
+		PlexURL:   ts.URL,
+		PlexToken: "test-token",
+	}, libraryRef{ID: section})
 }
 
 func TestPlexMoviesMapsItems(t *testing.T) {
@@ -99,11 +99,13 @@ func TestPlexMoviesMapsItems(t *testing.T) {
 	if len(got.Genres) != 2 || got.Genres[0] != "Comedy" || got.Genres[1] != "Drama" {
 		t.Errorf("Genres = %v, want [Comedy Drama]", got.Genres)
 	}
-	if got.PosterURL != "/api/images/plex/8014?tag=1782791305" {
+	// The poster path names the source that can serve the image, which under one
+	// source per library is the library-scoped id, not the bare service id.
+	if got.PosterURL != "/api/images/plex-2/8014?tag=1782791305" {
 		t.Errorf("PosterURL = %q, want the proxied path with the thumb version as tag", got.PosterURL)
 	}
-	if len(got.Availability) != 1 || got.Availability[0].Source != SourcePlex {
-		t.Errorf("Availability = %v, want one Plex entry", got.Availability)
+	if len(got.Availability) != 1 || got.Availability[0].Source != "plex-2" {
+		t.Errorf("Availability = %v, want one entry for this library's source", got.Availability)
 	}
 	if got.Availability[0].Label != "Plex" {
 		t.Errorf("Availability label = %q, want Plex", got.Availability[0].Label)
@@ -126,7 +128,7 @@ func TestPlexMoviesFallsBackWhenUnmatched(t *testing.T) {
 		t.Errorf("ID = %q, want plex:9001 for an item with no TMDB guid", movies[1].ID)
 	}
 	// No thumb means no tag, so the poster URL carries no cache-pinning query.
-	if movies[1].PosterURL != "/api/images/plex/9001" {
+	if movies[1].PosterURL != "/api/images/plex-2/9001" {
 		t.Errorf("PosterURL = %q, want the untagged proxied path", movies[1].PosterURL)
 	}
 }
@@ -342,7 +344,7 @@ func TestPlexVocabulary(t *testing.T) {
 func TestPlexSupportsUnwatchedAlways(t *testing.T) {
 	// Unlike Jellyfin, no user id is needed: a Plex token identifies a user,
 	// so play state is always answerable.
-	c := NewPlexClient(Config{PlexURL: "http://plex", PlexToken: "t"})
+	c := NewPlexClient(Config{PlexURL: "http://plex", PlexToken: "t"}, libraryRef{})
 	if !c.SupportsUnwatched() {
 		t.Error("SupportsUnwatched = false, want true whenever Plex is configured")
 	}
@@ -396,4 +398,150 @@ func containsAll(s string, subs ...string) bool {
 		}
 	}
 	return true
+}
+
+// --- section discovery ---
+
+// flakyPlexServer fails the first n requests to /library/sections and serves the
+// sections after that, which is what a Plex server that was still starting looks
+// like from here.
+type flakyPlexServer struct {
+	*httptest.Server
+	calls     int
+	failFirst int
+}
+
+func newFlakyPlexServer(t *testing.T, failFirst int) *flakyPlexServer {
+	t.Helper()
+	ts := &flakyPlexServer{failFirst: failFirst}
+	ts.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/library/sections" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		ts.calls++
+		if ts.calls <= ts.failFirst {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(plexSections))
+	}))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+const plexSections = `{"MediaContainer":{"Directory":[
+{"key":"1","type":"movie","title":"Films"},
+{"key":"2","type":"show","title":"TV"},
+{"key":"3","type":"movie","title":"Kids Films"}]}}`
+
+// A configured section is used as-is, with no discovery request at all. That is
+// what lets a deployment start deterministically without the server being up.
+func TestPlexConfiguredSectionSkipsDiscovery(t *testing.T) {
+	ts := newFlakyPlexServer(t, 0)
+	c := NewPlexClient(Config{PlexURL: ts.URL, PlexToken: "t"}, libraryRef{ID: "7"})
+
+	got, err := c.movieSection(context.Background())
+	if err != nil {
+		t.Fatalf("movieSection: %v", err)
+	}
+	if got != "7" {
+		t.Errorf("section = %q, want the configured value", got)
+	}
+	if ts.calls != 0 {
+		t.Errorf("made %d discovery requests, want none", ts.calls)
+	}
+}
+
+func TestPlexDiscoversTheFirstMovieSectionOnce(t *testing.T) {
+	ts := newFlakyPlexServer(t, 0)
+	c := NewPlexClient(Config{PlexURL: ts.URL, PlexToken: "t"}, libraryRef{})
+
+	for i := 0; i < 4; i++ {
+		got, err := c.movieSection(context.Background())
+		if err != nil {
+			t.Fatalf("movieSection %d: %v", i, err)
+		}
+		if got != "1" {
+			t.Errorf("section = %q, want the first movie section", got)
+		}
+	}
+	if ts.calls != 1 {
+		t.Errorf("made %d discovery requests, want one", ts.calls)
+	}
+}
+
+// The regression test for the sync.Once bug. Discovery used to cache its failure
+// for the life of the process, so one unreachable moment on the first query meant
+// Plex never worked again until the container was recreated. It presented days
+// later as "Plex worked yesterday", with the explaining log line long gone.
+func TestPlexRetriesFailedDiscovery(t *testing.T) {
+	ts := newFlakyPlexServer(t, 1)
+	c := NewPlexClient(Config{PlexURL: ts.URL, PlexToken: "t"}, libraryRef{})
+	clock := newFakeClock()
+	c.discovered.now = clock.now
+	c.discovered.retryAfter = time.Minute
+
+	if _, err := c.movieSection(context.Background()); err == nil {
+		t.Fatal("first discovery succeeded against a failing server")
+	}
+
+	clock.advance(2 * time.Minute)
+
+	got, err := c.movieSection(context.Background())
+	if err != nil {
+		t.Fatalf("discovery was never retried: %v", err)
+	}
+	if got != "1" {
+		t.Errorf("section = %q, want the discovered section", got)
+	}
+}
+
+// A retry storm against a server that is still down costs one request, not one
+// per caller.
+func TestPlexDoesNotRetryDiscoveryInsideTheWindow(t *testing.T) {
+	ts := newFlakyPlexServer(t, 99)
+	c := NewPlexClient(Config{PlexURL: ts.URL, PlexToken: "t"}, libraryRef{})
+	clock := newFakeClock()
+	c.discovered.now = clock.now
+	c.discovered.retryAfter = time.Minute
+
+	for i := 0; i < 5; i++ {
+		if _, err := c.movieSection(context.Background()); err == nil {
+			t.Fatalf("attempt %d succeeded against a failing server", i)
+		}
+		clock.advance(5 * time.Second)
+	}
+	if ts.calls != 1 {
+		t.Errorf("made %d requests inside the retry window, want one", ts.calls)
+	}
+}
+
+// A server with no movie library is a configuration problem, not a transient one,
+// but it is still reported rather than guessed around.
+func TestPlexReportsNoMovieSection(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"MediaContainer":{"Directory":[{"key":"2","type":"show","title":"TV"}]}}`))
+	}))
+	t.Cleanup(ts.Close)
+	c := NewPlexClient(Config{PlexURL: ts.URL, PlexToken: "t"}, libraryRef{})
+
+	if _, err := c.movieSection(context.Background()); err == nil {
+		t.Fatal("a server with no movie library discovered a section")
+	}
+}
+
+func TestPlexMovieSectionsFiltersNonMovieLibraries(t *testing.T) {
+	ts := newFlakyPlexServer(t, 0)
+	c := NewPlexClient(Config{PlexURL: ts.URL, PlexToken: "t"}, libraryRef{})
+
+	got, err := c.movieSections(context.Background())
+	if err != nil {
+		t.Fatalf("movieSections: %v", err)
+	}
+	if len(got) != 2 || got[0].Key != "1" || got[1].Key != "3" {
+		t.Errorf("sections = %+v, want only the two movie libraries", got)
+	}
 }

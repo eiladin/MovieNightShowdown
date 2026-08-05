@@ -150,8 +150,12 @@ button:disabled {
   transform: translateY(1px);
 }
 
-input[type="text"], 
-input[type="number"], 
+/* Password is in this list because the settings screen's credential fields are
+   password inputs, and a control style that omits one input type leaves that
+   field looking like it belongs to a different application. */
+input[type="text"],
+input[type="number"],
+input[type="password"],
 select {
   font-family: var(--sans);
   font-size: 16px;
@@ -164,6 +168,7 @@ select {
 }
 input[type="text"]:focus,
 input[type="number"]:focus,
+input[type="password"]:focus,
 select:focus {
   outline: none;
   border-color: var(--accent);

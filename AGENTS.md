@@ -29,6 +29,8 @@ docs/
   INSTALL.md         How to deploy and configure it (Docker Compose, env vars).
   screenshots/       Screenshots used by the README.
 main.go              Go entrypoint.
+config/              Written at runtime: the config file the settings screen
+                     saves. Not committed; see the Configuration section.
 server/              Go backend: sessions, WebSocket hub, Jellyfin client,
                      poster image proxy + on-disk cache, static file serving.
 web/                 React + Vite (TypeScript) frontend, embedded into the binary.
@@ -49,6 +51,26 @@ docker-compose.yml   Single-service deploy.
 
 The Go server serves the built frontend from `web/dist`, so a production-style
 run needs `npm run build` first (the Dockerfile does this automatically).
+
+### What CI runs
+
+Run all of it before committing. `.github/workflows/test.yml` is the source of
+truth; this is that list, and it is longer than the obvious commands — the two
+steps most easily missed are `golangci-lint`, which catches what `go vet` does not,
+and the fact that `gofmt` is checked across the **whole repository** rather than
+`server/`.
+
+```
+gofmt -l .                 # any output at all is a failure
+go build ./...
+go vet ./...
+go test ./...
+golangci-lint run          # config in .golangci.yml, tuned for bugs over style
+cd web && npm run lint && npx tsc -b && npm test
+```
+
+`gofmt -l` exits 0 even when it names files, so the output has to be tested rather
+than the exit code trusted.
 
 ## Regenerating screenshots
 
@@ -91,6 +113,24 @@ hand-curated and is not touched by this pipeline.
   on the source list, `Availability.Label` on each card. `knownProviders` in
   `server/providers.go` is an offline shortcut and a pin for the ids this app
   shipped with — never a limit on what can be configured.
+- **`providerCatalog` owns the TMDB-provider-to-`SourceID` mapping, and is the
+  only thing that may.** Both the settings screen's picker
+  (`fetchProviderList`) and startup resolution (`resolveStreamingProviders`)
+  read from it. They previously built separate indexes and drifted, which caused
+  two bugs. Do not add a third index.
+  - **A `SourceID` is claimed by exactly one provider.** `slugifyProvider` folds
+    everything outside `[a-z0-9]` to a separator, so names differing only in
+    punctuation collapse onto one id ("Apple TV" and "Apple TV+" both give
+    `apple-tv`). The catalog sorts by name and lets the first claim it; the loser
+    stays reachable by exact name and TMDB id. Emitting both put a duplicate
+    React key in the picker, and resolution can only ever map an id to one
+    provider anyway.
+  - **`knownProviders` wins on both id and display name, matched by TMDB id.**
+    TMDB calls provider 9 "Amazon Prime Video"; this application calls it
+    `prime`/"Prime Video". Slugifying TMDB's name gives one service two ids, and
+    two ids never merge into one deck entry. The slug of the upstream name is
+    kept as a lookup alias so a config file written before this rule existed
+    still resolves.
 - **Only the host's filter picks are persisted client-side.** `web/src/store.ts`
   persists `filtersByCode` (keyed by session code, capped at 5 entries) to
   localStorage and nothing else. Every other field is server-derived and must be
@@ -115,10 +155,168 @@ hand-curated and is not touched by this pipeline.
   when its credentials are set. Code must not assume it exists: filter options
   fall back to `defaultAvailableFilters()` without it, and `selectSources` falls
   back to the first configured source rather than to Jellyfin.
+- **The settings screen is the primary configuration path.** `web/src/pages/Settings.tsx`
+  writes the config file; `web/src/pages/Setup.tsx` remains the guide for a
+  deployment being configured by environment variables and points at it. The
+  setup token is held in memory only (`web/src/setupToken.ts`) — `store.ts`
+  persists exactly one thing and a credential is not it.
+- **`sourceAffecting` in `web/src/settingsDraft.ts` mirrors the server's
+  source-affecting tier.** The server remains authoritative; the client copy only
+  decides whether to confirm before saving. A new setting joining that tier needs
+  updating in both, and only the server has a test that would notice.
+- **The check routes require the setup token, permanently.**
+  `POST /api/settings/verify/{tmdb,jellyfin,plex}` and
+  `POST /api/settings/jellyfin/users` (`server/sourceverify.go`,
+  `server/tmdbverify.go`) each take a URL from the request and make the server
+  fetch it. Unauthenticated, that is a request-forgery primitive aimed at the
+  interior of whatever network this is deployed on, with the responses returned
+  to the caller. The token is the whole boundary.
+- **A check falls back to the stored credential per field.** The settings screen
+  never receives a stored secret, so it cannot submit one for a source that is
+  already saved — which is the case most worth checking. An empty secret in a
+  check request therefore means "use what is stored", never "check an empty
+  credential". This applies to the TMDB check too; it once lacked the fallback
+  and reported a working stored token as absent.
+- **A check distinguishes an unreachable host from a rejected credential.** They
+  have different fixes, and sending an operator to the wrong one is worse than
+  saying nothing. That needs the upstream status code, which is why
+  `server/sourceverify.go` builds its own requests instead of going through
+  `JellyfinClient`/`PlexClient` — those exist to return movies and collapse every
+  non-200 into one error string.
+- **The settings screen takes its colours from the tokens in
+  `web/src/index.css`.** They carry a light and a dark definition. An earlier
+  version of `settings.css` hardcoded a dark palette, which rendered near-white
+  text on a white page in light mode. It also restated control padding smaller
+  than the global `input`/`select`/`button` rules; do not re-add that — the base
+  styles already size these controls.
+- **An opaque identifier is offered as a list or not at all.** The Jellyfin user
+  id and the Plex library section key are both values nobody knows offhand —
+  each has to be read off the source itself. Neither field is rendered until a
+  check has enumerated the options, or unless a value is already stored (which
+  must stay visible so it can be seen and cleared). Whether a field shows is
+  decided by `settings`, never by `draft`: keying it on the draft made the
+  control unmount the moment its value was cleared, so it could not be retyped.
+- **A failed fetch reports its reason.** The service picker once fell back to an
+  empty list, which made an unreachable TMDB, a rejected token, and a region that
+  genuinely lists nothing indistinguishable — the least actionable of the three.
+  `listProviders` surfaces the server's message and the screen shows it. Do not
+  reintroduce a bare `.catch(() => setState([]))` on any of these calls.
+- **A library is a source.** Each configured library becomes its own `SourceID`,
+  formed as `<service>-<libraryId>` by `libraryScopedID`. An empty library list
+  registers one unscoped source per service under its bare id (`jellyfin`, `plex`),
+  which is what keeps an unconfigured deployment — and its saved host selections and
+  cached poster URLs — working exactly as before.
+- **The identifier is the library's own, never a slug of its name.** Names get
+  renamed; this value is embedded in the image proxy path and in the host's
+  persisted source selection.
+- **Two labels, deliberately.** `SourceDescriptor.label` is qualified
+  (`Jellyfin — Kids Movies`) because the host picker is one flat list, and a
+  Jellyfin server and a Plex server pointed at the same media both hold a library of
+  that name. `Availability.Label` on a card badge stays the bare service name,
+  because a badge has no room for the qualified form. They are separate fields set
+  in separate places; do not collapse them.
+- **Library identifiers are never case-folded.** `normalizeProviders` lowercases,
+  which is right for a provider name and wrong for an opaque identifier — Jellyfin's
+  is hexadecimal, Plex's is an integer. `parseLibraryList` trims and de-duplicates
+  and stops there. Name matching folds case at the point of comparison, in
+  `resolveLibraryNames`, where it cannot damage a stored value. The same list holds
+  both kinds, so one rule cannot be applied to all of it.
+- **A name is resolved lazily, and a success is never re-resolved.** A name has to
+  become an identifier before anything can be queried; an identifier does not.
+  Identifiers therefore resolve at startup with no network call, and names resolve on
+  the first request that needs the source list, through `currentSources()`. Resolving
+  at startup would let an application and a media server that start together race,
+  and losing it would mean registering no sources at all. Re-resolving a success
+  would change a `SourceID` under a live session: poster URLs carry the id and the
+  image handler looks the fetcher up by it, so every card in an in-progress deck
+  would start returning 404. The retry floor (`lazyValue`) applies to failures only.
+- **A resolution must not end sessions.** `applyConfig` ends them because the
+  operator changed the configuration; a lazy resolution is the same configuration
+  becoming resolvable. It builds a new set and `CompareAndSwap`s it in, without
+  `EndAll`. Do not "tidy" that into a call to `applyConfig`.
+- **A name that cannot be resolved registers no source.** An unresolved name used
+  verbatim produced ids like `jellyfin-Kids Movies`, and a `SourceID` is a path
+  segment in the image proxy. `isPendingName` is the gate; two libraries sharing a
+  title resolve deterministically by sorted order with the loser logged, the same
+  rule `providerCatalog` uses for colliding provider slugs.
+- **`PLEX_LIBRARY_SECTION` is a deprecated alias**, read only when
+  `PLEX_LIBRARY_SECTIONS` is unset. Dropping it would silently change which library
+  an existing deployment deals from, and the symptom appears mid-session rather than
+  at startup. `Config.PlexLibrarySection` is the compatibility input only — nothing
+  reads it to decide what to query.
+- **A capability is still declared, never inferred.** Nothing may branch on a
+  `SourceID` to decide what a source supports. Composite ids make that easier to get
+  wrong, which is why it is restated here.
+- **Two multi-select controls, chosen by cardinality.**
+  - `ChipToggleGroup` is a fieldset of checkboxes styled as chips — the idiom the
+    host screen already uses for sources and genres. Use it when every option fits
+    on screen, which is what libraries are. Checked and unchecked are one control in
+    two states, so it cannot be misread.
+  - `ChipPicker` hides several hundred options behind a query and shows results in an
+    overlay. Use it only when there are that many: TMDB's watch providers for a
+    region.
+  - Libraries had the picker first, and it read as a search control even after the
+    search box was removed — its unselected pills looked exactly like the selection
+    chips of the service picker further down the same page. Do not reach for chips
+    plus a list of pills again; the toggle group is the answer.
+  - `.chip` and `.chip-group` live in `web/src/styles/chip-group.css`, shared by both
+    screens. Two copies is how they come to disagree about what a chip looks like.
+    `.settings-fields > label` is a **child** selector for the same reason: as a
+    descendant selector it restyled every chip label nested inside a group.
+- **The search variant renders no results for an empty query.** Not on focus
+  either. TMDB returns several hundred services for a region, and that list is
+  what the search box exists to avoid; showing it on focus buried the rest of the
+  form under an overlay. Matches are also capped (`MAX_VISIBLE` in
+  `web/src/components/ChipPicker.tsx`) with the remainder counted on screen,
+  because a truncated list that looks complete is worse than a short one that
+  says so.
 - The docs (`AGENTS.md`, `README.md`, `docs/*`) are written in a neutral,
   professional voice, since they are read by other agents and humans.
 
-## Configuration (environment variables)
+## Configuration
+
+**The application owns its config file.** `CONFIG_FILE` (default
+`./config/config.yaml`) is written by the settings screen and is authoritative.
+Environment variables seed a deployment that has not saved a value for a setting
+yet, and are ignored once the file sets the same key. This follows the model of
+this application's peers — Jellyfin, Plex, and the \*arr stack — whose operators
+are the same people; a settings screen that an environment variable silently
+overrode would be worse than no settings screen.
+
+Rules that follow from it, all load-bearing:
+
+- **Resolution is per key, never per source.** A file setting `plex.url` and an
+  environment setting `PLEX_TOKEN` must yield both. See `resolver` in
+  `server/configfile.go`; every scalar in `configFile` is a pointer so "absent"
+  and "explicitly blanked" stay distinguishable.
+- **Provenance is reported, not inferred.** `Config.Provenance` records where
+  each setting came from and whether an environment variable is being ignored.
+  The startup log states it per setting and the settings screen badges it. These
+  are the mitigation the whole model depends on — do not remove either.
+- **`PORT`, `CACHE_DIR` and `CONFIG_FILE` are environment-only, permanently.**
+  Each names something established before the process starts. They are reported
+  read-only on `settingsResponse.Runtime` and have no counterpart on
+  `settingsRequest`; the absence from the request type is the boundary, not the
+  disabled input.
+- **Config writes require the setup token** (`server/setuptoken.go`), generated
+  on first start and printed to the log. Without it the write endpoint is an
+  SSRF vector and a way to have the server deliver its stored credentials to an
+  attacker's host. The token is deliberately logged; that is its only delivery
+  channel.
+- **No stored secret may appear in a response.** `settingsResponse` reports each
+  credential as a boolean. An omitted secret in a request means unchanged, never
+  cleared — the screen never receives one, so it cannot send one back.
+- **Reload is tiered** (`server/sourceset.go`). Source-affecting changes rebuild
+  the source set and end active sessions; harmless ones apply live; the listen
+  port needs a restart. Sessions are ended *before* the pointer swap, and the new
+  set is built *before* anything is ended. A setting whose owner is not `Config`
+  itself must be pushed to that owner in `setConfig`, or the server reports a
+  change it did not make.
+- **Streaming defaults are conditional.** `defaultStreamingProviders` applies
+  only to a deployment with no `streaming` section in its config file. Once the
+  file manages streaming, services are selected explicitly or not at all.
+
+### Environment variables
 
 | Var | Required | Purpose |
 |---|---|---|
@@ -127,11 +325,14 @@ hand-curated and is not touched by this pipeline.
 | `JELLYFIN_USER_ID` | optional | Needed for "unwatched" filtering |
 | `PLEX_URL` | one of¹ | Base URL of the Plex Media Server (usually port 32400) |
 | `PLEX_TOKEN` | one of¹ | Plex authentication token (stays server-side, never sent to clients) |
-| `PLEX_LIBRARY_SECTION` | optional | Key of the movie library section. Discovered on first use (first section of type `movie`) when unset; required only on a server with several movie libraries |
+| `PLEX_LIBRARY_SECTIONS` | optional | Comma-separated movie libraries to draw from, by **name or section key**. Each becomes its own source. Unset means every library, which is one unscoped source |
+| `PLEX_LIBRARY_SECTION` | deprecated | The singular predecessor. Still read when the plural is unset, so an existing deployment does not silently change which library it deals from |
+| `JELLYFIN_LIBRARIES` | optional | Comma-separated movie libraries to draw from, by **name or library id**. Same semantics as `PLEX_LIBRARY_SECTIONS` |
 | `PUBLIC_URL` | yes | Base URL used to build QR/join links |
-| `PORT` | optional | Listen port (default 8080) |
+| `PORT` | optional | Listen port (default 8080). Environment-only |
 | `SESSION_TTL` | optional | Session expiry (default a few hours) |
-| `CACHE_DIR` | optional | Directory for the on-disk poster cache (default a temp dir); mount a volume in Docker to persist it across restarts |
+| `CACHE_DIR` | optional | Directory for the on-disk poster cache (default a temp dir); mount a volume in Docker to persist it across restarts. Environment-only |
+| `CONFIG_FILE` | optional | Path to the config file the settings screen writes (default `./config/config.yaml`). A missing file is never fatal — the application creates it on its first write — but a path whose directory cannot be created is fatal at startup, since every later save would fail against it. Environment-only |
 | `TMDB_READ_TOKEN` | one of¹ | TMDB v4 API Read Access Token. Enables streaming services as sources. When unset, the server registers no streaming source, so the API does not advertise them and the UI does not render them. Stays server-side, never sent to clients. |
 | `STREAMING_PROVIDERS` | optional | Comma-separated streaming services to offer, by provider name **or numeric TMDB provider id**. Any TMDB watch provider is accepted, not a fixed set. Normalized in `LoadConfig` (trimmed, lowercased, de-duplicated) and resolved in `New` via `resolveStreamingProviders`. Defaults to `netflix,prime,disney`; inert without `TMDB_READ_TOKEN`. |
 | `TMDB_WATCH_REGION` | optional | ISO 3166-1 region for provider resolution and every Discover query. Defaults to `US`. |
@@ -139,6 +340,8 @@ hand-curated and is not touched by this pipeline.
 ¹ At least one movie source is required: Jellyfin (`JELLYFIN_URL` **and**
 `JELLYFIN_API_KEY`), Plex (`PLEX_URL` **and** `PLEX_TOKEN`), streaming
 (`TMDB_READ_TOKEN`), or any combination. `Config.JellyfinConfigured`,
-`Config.PlexConfigured` and `Config.StreamingConfigured` are the predicates. With neither set, `New`
+`Config.PlexConfigured` and `Config.StreamingConfigured` are the predicates.
+Any of them can equally be satisfied from the config file rather than the
+environment. With neither set, `New`
 registers no source, logs what is missing, and every client route redirects to
 the in-app `/setup` guide (`server/setup.go`, `web/src/pages/Setup.tsx`).

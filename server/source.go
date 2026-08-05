@@ -54,6 +54,47 @@ func sourceLabel(s MovieSource) string {
 	return string(s.ID())
 }
 
+// libraryScopedID composes the SourceID for one library of a local service.
+//
+// A library with no identifier yields the bare service id — `jellyfin`, `plex` —
+// which is what an unconfigured deployment has always used and what keeps its
+// saved host selections and cached poster URLs valid across an upgrade.
+//
+// The library's own identifier is used rather than a slug of its name. Names get
+// renamed; this value appears in the image proxy path and in the host's persisted
+// source selection, so it has to outlive somebody tidying up their library titles.
+func libraryScopedID(service SourceID, ref libraryRef) SourceID {
+	if ref.ID == "" {
+		return service
+	}
+	return SourceID(string(service) + "-" + ref.ID)
+}
+
+// libraryScopedName composes the display name for one library of a local service.
+//
+// It is qualified — "Jellyfin — Kids Movies" — because the host's source picker is
+// one flat list, and a Jellyfin server and a Plex server pointed at the same media
+// both hold a library of that name. Unqualified, those two chips are
+// indistinguishable.
+//
+// This is deliberately not what a card badge shows. Availability.Label stays the
+// bare service name, because a badge has no room for the qualified form; the two
+// are separate fields so both can be right.
+//
+// With no name known, the identifier stands in. That is only ever seen by a
+// deployment configured with bare identifiers, and it is honest about what it
+// knows rather than inventing a label.
+func libraryScopedName(service string, ref libraryRef) string {
+	switch {
+	case ref.ID == "":
+		return service
+	case ref.Name != "":
+		return service + " — " + ref.Name
+	default:
+		return service + " — " + ref.ID
+	}
+}
+
 // VocabularySource is a source that can report the filter values it recognizes.
 // Sources without one contribute nothing to the picker, which is correct rather
 // than empty: a source that cannot name its own vocabulary has no values to

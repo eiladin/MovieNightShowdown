@@ -3,6 +3,7 @@ import RequireSetup from './components/RequireSetup'
 import HostSetup from './pages/HostSetup'
 import Landing from './pages/Landing'
 import Lobby from './pages/Lobby'
+import Settings from './pages/Settings'
 import Setup from './pages/Setup'
 
 // AppRoutes is the route tree on its own, without a router around it. App
@@ -15,6 +16,9 @@ export function AppRoutes() {
                 unconfigured deployment, and stays reachable as a reference
                 once configuration is done. */}
             <Route path="/setup" element={<Setup />} />
+            {/* /settings sits outside the gate for the same reason /setup does:
+                it is how a deployment with no usable source gets configured. */}
+            <Route path="/settings" element={<Settings />} />
             <Route
                 path="/"
                 element={

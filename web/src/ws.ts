@@ -45,8 +45,15 @@ export interface LeaderboardEntry {
     yesCount: number
 }
 
+// EndReason says why a session ended. The server sends a machine-readable
+// value and the client owns the wording, exactly as it owns source labels.
+// It is a plain string, not a union: an unrecognized reason must still render
+// a leaderboard rather than being treated as an error.
+export type EndReason = string
+
 export interface SessionEndedPayload {
     leaderboard: LeaderboardEntry[]
+    reason?: EndReason
 }
 
 export interface ErrorPayload {

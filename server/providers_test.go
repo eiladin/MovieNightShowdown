@@ -82,20 +82,88 @@ func TestResolveLooksUpUnknownNamesInTMDB(t *testing.T) {
 }
 
 // A multi-word provider is matched by its name and by the slug of that name,
-// and its id is the slug, so it stays usable in a URL path.
+// and every spelling lands on one identifier.
+//
+// The id is the one knownProviders pins for that TMDB id, not the slug of TMDB's
+// name for it: provider 1899 is "max" here and "HBO Max" upstream. Resolving the
+// slug of the upstream name instead would give one service two ids depending on
+// how it was configured, and two ids never merge into one deck entry.
 func TestResolveMatchesNameAndSlug(t *testing.T) {
 	calls := 0
 	srv := stubProviderList(t, &calls)
 
-	for _, entry := range []string{"hbo max", "hbo-max"} {
+	for _, entry := range []string{"hbo max", "hbo-max", "max"} {
 		cfg := resolveConfig(srv.URL, entry)
 		got := resolveStreamingProviders(context.Background(), cfg, cfg.StreamingProviders)
 		if len(got) != 1 {
 			t.Fatalf("%q resolved to %+v, want one provider", entry, got)
 		}
-		if got[0].ID != "hbo-max" || got[0].TMDBID != 1899 || got[0].Name != "HBO Max" {
-			t.Fatalf("%q resolved to %+v", entry, got[0])
+		if got[0].ID != "max" || got[0].TMDBID != 1899 || got[0].Name != "HBO Max" {
+			t.Fatalf("%q resolved to %+v, want the pinned id \"max\"", entry, got[0])
 		}
+	}
+}
+
+// A slug written into a config file before the built-in table was consulted must
+// keep resolving. It is the id an earlier build of the settings screen wrote, and
+// an upgrade that silently stopped resolving it would drop a source the operator
+// selected.
+func TestResolveAcceptsTheUpstreamSlugAsAnAlias(t *testing.T) {
+	calls := 0
+	srv := stubProviderList(t, &calls)
+	cfg := resolveConfig(srv.URL, "hbo-max")
+
+	got := resolveStreamingProviders(context.Background(), cfg, cfg.StreamingProviders)
+
+	if len(got) != 1 || got[0].TMDBID != 1899 {
+		t.Fatalf("got %+v, want the HBO Max provider", got)
+	}
+	if got[0].ID != "max" {
+		t.Errorf("id = %q, want the canonical \"max\" rather than the alias", got[0].ID)
+	}
+}
+
+// Two providers whose names differ only in punctuation reduce to one slug. Only
+// one may claim it: the picker keys its rows by id, and resolution can map an id
+// to a single provider, so offering both promises a choice the server cannot
+// keep. The winner is the one that sorts first by name, which is stable across
+// calls even though TMDB's array order is not.
+func TestProviderCatalogGivesACollidingSlugToOneProvider(t *testing.T) {
+	// Neither id is in knownProviders, so nothing is pinned and both fall back
+	// to the slug of their upstream name.
+	list := tmdbProviderList{}
+	list.Results = append(list.Results,
+		struct {
+			ProviderID   int    `json:"provider_id"`
+			ProviderName string `json:"provider_name"`
+		}{526, "AMC+"},
+		struct {
+			ProviderID   int    `json:"provider_id"`
+			ProviderName string `json:"provider_name"`
+		}{80, "AMC"},
+	)
+
+	cat := newProviderCatalog(list)
+
+	seen := map[SourceID]int{}
+	for _, o := range cat.options {
+		seen[o.ID]++
+	}
+	for id, n := range seen {
+		if n > 1 {
+			t.Errorf("id %q appears %d times in the offered options", id, n)
+		}
+	}
+	if got, ok := cat.bySlug["amc"]; !ok || got.TMDBID != 80 {
+		t.Errorf("bySlug[amc] = %+v, want AMC (80) — the name that sorts first", got)
+	}
+	// The loser is not erased. It is still selectable, just not by the shared
+	// slug, so a deployment that wants it has a way to say so.
+	if got, ok := cat.lookup("amc+"); !ok || got.TMDBID != 526 {
+		t.Errorf("lookup(\"amc+\") = %+v, want AMC+ (526) by its exact name", got)
+	}
+	if got, ok := cat.byID[526]; !ok || got.Name != "AMC+" {
+		t.Errorf("byID[526] = %+v, want AMC+", got)
 	}
 }
 

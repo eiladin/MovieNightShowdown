@@ -1,0 +1,285 @@
+/* The settings screen.
+ *
+ * Every colour here comes from the tokens in index.css, which carry a light and
+ * a dark definition. The previous version of this file hardcoded a dark palette
+ * — #eee text, #1b1b1b fields — so on a light-mode browser it rendered near-white
+ * text on a white page. It was not merely off-theme; it was unreadable.
+ *
+ * Control sizing is deliberately absent: index.css already gives inputs, selects
+ * and buttons their padding and type size. Restating it smaller here is what made
+ * these fields cramped next to the rest of the app.
+ */
+
+.settings-page {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 0 1rem 4rem;
+  text-align: left;
+}
+
+.settings-lede {
+  margin: 0 0 2rem;
+  opacity: 0.85;
+}
+
+/* Each source is a card, matching the shape .setup-option uses on the setup
+   guide — the two screens are read one after the other. */
+.settings-section {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.settings-section h2 {
+  margin: 0;
+}
+
+/* The read-only section has no toggle to space its heading off the text below
+   it, so it needs the gap itself. */
+.settings-section h2 + .settings-hint {
+  margin-top: 0.6rem;
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.settings-toggle input[type='checkbox'] {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* A single column, so a label always sits directly above the field it names.
+   Two columns put a long badge or error beside the wrong input. */
+.settings-fields {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+/* A direct child, so this reaches the form's own field labels and not a label
+   nested inside a control. The chip toggles in a library group are labels too, and
+   this rule was overriding their type size and adding a top margin to each one —
+   making the same chip look different here than on the host screen.
+
+   16px matches the font-size the global input rule sets, so a label is not larger
+   than the value it names. The page's 18px base makes it so otherwise. */
+.settings-fields > label {
+  color: var(--text-h);
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 0.9rem;
+}
+
+.settings-fields > label:first-child {
+  margin-top: 0;
+}
+
+/* A hint belongs to the label above it, not to the gap between fields. */
+.settings-fields > label + .settings-hint {
+  margin-top: -0.15rem;
+}
+
+/* The provider picker names a composite control — chips plus a search box — so
+   its heading is a span rather than a label. It still has to look like one. */
+.settings-pseudo-label {
+  color: var(--text-h);
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 0.9rem;
+}
+
+.settings-fields input,
+.settings-fields select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* An environment variable the saved value overrides. The operator can only act
+   on this if they see it at the moment they are editing the field. */
+.settings-badge {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+}
+
+.settings-field-error {
+  display: block;
+  font-size: 0.9rem;
+  color: #d92d20;
+  font-weight: 500;
+}
+
+@media (prefers-color-scheme: dark) {
+  .settings-field-error {
+    color: #ff8a80;
+  }
+}
+
+.settings-success,
+.settings-error {
+  padding: 0.85rem 1.1rem;
+  border-radius: 8px;
+  margin-bottom: 1.25rem;
+  color: var(--text-h);
+}
+
+.settings-success {
+  border: 1px solid rgba(63, 164, 91, 0.5);
+  background: rgba(63, 164, 91, 0.1);
+}
+
+.settings-error {
+  border: 1px solid rgba(217, 45, 32, 0.5);
+  background: rgba(217, 45, 32, 0.08);
+}
+
+.settings-hint {
+  color: var(--text);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+/* The "does this actually work" control. It sits at the foot of its section,
+   separated from the fields, because it reports on all of them together. */
+.settings-check {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-top: 1.4rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border);
+}
+
+.settings-check-button {
+  font-size: 0.95rem;
+  padding: 0.6rem 1.2rem;
+}
+
+.settings-check-ok,
+.settings-check-bad {
+  margin: 0;
+  font-size: 0.9rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 8px;
+  color: var(--text-h);
+}
+
+.settings-check-ok {
+  border: 1px solid rgba(63, 164, 91, 0.5);
+  background: rgba(63, 164, 91, 0.1);
+}
+
+.settings-check-bad {
+  border: 1px solid rgba(217, 45, 32, 0.5);
+  background: rgba(217, 45, 32, 0.08);
+}
+
+/* The token gate is the whole page when it shows, so it is centred as a card
+   rather than left as a narrow column pinned to one edge of a wide page. */
+.settings-gate {
+  max-width: 32rem;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.settings-gate .settings-lede,
+.settings-gate .settings-error {
+  text-align: left;
+}
+
+.settings-token-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin: 1.5rem 0;
+  text-align: left;
+}
+
+.settings-token-form label {
+  color: var(--text-h);
+  font-weight: 500;
+}
+
+/* Monospace, because a setup token is 64 hex characters read off a log and
+   compared by eye. */
+.settings-token-form input {
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+}
+
+.settings-save {
+  margin-top: 0.5rem;
+}
+
+.settings-footnote {
+  margin-top: 2rem;
+  font-size: 0.9rem;
+}
+
+/* The explicit way to remove a stored credential. Emptying the field also
+   works, but an affordance that is only discoverable by guessing is not one. */
+.settings-clear {
+  align-self: flex-start;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.85rem;
+}
+
+/* Settings fixed at container level. Shown so the operator knows what is in
+   effect, styled flatter than the editable sections so it does not read as a
+   form they can submit. */
+.settings-readonly {
+  background: var(--social-bg);
+}
+
+.settings-readonly-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem 1.25rem;
+  margin: 1rem 0 0;
+}
+
+.settings-readonly-list dt {
+  color: var(--text-h);
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.settings-readonly-list dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .settings-section {
+    padding: 1rem;
+  }
+
+  .settings-readonly-list {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+
+  .settings-readonly-list dd {
+    margin-bottom: 0.6rem;
+  }
+}

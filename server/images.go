@@ -25,7 +25,7 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	fetcher, ok := s.fetchers[source]
+	fetcher, ok := s.currentSources().fetchers[source]
 	if !ok {
 		http.NotFound(w, r)
 		return

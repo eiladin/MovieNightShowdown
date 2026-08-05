@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router'
 import { getAvailableFilters, getPreview, warmLibrary, type PreviewFilters, type PreviewResponse, type SourceDescriptor, type SourceID } from '../api'
 import { useFiltersFor, useSessionStore } from '../store'
 import { accentStyle } from '../sourceColor'
+import '../styles/chip-group.css'
 import '../styles/admin.css'
 
 const RATING_ORDER: Record<string, number> = {
