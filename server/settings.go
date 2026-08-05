@@ -423,7 +423,7 @@ func (s *Server) settingsView(cfg Config, outcome reloadOutcome) settingsRespons
 func libraryOptions(refs []libraryRef) []libraryOption {
 	out := make([]libraryOption, 0, len(refs))
 	for _, ref := range refs {
-		out = append(out, libraryOption{ID: ref.ID, Name: ref.Name})
+		out = append(out, libraryOption(ref))
 	}
 	return out
 }
