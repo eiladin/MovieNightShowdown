@@ -72,8 +72,17 @@
   color: #fff;
 }
 
+/* Wrap rather than scroll. These are the configuration examples the page exists to
+   show, and a horizontal scrollbar hides the end of every line — including the
+   comments explaining which settings are optional. On a phone that clipped most of
+   them, and a screenshot of the page captures the clipped state rather than the
+   scrollable one. */
 .setup-option pre {
-  overflow-x: auto;
+  /* Left, against the page's centred text. A wrapped configuration line whose
+     continuation is centred cannot be read as configuration. */
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   margin: 0 0 12px;
   padding: 12px;
   border-radius: 8px;
