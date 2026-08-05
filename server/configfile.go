@@ -353,21 +353,43 @@ func checkConfigFilePermissions(path string) {
 	}
 }
 
+// maskedSecret and absentSecret are what a credential looks like in the log. A
+// credential's own value never appears there.
+const (
+	maskedSecret = "***"
+	absentSecret = "(unset)"
+)
+
+// maskSecret reduces a credential to whether it is set.
+//
+// Callers use this instead of passing the value, so a plaintext secret never reaches
+// the logger at all. Masking inside the logger would mean the value had already been
+// handed to something whose job is to print, guarded only by a flag — and a setting
+// registered with resolver.str rather than resolver.secret carries no such flag.
+func maskSecret(value string) string {
+	if value == "" {
+		return absentSecret
+	}
+	return maskedSecret
+}
+
 // logProvenance states where every setting came from, so a value that is not
 // what an operator expects can be traced from the first place anyone looks.
-// Secrets are reported as set or unset and never printed.
+// Secrets arrive already masked and are never printed.
 func logProvenance(prov map[string]settingProvenance, values map[string]string) {
 	for _, key := range provenanceOrder {
 		p, ok := prov[key]
 		if !ok {
 			continue
 		}
+		// A credential must already have been masked by the caller; see
+		// maskSecret. This is a second barrier and must never be the only one —
+		// masking here means the plaintext value was carried into this function to
+		// be conditionally printed, and one setting registered with str instead of
+		// secret would print it.
 		value := values[key]
-		if p.Secret {
-			value = "(unset)"
-			if values[key] != "" {
-				value = "***"
-			}
+		if p.Secret && value != maskedSecret && value != absentSecret {
+			value = maskedSecret
 		}
 		line := fmt.Sprintf("config: %s = %s (%s", key, value, p.Source)
 		if p.EnvIgnored {

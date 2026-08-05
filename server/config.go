@@ -284,12 +284,12 @@ func logResolvedConfig(cfg Config) {
 	logProvenance(cfg.Provenance, map[string]string{
 		"publicUrl": cfg.PublicURL, "sessionTtl": cfg.SessionTTL,
 		"jellyfin.enabled": strconv.FormatBool(!cfg.JellyfinDisabled), "jellyfin.url": cfg.JellyfinURL,
-		"jellyfin.apiKey": cfg.JellyfinAPIKey, "jellyfin.userId": cfg.JellyfinUserID,
+		"jellyfin.apiKey": maskSecret(cfg.JellyfinAPIKey), "jellyfin.userId": cfg.JellyfinUserID,
 		"jellyfin.libraries": describeLibraries(cfg.JellyfinLibraries),
 		"plex.enabled":       strconv.FormatBool(!cfg.PlexDisabled), "plex.url": cfg.PlexURL,
-		"plex.token": cfg.PlexToken, "plex.librarySection": cfg.PlexLibrarySection,
+		"plex.token": maskSecret(cfg.PlexToken), "plex.librarySection": cfg.PlexLibrarySection,
 		"plex.libraries":    describeLibraries(cfg.PlexLibraries),
-		"streaming.enabled": strconv.FormatBool(!cfg.StreamingDisabled), "streaming.tmdbReadToken": cfg.TMDBReadToken,
+		"streaming.enabled": strconv.FormatBool(!cfg.StreamingDisabled), "streaming.tmdbReadToken": maskSecret(cfg.TMDBReadToken),
 		"streaming.watchRegion": cfg.TMDBWatchRegion, "streaming.providers": strings.Join(cfg.StreamingProviders, ","),
 	})
 }

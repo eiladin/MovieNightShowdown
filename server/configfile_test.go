@@ -29,7 +29,8 @@ func clearConfigEnv(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{
 		"CONFIG_FILE", "JELLYFIN_URL", "JELLYFIN_API_KEY", "JELLYFIN_USER_ID",
-		"PLEX_URL", "PLEX_TOKEN", "PLEX_LIBRARY_SECTION",
+		"JELLYFIN_LIBRARIES",
+		"PLEX_URL", "PLEX_TOKEN", "PLEX_LIBRARY_SECTION", "PLEX_LIBRARY_SECTIONS",
 		"TMDB_READ_TOKEN", "TMDB_WATCH_REGION", "STREAMING_PROVIDERS",
 		"PUBLIC_URL", "SESSION_TTL", "CACHE_DIR", "PORT",
 	} {
@@ -571,6 +572,21 @@ func TestLoadConfigMalformedFileIsFatal(t *testing.T) {
 
 // TestProvenanceLogHasNoSecrets is the check that matters most in this file: a
 // startup log is written to disk, shipped in bug reports, and re-read later.
+// maskSecret is what keeps a credential out of the logger's hands entirely, rather
+// than handing it over and relying on a flag to stop it being printed. A static
+// analyser cannot follow that flag, and neither can a reader adding a setting.
+func TestMaskSecretNeverReturnsTheValue(t *testing.T) {
+	for _, value := range []string{"a", "JELLYFIN-SECRET-VALUE", "***", strings.Repeat("x", 64)} {
+		got := maskSecret(value)
+		if got != maskedSecret {
+			t.Errorf("maskSecret(%q) = %q, want %q", value, got, maskedSecret)
+		}
+	}
+	if got := maskSecret(""); got != absentSecret {
+		t.Errorf("maskSecret(\"\") = %q, want %q", got, absentSecret)
+	}
+}
+
 func TestProvenanceLogHasNoSecrets(t *testing.T) {
 	clearConfigEnv(t)
 	writeConfig(t, `
