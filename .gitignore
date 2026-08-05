@@ -1,7 +1,11 @@
 # Env / secrets
+# `.env` matches that exact name only, so variants such as `.env.bak` were not
+# covered. Ignore the whole family and re-admit the committed template.
 .env
-.env.local
+.env.*
+!.env.example
 *.local
+*.bak
 
 # The config file the app writes at runtime. It holds credentials in plaintext
 # and the setup token, and a local `go run .` creates it here by default.
