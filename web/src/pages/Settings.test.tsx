@@ -207,8 +207,7 @@ describe('Settings', () => {
     it('renders a stored secret as a placeholder and omits it when untouched', async () => {
         installFetch()
         // The library section is source-affecting, so the save is gated on the
-        // confirmation; accept it and let the request through.
-        vi.spyOn(window, 'confirm').mockReturnValue(true)
+        // confirmation dialog; accept it and let the request through.
         const user = userEvent.setup()
         renderSettings()
         await enterToken(user)
@@ -220,6 +219,7 @@ describe('Settings', () => {
         // Any source-affecting edit will do; the point of the test is the secret.
         await user.type(screen.getByLabelText('Server URL'), '/x')
         await user.click(screen.getByRole('button', { name: 'Save settings' }))
+        await user.click(await screen.findByRole('button', { name: 'Continue' }))
 
         await waitFor(() => expect(posted).toHaveLength(1))
         const body = posted[0].body as { plex: Record<string, unknown> }
@@ -350,7 +350,6 @@ describe('Settings', () => {
 
     it('warns before a source-affecting save and abandons it when declined', async () => {
         installFetch()
-        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
         const user = userEvent.setup()
         renderSettings()
         await enterToken(user)
@@ -360,13 +359,13 @@ describe('Settings', () => {
         await user.type(screen.getByLabelText('Server URL'), 'http://moved:32400')
         await user.click(screen.getByRole('button', { name: 'Save settings' }))
 
-        expect(confirmSpy).toHaveBeenCalledOnce()
+        await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+        expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
         expect(posted).toHaveLength(0)
     })
 
     it('does not warn for a change that touches no source', async () => {
         installFetch()
-        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
         const user = userEvent.setup()
         renderSettings()
         await enterToken(user)
@@ -377,7 +376,7 @@ describe('Settings', () => {
         await user.click(screen.getByRole('button', { name: 'Save settings' }))
 
         await waitFor(() => expect(posted).toHaveLength(1))
-        expect(confirmSpy).not.toHaveBeenCalled()
+        expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
     })
 
     it('links to the environment-variable guide for a first-time operator', async () => {
@@ -390,7 +389,6 @@ describe('Settings', () => {
 
     it('offers an explicit control for removing a stored credential', async () => {
         installFetch()
-        vi.spyOn(window, 'confirm').mockReturnValue(true)
         const user = userEvent.setup()
         renderSettings()
         await enterToken(user)
@@ -402,6 +400,7 @@ describe('Settings', () => {
         expect(screen.getByText(/removed when you save/i)).toBeTruthy()
 
         await user.click(screen.getByRole('button', { name: 'Save settings' }))
+        await user.click(await screen.findByRole('button', { name: 'Continue' }))
         await waitFor(() => expect(posted).toHaveLength(1))
         const body = posted[0].body as { plex: Record<string, unknown> }
         expect(body.plex.clearToken).toBe(true)
@@ -579,8 +578,7 @@ describe('Settings', () => {
             },
         })
         // Choosing a library rebuilds the source set and ends every session, so the
-        // save is gated on the confirmation. Accept it and let the request through.
-        vi.spyOn(window, 'confirm').mockReturnValue(true)
+        // save is gated on the confirmation dialog. Accept it and let the request through.
         const user = userEvent.setup()
         renderSettings()
         await enterToken(user)
@@ -609,6 +607,7 @@ describe('Settings', () => {
         // Chosen libraries are sent as id and name pairs, so a later start has
         // nothing to resolve.
         await user.click(screen.getByRole('button', { name: 'Save settings' }))
+        await user.click(await screen.findByRole('button', { name: 'Continue' }))
         await waitFor(() => expect(posted.some((p) => p.url === '/api/settings')).toBe(true))
         const save = posted.find((p) => p.url === '/api/settings')
         const body = save?.body as { plex: { libraries: unknown } } | undefined
@@ -831,7 +830,7 @@ describe('sourceAffecting', () => {
     })
 
     // A library change rebuilds the source set and ends every session, so the
-    // confirmation has to fire for it.
+    // confirmation dialog has to fire for it.
     it('is true when a library selection changes', () => {
         const from = settingsFixture()
         const draft = draftFrom(from)

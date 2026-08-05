@@ -41,3 +41,24 @@ if (typeof globalThis.localStorage?.getItem !== 'function') {
         Object.defineProperty(target, 'localStorage', { configurable: true, value: storage })
     }
 }
+
+// jsdom 30 defines HTMLDialogElement but not showModal/close, so a component
+// driving a native <dialog> through a ref crashes under test. Install the
+// minimum that matches the spec's observable behaviour: `open` reflects the
+// attribute, and close() fires a `close` event.
+const dialog = window.HTMLDialogElement.prototype as HTMLDialogElement & {
+    showModal?: () => void
+    show?: () => void
+    close?: (returnValue?: string) => void
+}
+if (typeof dialog.showModal !== 'function') {
+    const open = function (this: HTMLDialogElement) {
+        this.setAttribute('open', '')
+    }
+    dialog.showModal = open
+    dialog.show = open
+    dialog.close = function (this: HTMLDialogElement) {
+        this.removeAttribute('open')
+        this.dispatchEvent(new Event('close'))
+    }
+}
