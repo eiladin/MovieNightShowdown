@@ -98,6 +98,20 @@ curl -sS -H "Accept: application/json" \
 
 The `key` of the section whose `type` is `"movie"` is the value to use.
 
+Jellyfin's library ids the same way — they are hexadecimal rather than numeric,
+but they go in `JELLYFIN_LIBRARIES` exactly as Plex's keys go in
+`PLEX_LIBRARY_SECTIONS`:
+
+```bash
+curl -sS -H "Accept: application/json" -H "X-Emby-Token: $JELLYFIN_API_KEY" \
+  "$JELLYFIN_URL/Library/MediaFolders" \
+  | jq '.Items[] | select(.CollectionType == "movies") | {Id, Name}'
+```
+
+`Id` is the value to use. Only folders whose `CollectionType` is `movies` are
+worth naming — the app skips the rest, since a music library offered as a movie
+source is one whose every query comes back empty.
+
 ## The quickest path
 
 Start the app with nothing configured, then fill everything in from the settings
@@ -302,7 +316,7 @@ which takes precedence — see [How settings are resolved](#how-settings-are-res
 | `PLEX_LIBRARY_SECTIONS` | no | Comma-separated movie libraries to draw from, by name or by section key. Each becomes its own source. Unset means every library. See [Choosing which movie libraries to use](#choosing-which-movie-libraries-to-use). |
 | `PLEX_LIBRARY_SECTION` | no | Deprecated singular form, still read when the plural is unset so existing deployments keep working. Use the plural. |
 | `JELLYFIN_LIBRARIES` | no | Comma-separated movie libraries to draw from, by name or by library id. Each becomes its own source. Unset means every library. |
-| `TMDB_READ_TOKEN` | one of¹ | TMDB v4 API Read Access Token. Unlocks streaming services as sources; without it only Jellyfin is offered. Stays server-side; never sent to clients. See [Streaming services](#streaming-services). |
+| `TMDB_READ_TOKEN` | one of¹ | TMDB v4 API Read Access Token. Unlocks streaming services as sources; without it only your local libraries are offered. Stays server-side; never sent to clients. See [Streaming services](#streaming-services). |
 | `STREAMING_PROVIDERS` | no | Comma-separated list of streaming services to offer, by name or numeric TMDB provider id. Any provider TMDB tracks is accepted. Defaults to `netflix,prime,disney` **only for a deployment that has not saved streaming settings** — once the settings screen manages them, services are chosen explicitly or not at all. Ignored when `TMDB_READ_TOKEN` is unset. See [Choosing which services to offer](#choosing-which-services-to-offer). |
 | `TMDB_WATCH_REGION` | no | ISO 3166-1 country code deciding which streaming services exist and what they carry. Defaults to `US`. See [Setting the region](#setting-the-region). |
 | `PUBLIC_URL` | yes | The URL people use to reach the app. Used to build the join links and QR codes, so it must be reachable from their devices. |
@@ -330,7 +344,7 @@ point somewhere their phones can't reach.
 
 ## Streaming services
 
-By default the deck is drawn from your Jellyfin library alone. Setting
+Without a TMDB token the deck is drawn from your own libraries alone. Setting
 `TMDB_READ_TOKEN` adds streaming services as additional sources the host can
 select when starting a showdown. Netflix, Prime Video, and Disney+ are offered
 by default, and any other service TMDB tracks — Hulu, Peacock, Max, and so on —
@@ -346,22 +360,23 @@ key) into `TMDB_READ_TOKEN`. The token stays on the server and is never sent to
 browsers.
 
 When the token is unset, the app does not advertise streaming sources at all:
-the API reports only Jellyfin, and the source picker shows only Jellyfin along
-with a short note about enabling the rest.
+the API reports only the local libraries you configured, and that is all the
+source picker shows, along with a short note about enabling the rest.
 
-### Running without a Jellyfin library
+### Running without a local library
 
-A TMDB token alone is enough: leave `JELLYFIN_URL` and `JELLYFIN_API_KEY` unset
-and the deck is built entirely from streaming catalogs. Two differences from a
-deployment that has a library:
+A TMDB token alone is enough: configure neither Jellyfin nor Plex and the deck is
+built entirely from streaming catalogs. Two differences from a deployment that
+has a library:
 
 - **Filter options are a fixed list.** With a library, the genre and rating
   chips are enumerated from what is actually on your shelf. A streaming catalog
   is far too large to enumerate, so the picker offers a default vocabulary
   instead — the 19 genres and the six US certifications (`G`, `PG`, `PG-13`,
   `R`, `NC-17`, `NR`) that a streaming query can honor.
-- **"Unwatched only" is unavailable.** It reads a Jellyfin user's play state and
-  has no meaning for a streaming catalog.
+- **"Unwatched only" is unavailable.** It reads play state off a local server —
+  a named Jellyfin user, or whoever the Plex token belongs to — and has no
+  meaning for a streaming catalog.
 
 ### Choosing which services to offer
 

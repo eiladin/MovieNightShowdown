@@ -20,11 +20,17 @@ minutes of "I don't know, what do *you* want to watch?" before somebody gives up
 and puts on the same show you've all seen six times.
 
 Movie Night Showdown is a small self-hosted app that ends that stalemate. It
-plugs into the Jellyfin server you already run, turns your library into a deck of
-movie posters, and lets everyone in the room swipe through it at the same time —
-left for no, right for yes, from their own phone. The instant a single movie
-collects a yes from *everyone*, every screen in the room lights up with the
-winner and a burst of confetti. Decision made. Popcorn time.
+plugs into the movie servers you already run — Jellyfin, Plex, or both — turns
+your libraries into a deck of movie posters, and lets everyone in the room swipe
+through it at the same time — left for no, right for yes, from their own phone.
+The instant a single movie collects a yes from *everyone*, every screen in the
+room lights up with the winner and a burst of confetti. Decision made. Popcorn
+time.
+
+It can look past your own shelves too. Give it a TMDB token and streaming
+services join the deck as sources of their own, so a showdown can cover what you
+can stream as well as what you own — or nothing but streaming, if you keep no
+library at all.
 
 No accounts, no apps to install, no cloud. People join by scanning a QR code or
 typing a four-character session code, and the whole thing runs on your network
@@ -80,25 +86,36 @@ it takes over every screen just like a match would.
 
 ## Why you'd want it
 
-It's yours. Everything runs on your own hardware against your own Jellyfin
-library — no third-party service ever sees what you watch, and your Jellyfin API
-key never leaves the server. It's frictionless for guests, because "scan this
-code" is the entire onboarding story; nobody makes an account to pick a movie on
-your couch. And it ships as one container that sits next to Jellyfin and does one
-job well.
+It's yours. Everything runs on your own hardware against your own libraries — no
+third-party service ever sees what you watch, and the API key or token that
+reaches your media server never leaves the app's server. It's frictionless for
+guests, because "scan this code" is the entire onboarding story; nobody makes an
+account to pick a movie on your couch. And it ships as one container that sits
+next to the servers you already run and does one job well.
 
 It's the kind of thing you set up once and quietly rely on every Friday night.
 
-Optionally, it can look beyond your own shelves. Add a TMDB API read token and
-the host can also draw from streaming services, so the deck covers what you can
-stream as well as what you own. Out of the box that's Netflix, Prime Video, and
-Disney+; name your own services instead — any TMDB tracks, so Hulu, Peacock, and
-Max are all fair game — and those are what the deck draws from. A movie
-available in both places shows up once, badged with everywhere it can be
-watched.
-Without a token the app is Jellyfin-only, and nothing about streaming appears in
-the UI. A token on its own works too, if you want a showdown with no local
-library at all. See [docs/INSTALL.md](docs/INSTALL.md#streaming-services).
+## Where the movies come from
+
+Three kinds of source, and they're peers. Configure any one of them and the app
+works; configure several and they all show up in the host's picker, to be mixed
+or used alone.
+
+- **Jellyfin** — a URL and an API key.
+- **Plex** — a URL and a token.
+- **Streaming services** — a TMDB API read token. Out of the box that's Netflix,
+  Prime Video, and Disney+; name your own services instead — anything TMDB
+  tracks, so Hulu, Peacock, and Max are all fair game — and those are what the
+  deck draws from. With no token, nothing about streaming appears anywhere in the
+  app.
+
+A Jellyfin server and a Plex server can each hold several libraries, and every
+library you pick becomes a source in its own right — so "Plex — Kids Movies" sits
+in the picker beside "Netflix", and a session can be dealt from that one shelf.
+
+A movie that exists in more than one of them shows up once, badged with
+everywhere it can be watched. See
+[docs/INSTALL.md](docs/INSTALL.md#configuration-reference).
 
 Start it with nothing configured and it won't leave you guessing. It points you
 at a built-in settings screen where you add your sources, test your credentials,
@@ -126,9 +143,10 @@ the credentials is wrong. You find out now rather than when four people are alre
 holding their phones.
 
 Checking also fills in the parts you'd otherwise have to go hunting for. Your Jellyfin
-accounts turn into a dropdown for the "unwatched only" filter, and your libraries turn
-into a row you tick. Each library you pick becomes its own source, so a host can run a
-night off the kids' shelf alone; tick none and the deck draws from all of them.
+accounts turn into a dropdown for the "unwatched only" filter, and each server's movie
+libraries turn into a row you tick. Each library you pick becomes its own source, so a
+host can run a night off the kids' shelf alone; tick none and the deck draws from all
+of them.
 Credentials never come back to the browser — a saved one shows as dots, and nothing on
 this page can read it.
 
